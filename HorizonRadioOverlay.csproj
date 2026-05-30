@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyTitle>网易云悬浮窗</AssemblyTitle>
+    <Product>网易云悬浮窗</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Fonts\MiSans-Demibold.ttf" />
+    <Resource Include="Assets\Icons\icons8-github-50.png" />
+  </ItemGroup>
+
+</Project>
