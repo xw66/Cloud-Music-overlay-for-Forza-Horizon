@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
     <AssemblyTitle>网易云悬浮窗</AssemblyTitle>
     <Product>网易云悬浮窗</Product>
   </PropertyGroup>
@@ -13,6 +15,7 @@
   <ItemGroup>
     <Resource Include="Assets\Fonts\MiSans-Demibold.ttf" />
     <Resource Include="Assets\Icons\icons8-github-50.png" />
+    <Resource Include="icon.ico" />
   </ItemGroup>
 
 </Project>

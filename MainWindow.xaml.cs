@@ -1,7 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using System.Windows.Media.Imaging;
 using HorizonRadioOverlay.Models;
@@ -23,6 +26,33 @@ public partial class MainWindow : Window
     private bool _isInitializingOverlayControls;
     private OverlaySettings _activeSettings;
     private string _lastTrackKey = string.Empty;
+    private string _lastDisplayTrackKey = string.Empty;
+    private byte[]? _lastPreviewCoverBytes;
+    private string _lastStatusText = string.Empty;
+    private readonly Dictionary<TextBox, HashSet<GamepadButton>> _gamepadPressed = new();
+    private readonly Dictionary<TextBox, DispatcherTimer> _gamepadCommitTimers = new();
+    private bool _gamepadEnabledBeforeCapture;
+    private int _gamepadCaptureFocusCount;
+
+    private static readonly (GamepadButton Button, string Token)[] GamepadTokenOrder =
+    {
+        (GamepadButton.LeftTrigger, "LT"),
+        (GamepadButton.RightTrigger, "RT"),
+        (GamepadButton.LeftShoulder, "LB"),
+        (GamepadButton.RightShoulder, "RB"),
+        (GamepadButton.DPadUp, "Up"),
+        (GamepadButton.DPadDown, "Down"),
+        (GamepadButton.DPadLeft, "Left"),
+        (GamepadButton.DPadRight, "Right"),
+        (GamepadButton.A, "A"),
+        (GamepadButton.B, "B"),
+        (GamepadButton.X, "X"),
+        (GamepadButton.Y, "Y"),
+        (GamepadButton.LeftThumb, "LS"),
+        (GamepadButton.RightThumb, "RS"),
+        (GamepadButton.Back, "Back"),
+        (GamepadButton.Start, "Start")
+    };
 
     public MainWindow()
     {
@@ -42,7 +72,7 @@ public partial class MainWindow : Window
 
         _pollTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(250)
+            Interval = TimeSpan.FromMilliseconds(400)
         };
         _pollTimer.Tick += PollTimer_Tick;
 
@@ -52,6 +82,7 @@ public partial class MainWindow : Window
         _gamepadInputService.Start();
 
         InitializeOverlayControls(loadedSettings);
+        SetupHotkeyCaptureInputs();
 
         SourceInitialized += MainWindow_SourceInitialized;
         Closed += MainWindow_Closed;
@@ -177,23 +208,33 @@ public partial class MainWindow : Window
             TrackInfo? track = await _neteaseLocalDataService.GetCurrentTrackAsync();
             if (track == null)
             {
-                CurrentTitle.Text = "未检测到网易云歌曲";
-                CurrentArtist.Text = "请打开网易云音乐并播放歌曲";
-                CurrentMeta.Text = "来源：CloudMusic(ProcessTitle)";
-                CoverPreview.Source = null;
+                if (!string.IsNullOrEmpty(_lastDisplayTrackKey))
+                {
+                    CurrentTitle.Text = "未检测到网易云歌曲";
+                    CurrentArtist.Text = "请打开网易云音乐并播放歌曲";
+                    CurrentMeta.Text = "来源：CloudMusic(ProcessTitle)";
+                    SetCover(null);
+                }
+
                 SetStatus("状态：未读取到网易云窗口标题。", false);
                 _lastTrackKey = string.Empty;
+                _lastDisplayTrackKey = string.Empty;
                 return;
             }
-
-            CurrentTitle.Text = track.Name;
-            CurrentArtist.Text = track.Artist;
-            CurrentMeta.Text = $"来源：{track.SourceAppId}";
-            SetCover(track.CoverBytes);
 
             string currentTrackKey = $"{track.Name}|{track.Artist}";
             bool changed = !string.Equals(_lastTrackKey, currentTrackKey, StringComparison.Ordinal);
             _lastTrackKey = currentTrackKey;
+
+            bool displayChanged = !string.Equals(_lastDisplayTrackKey, currentTrackKey, StringComparison.Ordinal);
+            if (displayChanged)
+            {
+                CurrentTitle.Text = track.Name;
+                CurrentArtist.Text = track.Artist;
+                CurrentMeta.Text = $"来源：{track.SourceAppId}";
+                SetCover(track.CoverBytes);
+                _lastDisplayTrackKey = currentTrackKey;
+            }
 
             if (showOverlay || (allowOverlayOnTrackChange && changed))
             {
@@ -210,6 +251,13 @@ public partial class MainWindow : Window
 
     private void SetCover(byte[]? coverBytes)
     {
+        if (ReferenceEquals(_lastPreviewCoverBytes, coverBytes))
+        {
+            return;
+        }
+
+        _lastPreviewCoverBytes = coverBytes;
+
         if (coverBytes == null || coverBytes.Length == 0)
         {
             CoverPreview.Source = null;
@@ -237,6 +285,12 @@ public partial class MainWindow : Window
 
     private void SetStatus(string text, bool isError = false)
     {
+        if (string.Equals(_lastStatusText, text, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastStatusText = text;
         StatusText.Text = text;
         if (isError)
         {
@@ -374,6 +428,230 @@ public partial class MainWindow : Window
         {
             SetStatus("状态：无法打开浏览器。", true);
         }
+    }
+
+    private void SetupHotkeyCaptureInputs()
+    {
+        ConfigureKeyboardHotkeyInput(AppPrevHotkeyBox);
+        ConfigureKeyboardHotkeyInput(AppNextHotkeyBox);
+        ConfigureKeyboardHotkeyInput(AppToggleHotkeyBox);
+        ConfigureKeyboardHotkeyInput(NeteasePrevHotkeyBox);
+        ConfigureKeyboardHotkeyInput(NeteaseNextHotkeyBox);
+        ConfigureKeyboardHotkeyInput(NeteaseToggleHotkeyBox);
+
+        ConfigureGamepadHotkeyInput(GamepadPrevHotkeyBox);
+        ConfigureGamepadHotkeyInput(GamepadNextHotkeyBox);
+        ConfigureGamepadHotkeyInput(GamepadToggleHotkeyBox);
+    }
+
+    private void ConfigureKeyboardHotkeyInput(TextBox textBox)
+    {
+        textBox.PreviewKeyDown += KeyboardHotkeyInput_PreviewKeyDown;
+    }
+
+    private void KeyboardHotkeyInput_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox textBox)
+        {
+            return;
+        }
+
+        Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key == Key.Tab)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        if (key == Key.Back || key == Key.Delete)
+        {
+            textBox.Clear();
+            return;
+        }
+
+        string? keyToken = KeyToToken(key);
+        if (string.IsNullOrWhiteSpace(keyToken))
+        {
+            return;
+        }
+
+        bool isModifierKey = key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin;
+        if (isModifierKey)
+        {
+            return;
+        }
+
+        string captured = FormatKeyboardCombination(Keyboard.Modifiers, keyToken);
+        if (!string.IsNullOrWhiteSpace(captured))
+        {
+            textBox.Text = captured;
+            textBox.CaretIndex = textBox.Text.Length;
+        }
+    }
+
+    private void ConfigureGamepadHotkeyInput(TextBox textBox)
+    {
+        textBox.IsReadOnly = true;
+        textBox.GotKeyboardFocus += GamepadHotkeyInput_GotKeyboardFocus;
+        textBox.LostKeyboardFocus += GamepadHotkeyInput_LostKeyboardFocus;
+    }
+
+    private void GamepadHotkeyInput_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is not TextBox textBox)
+        {
+            return;
+        }
+
+        if (!_gamepadCommitTimers.TryGetValue(textBox, out DispatcherTimer? timer))
+        {
+            timer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(45)
+            };
+            timer.Tick += (_, _) => CaptureGamepadInput(textBox);
+            _gamepadCommitTimers[textBox] = timer;
+        }
+
+        if (_gamepadCaptureFocusCount == 0)
+        {
+            _gamepadEnabledBeforeCapture = _gamepadInputService.Enabled;
+        }
+
+        _gamepadCaptureFocusCount++;
+        _gamepadInputService.Enabled = false;
+        timer.Start();
+    }
+
+    private void GamepadHotkeyInput_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is not TextBox textBox)
+        {
+            return;
+        }
+
+        if (_gamepadCommitTimers.TryGetValue(textBox, out DispatcherTimer? timer))
+        {
+            timer.Stop();
+        }
+
+        _gamepadPressed.Remove(textBox);
+
+        _gamepadCaptureFocusCount = Math.Max(0, _gamepadCaptureFocusCount - 1);
+        if (_gamepadCaptureFocusCount == 0)
+        {
+            _gamepadInputService.Enabled = _gamepadEnabledBeforeCapture;
+        }
+    }
+
+    private void CaptureGamepadInput(TextBox textBox)
+    {
+        GamepadButton currentButtons = GamepadInputService.GetCurrentButtonsSnapshot();
+        if (currentButtons == GamepadButton.None)
+        {
+            return;
+        }
+
+        if (!_gamepadPressed.TryGetValue(textBox, out HashSet<GamepadButton>? pressed))
+        {
+            pressed = new HashSet<GamepadButton>();
+            _gamepadPressed[textBox] = pressed;
+        }
+
+        pressed.Clear();
+        foreach (var (button, _) in GamepadTokenOrder)
+        {
+            if ((currentButtons & button) == button)
+            {
+                pressed.Add(button);
+            }
+        }
+
+        string captured = FormatGamepadCombination(pressed);
+        if (!string.IsNullOrWhiteSpace(captured))
+        {
+            textBox.Text = captured;
+            textBox.CaretIndex = textBox.Text.Length;
+        }
+    }
+
+    private static string FormatKeyboardCombination(ModifierKeys modifiers, string mainKeyToken)
+    {
+        List<string> tokens = new();
+
+        if (modifiers.HasFlag(ModifierKeys.Control))
+        {
+            tokens.Add("Ctrl");
+        }
+
+        if (modifiers.HasFlag(ModifierKeys.Alt))
+        {
+            tokens.Add("Alt");
+        }
+
+        if (modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            tokens.Add("Shift");
+        }
+
+        if (modifiers.HasFlag(ModifierKeys.Windows))
+        {
+            tokens.Add("Win");
+        }
+
+        if (!string.IsNullOrWhiteSpace(mainKeyToken))
+        {
+            tokens.Add(mainKeyToken);
+        }
+
+        return string.Join("+", tokens);
+    }
+
+    private static string FormatGamepadCombination(HashSet<GamepadButton> pressed)
+    {
+        List<string> tokens = new();
+        foreach (var (button, token) in GamepadTokenOrder)
+        {
+            if (pressed.Contains(button))
+            {
+                tokens.Add(token);
+            }
+        }
+
+        return string.Join("+", tokens);
+    }
+
+    private static string? KeyToToken(Key key)
+    {
+        return key switch
+        {
+            Key.LeftCtrl or Key.RightCtrl or Key.LeftCtrl => "Ctrl",
+            Key.LeftAlt or Key.RightAlt => "Alt",
+            Key.LeftShift or Key.RightShift => "Shift",
+            Key.LWin or Key.RWin => "Win",
+            Key.Left => "Left",
+            Key.Right => "Right",
+            Key.Up => "Up",
+            Key.Down => "Down",
+            Key.Space => "Space",
+            Key.Oem1 => ";",
+            Key.OemQuotes => "'",
+            Key.OemComma => ",",
+            Key.OemPeriod => ".",
+            Key.Oem2 => "/",
+            Key.Oem5 => "\\",
+            Key.OemOpenBrackets => "[",
+            Key.Oem6 => "]",
+            Key.OemMinus => "-",
+            Key.OemPlus => "=",
+            Key.Oem3 => "`",
+            >= Key.A and <= Key.Z => key.ToString(),
+            >= Key.D0 and <= Key.D9 => ((char)('0' + (key - Key.D0))).ToString(),
+            >= Key.NumPad0 and <= Key.NumPad9 => ((char)('0' + (key - Key.NumPad0))).ToString(),
+            >= Key.F1 and <= Key.F12 => key.ToString(),
+            _ => null
+        };
     }
 
     private void ApplyOverlaySettingsFromControls()

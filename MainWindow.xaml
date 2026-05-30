@@ -9,6 +9,7 @@
          Width="960"
          MinHeight="1024"
          MinWidth="960"
+         Icon="pack://application:,,,/icon.ico"
          WindowStyle="SingleBorderWindow"
          ResizeMode="CanResizeWithGrip"
          WindowStartupLocation="CenterScreen"
