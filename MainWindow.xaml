@@ -14,18 +14,18 @@
         WindowStartupLocation="CenterScreen"
         AllowsTransparency="True"
         Background="Transparent"
-        Foreground="#E8ECF0"
         FontFamily="Segoe UI">
     <Window.Resources>
-        <SolidColorBrush x:Key="GlassBg" Color="#1A1F2E" Opacity="0.82" />
-        <SolidColorBrush x:Key="GlassBgLight" Color="#1E2536" Opacity="0.75" />
-        <SolidColorBrush x:Key="GlassBorder" Color="#3A4560" Opacity="0.4" />
         <SolidColorBrush x:Key="Accent" Color="#7C6BF0" />
-        <SolidColorBrush x:Key="AccentHover" Color="#9B8DF5" />
-        <SolidColorBrush x:Key="TextPrimary" Color="#F0F2F5" />
-        <SolidColorBrush x:Key="TextSecondary" Color="#8B95A8" />
-        <SolidColorBrush x:Key="TextTertiary" Color="#5A6378" />
-        <SolidColorBrush x:Key="Divider" Color="#2A3245" Opacity="0.6" />
+        <SolidColorBrush x:Key="TextPrimary" Color="#E8ECF0" />
+        <SolidColorBrush x:Key="TextSecondary" Color="#8899AA" />
+        <SolidColorBrush x:Key="TextMuted" Color="#5A6880" />
+        <SolidColorBrush x:Key="InputBg" Color="#1C2438" />
+        <SolidColorBrush x:Key="InputBorder" Color="#2E3D56" />
+        <SolidColorBrush x:Key="CardBg" Color="#151D2E" />
+        <SolidColorBrush x:Key="CardBorder" Color="#263350" />
+        <SolidColorBrush x:Key="BtnBg" Color="#252F44" />
+        <SolidColorBrush x:Key="BtnBorder" Color="#364866" />
 
         <Style TargetType="Button">
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
@@ -33,6 +33,9 @@
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Padding" Value="16,8" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="{StaticResource BtnBg}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BtnBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -40,38 +43,32 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="12"
-                                Padding="{TemplateBinding Padding}"
-                                SnapsToDevicePixels="True">
+                                CornerRadius="10"
+                                Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#2E3D56" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#1C2438" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
         <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#0F1318" />
+            <Setter Property="Background" Value="{StaticResource InputBg}" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
-            <Setter Property="BorderBrush" Value="{StaticResource GlassBorder}" />
+            <Setter Property="BorderBrush" Value="{StaticResource InputBorder}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="FontFamily" Value="Segoe UI" />
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Padding" Value="8,5" />
             <Setter Property="CaretBrush" Value="{StaticResource Accent}" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10"
-                                SnapsToDevicePixels="True">
-                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <Style TargetType="Slider">
@@ -81,9 +78,9 @@
         </Style>
 
         <Style TargetType="ComboBox">
-            <Setter Property="Background" Value="#0F1318" />
+            <Setter Property="Background" Value="{StaticResource InputBg}" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
-            <Setter Property="BorderBrush" Value="{StaticResource GlassBorder}" />
+            <Setter Property="BorderBrush" Value="{StaticResource InputBorder}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="FontFamily" Value="Segoe UI" />
             <Setter Property="FontSize" Value="12" />
@@ -97,7 +94,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="#0D1117" CornerRadius="20" BorderThickness="1" BorderBrush="#2A3245">
+    <Border Background="#0D1117" CornerRadius="20" BorderThickness="1" BorderBrush="#263350">
         <Grid Margin="24">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -106,7 +103,7 @@
             </Grid.RowDefinitions>
 
             <!-- Header -->
-            <Border Grid.Row="0" Padding="20,16" Background="{StaticResource GlassBg}" BorderThickness="1" BorderBrush="{StaticResource GlassBorder}" CornerRadius="16">
+            <Border Grid.Row="0" Padding="20,16" Background="{StaticResource CardBg}" BorderThickness="1" BorderBrush="{StaticResource CardBorder}" CornerRadius="16">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -114,16 +111,14 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0">
                         <TextBlock Text="网易云悬浮窗" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" />
-                        <TextBlock Margin="0,4,0,0" FontSize="12" Opacity="0.7" Foreground="{StaticResource TextSecondary}"
+                        <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{StaticResource TextSecondary}"
                                    Text="支持网易云窗口标题与 SMTC（QQ音乐/Apple Music 等）" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Width="90" Height="32" Background="#252D3D" BorderBrush="{StaticResource GlassBorder}" BorderThickness="1"
-                                Click="CheckUpdate_Click" ToolTip="检查 GitHub 是否有新版本">
+                        <Button Width="90" Height="32" Click="CheckUpdate_Click" ToolTip="检查 GitHub 是否有新版本">
                             <TextBlock Text="检查更新" FontSize="12" />
                         </Button>
                         <Button Width="36" Height="36" Margin="8,0,0,0" Padding="6"
-                                Background="#252D3D" BorderBrush="{StaticResource GlassBorder}" BorderThickness="1"
                                 Click="GitHubButton_Click" ToolTip="在 GitHub 上查看源码">
                             <Image Name="GitHubImage" Stretch="Uniform" Width="18" Height="18" />
                         </Button>
@@ -134,26 +129,26 @@
             <!-- Main Content -->
             <Grid Grid.Row="1" Margin="0,16,0,0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="320" />
+                    <ColumnDefinition Width="300" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
                 <!-- Left: Now Playing -->
-                <Border Grid.Column="0" Padding="20" Background="{StaticResource GlassBg}" BorderThickness="1" BorderBrush="{StaticResource GlassBorder}" CornerRadius="16">
+                <Border Grid.Column="0" Padding="20" Background="{StaticResource CardBg}" BorderThickness="1" BorderBrush="{StaticResource CardBorder}" CornerRadius="16">
                     <StackPanel>
-                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextTertiary}" Text="正在播放" />
+                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}" Text="正在播放" />
                         <Border Margin="0,12,0,0" Width="120" Height="120" CornerRadius="16" ClipToBounds="True"
-                                HorizontalAlignment="Center" Background="#151B28" BorderThickness="1" BorderBrush="{StaticResource GlassBorder}">
+                                HorizontalAlignment="Center" Background="#0F1520" BorderThickness="1" BorderBrush="{StaticResource InputBorder}">
                             <Image Name="CoverPreview" Stretch="UniformToFill" />
                         </Border>
-                        <TextBlock Name="CurrentTitle" Margin="0,16,0,0" FontSize="18" FontWeight="SemiBold"
+                        <TextBlock Name="CurrentTitle" Margin="0,14,0,0" FontSize="18" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" TextAlignment="Center"
                                    Text="未检测到播放中的歌曲" />
-                        <TextBlock Name="CurrentArtist" Margin="0,6,0,0" FontSize="13" Opacity="0.7"
+                        <TextBlock Name="CurrentArtist" Margin="0,6,0,0" FontSize="13"
                                    Foreground="{StaticResource TextSecondary}" TextAlignment="Center"
                                    Text="请先打开网易云音乐并播放" />
-                        <TextBlock Name="CurrentMeta" Margin="0,4,0,0" FontSize="11" Opacity="0.5"
-                                   Foreground="{StaticResource TextTertiary}" TextAlignment="Center" Text="来源：-" />
+                        <TextBlock Name="CurrentMeta" Margin="0,4,0,0" FontSize="11" Opacity="0.6"
+                                   Foreground="{StaticResource TextMuted}" TextAlignment="Center" Text="来源：-" />
 
                         <Grid Margin="0,16,0,0">
                             <Grid.ColumnDefinitions>
@@ -162,24 +157,21 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" Height="36" Margin="0,0,4,0" Background="#1E2536" BorderBrush="{StaticResource GlassBorder}" BorderThickness="1"
-                                    Click="Prev_Click" Content="⏮" FontSize="14" />
-                            <Button Grid.Column="1" Height="36" Margin="4,0,4,0" Background="#252D3D" BorderBrush="{StaticResource GlassBorder}" BorderThickness="1"
-                                    Click="PlayPause_Click" Content="⏯" FontSize="14" />
-                            <Button Grid.Column="2" Height="36" Margin="4,0,4,0" Background="#1E2536" BorderBrush="{StaticResource GlassBorder}" BorderThickness="1"
-                                    Click="Next_Click" Content="⏭" FontSize="14" />
-                            <Button Grid.Column="3" Height="36" Margin="4,0,0,0" Background="#2D2520" BorderBrush="#4A3530" BorderThickness="1"
-                                    Click="Refresh_Click" Content="⟳" FontSize="14" />
+                            <Button Grid.Column="0" Height="36" Margin="0,0,4,0" Click="Prev_Click" Content="⏮" FontSize="14" />
+                            <Button Grid.Column="1" Height="36" Margin="4,0,4,0" Click="PlayPause_Click" Content="⏯" FontSize="14" />
+                            <Button Grid.Column="2" Height="36" Margin="4,0,4,0" Click="Next_Click" Content="⏭" FontSize="14" />
+                            <Button Grid.Column="3" Height="36" Margin="4,0,0,0" Click="Refresh_Click" Content="⟳" FontSize="14"
+                                    Background="#2D2520" BorderBrush="#4A3530" />
                         </Grid>
                     </StackPanel>
                 </Border>
 
                 <!-- Right: Settings -->
-                <Border Grid.Column="1" Margin="16,0,0,0" Padding="20" Background="{StaticResource GlassBg}" BorderThickness="1" BorderBrush="{StaticResource GlassBorder}" CornerRadius="16">
+                <Border Grid.Column="1" Margin="16,0,0,0" Padding="20" Background="{StaticResource CardBg}" BorderThickness="1" BorderBrush="{StaticResource CardBorder}" CornerRadius="16">
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel>
-                            <!-- Overlay Settings -->
-                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextTertiary}" Text="悬浮窗" />
+                            <!-- Overlay -->
+                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}" Text="悬浮窗" />
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -187,42 +179,43 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                    <TextBlock FontSize="11" Opacity="0.6" Foreground="{StaticResource TextSecondary}" Text="数据来源" />
+                                    <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}" Text="数据来源" />
                                     <ComboBox Name="TrackSourceComboBox" Margin="0,4,0,0" SelectedIndex="0"
                                               SelectionChanged="TrackSourceComboBox_SelectionChanged">
                                         <ComboBoxItem Tag="NeteaseProcess" Content="网易云窗口标题" />
                                         <ComboBoxItem Tag="SMTC" Content="QQ音乐 / Apple Music" />
                                     </ComboBox>
-                                    <TextBlock Margin="0,3,0,0" FontSize="10" Opacity="0.4" Foreground="{StaticResource TextTertiary}"
+                                    <TextBlock Margin="0,4,0,0" FontSize="10" Opacity="0.6" Foreground="{StaticResource TextMuted}"
                                                Text="漫游模式无封面" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Margin="5,0,5,0">
-                                    <TextBlock FontSize="11" Opacity="0.6" Foreground="{StaticResource TextSecondary}" Text="水平位置" />
+                                    <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}" Text="水平位置" />
                                     <Grid Margin="0,4,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="36" />
                                         </Grid.ColumnDefinitions>
                                         <Slider Name="HorizontalSlider" Grid.Column="0" Minimum="0" Maximum="40"
                                                 ValueChanged="HorizontalSlider_ValueChanged" />
-                                        <TextBlock Name="HorizontalValueText" Grid.Column="1" Width="36" FontSize="11" Opacity="0.5"
+                                        <TextBlock Name="HorizontalValueText" Grid.Column="1" FontSize="11" Opacity="0.7"
                                                    VerticalAlignment="Center" TextAlignment="Right" Text="0%" />
                                     </Grid>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Margin="10,0,0,0">
-                                    <TextBlock FontSize="11" Opacity="0.6" Foreground="{StaticResource TextSecondary}" Text="垂直位置" />
+                                    <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}" Text="垂直位置" />
                                     <Grid Margin="0,4,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="36" />
                                         </Grid.ColumnDefinitions>
                                         <Slider Name="BottomOffsetSlider" Grid.Column="0" Minimum="0" Maximum="80"
                                                 ValueChanged="BottomOffsetSlider_ValueChanged" />
-                                        <TextBlock Name="BottomOffsetValueText" Grid.Column="1" Width="36" FontSize="11" Opacity="0.5"
+                                        <TextBlock Name="BottomOffsetValueText" Grid.Column="1" FontSize="11" Opacity="0.7"
                                                    VerticalAlignment="Center" TextAlignment="Right" Text="0%" />
                                     </Grid>
                                 </StackPanel>
                             </Grid>
+
                             <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -230,101 +223,83 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                    <TextBlock FontSize="11" Opacity="0.6" Foreground="{StaticResource TextSecondary}" Text="缩放" />
+                                    <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}" Text="缩放" />
                                     <Grid Margin="0,4,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="36" />
                                         </Grid.ColumnDefinitions>
                                         <Slider Name="ScaleSlider" Grid.Column="0" Minimum="80" Maximum="180"
                                                 ValueChanged="ScaleSlider_ValueChanged" />
-                                        <TextBlock Name="ScaleValueText" Grid.Column="1" Width="36" FontSize="11" Opacity="0.5"
+                                        <TextBlock Name="ScaleValueText" Grid.Column="1" FontSize="11" Opacity="0.7"
                                                    VerticalAlignment="Center" TextAlignment="Right" Text="100%" />
                                     </Grid>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Margin="5,0,5,0">
-                                    <TextBlock FontSize="11" Opacity="0.6" Foreground="{StaticResource TextSecondary}" Text="歌名颜色" />
+                                    <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}" Text="歌名颜色" />
+                                    <TextBox Name="TitleColorBox" Margin="0,4,0,0" Height="30" Text="#E8ECF0" />
                                     <Grid Margin="0,4,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="36" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBox Name="TitleColorBox" Grid.Column="0" Text="#F0F2F5" Height="30" />
-                                        <Grid Grid.Column="1" Margin="6,0,0,0">
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="50" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <Slider Name="TitleOpacitySlider" Grid.Column="0" Minimum="0" Maximum="100" Value="100" Height="20"
-                                                    VerticalAlignment="Center" ValueChanged="TitleOpacitySlider_ValueChanged" />
-                                            <TextBlock Name="TitleOpacityValueText" Grid.Column="1" Grid.Row="0" Margin="4,0,0,0" FontSize="10" Opacity="0.5"
-                                                       VerticalAlignment="Center" Text="100%" />
-                                        </Grid>
+                                        <Slider Name="TitleOpacitySlider" Grid.Column="0" Minimum="0" Maximum="100" Value="100"
+                                                ValueChanged="TitleOpacitySlider_ValueChanged" />
+                                        <TextBlock Name="TitleOpacityValueText" Grid.Column="1" FontSize="11" Opacity="0.7"
+                                                   VerticalAlignment="Center" TextAlignment="Right" Text="100%" />
                                     </Grid>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Margin="10,0,0,0">
-                                    <TextBlock FontSize="11" Opacity="0.6" Foreground="{StaticResource TextSecondary}" Text="歌手颜色" />
+                                    <TextBlock FontSize="11" Foreground="{StaticResource TextSecondary}" Text="歌手颜色" />
+                                    <TextBox Name="ArtistColorBox" Margin="0,4,0,0" Height="30" Text="#C8D0DC" />
                                     <Grid Margin="0,4,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="36" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBox Name="ArtistColorBox" Grid.Column="0" Text="#E2ECF7" Height="30" />
-                                        <Grid Grid.Column="1" Margin="6,0,0,0">
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="50" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <Slider Name="ArtistOpacitySlider" Grid.Column="0" Minimum="0" Maximum="100" Value="100" Height="20"
-                                                    VerticalAlignment="Center" ValueChanged="ArtistOpacitySlider_ValueChanged" />
-                                            <TextBlock Name="ArtistOpacityValueText" Grid.Column="1" Grid.Row="0" Margin="4,0,0,0" FontSize="10" Opacity="0.5"
-                                                       VerticalAlignment="Center" Text="100%" />
-                                        </Grid>
+                                        <Slider Name="ArtistOpacitySlider" Grid.Column="0" Minimum="0" Maximum="100" Value="100"
+                                                ValueChanged="ArtistOpacitySlider_ValueChanged" />
+                                        <TextBlock Name="ArtistOpacityValueText" Grid.Column="1" FontSize="11" Opacity="0.7"
+                                                   VerticalAlignment="Center" TextAlignment="Right" Text="100%" />
                                     </Grid>
                                 </StackPanel>
                             </Grid>
 
-                            <Border Height="1" Background="{StaticResource Divider}" Margin="0,14,0,0" />
+                            <Border Height="1" Background="#263350" Margin="0,14,0,0" />
 
                             <!-- Hotkeys -->
-                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextTertiary}" Text="快捷键映射" />
+                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}" Text="快捷键映射" />
+                            <TextBlock Margin="0,4,0,0" FontSize="11" Opacity="0.6" Foreground="{StaticResource TextMuted}"
+                                       Text="左侧：游戏内按键  |  右侧：转发给网易云的按键" />
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                    <TextBlock FontSize="11" Opacity="0.6" Foreground="{StaticResource TextSecondary}" Text="应用快捷键（游戏内）" />
-                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.5" Foreground="{StaticResource TextTertiary}" Text="上一首" />
+                                    <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondary}" Text="应用快捷键" />
+                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.6" Foreground="{StaticResource TextMuted}" Text="上一首" />
                                     <TextBox Name="AppPrevHotkeyBox" Margin="0,2,0,0" Height="30" Text="Ctrl+Shift+Left" />
-                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.5" Foreground="{StaticResource TextTertiary}" Text="下一首" />
+                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.6" Foreground="{StaticResource TextMuted}" Text="下一首" />
                                     <TextBox Name="AppNextHotkeyBox" Margin="0,2,0,0" Height="30" Text="Ctrl+Shift+Right" />
-                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.5" Foreground="{StaticResource TextTertiary}" Text="播放/暂停" />
+                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.6" Foreground="{StaticResource TextMuted}" Text="播放/暂停" />
                                     <TextBox Name="AppToggleHotkeyBox" Margin="0,2,0,0" Height="30" Text="Ctrl+Shift+Down" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                    <TextBlock FontSize="11" Opacity="0.6" Foreground="{StaticResource TextSecondary}" Text="网易云快捷键（转发）" />
-                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.5" Foreground="{StaticResource TextTertiary}" Text="上一首" />
+                                    <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondary}" Text="网易云快捷键" />
+                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.6" Foreground="{StaticResource TextMuted}" Text="上一首" />
                                     <TextBox Name="NeteasePrevHotkeyBox" Margin="0,2,0,0" Height="30" Text="Ctrl+Alt+Left" />
-                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.5" Foreground="{StaticResource TextTertiary}" Text="下一首" />
+                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.6" Foreground="{StaticResource TextMuted}" Text="下一首" />
                                     <TextBox Name="NeteaseNextHotkeyBox" Margin="0,2,0,0" Height="30" Text="Ctrl+Alt+Right" />
-                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.5" Foreground="{StaticResource TextTertiary}" Text="播放/暂停" />
+                                    <TextBlock Margin="0,6,0,0" FontSize="11" Opacity="0.6" Foreground="{StaticResource TextMuted}" Text="播放/暂停" />
                                     <TextBox Name="NeteaseToggleHotkeyBox" Margin="0,2,0,0" Height="30" Text="Ctrl+Alt+P" />
                                 </StackPanel>
                             </Grid>
 
-                            <Border Height="1" Background="{StaticResource Divider}" Margin="0,14,0,0" />
+                            <Border Height="1" Background="#263350" Margin="0,14,0,0" />
 
                             <!-- Gamepad -->
-                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextTertiary}" Text="手柄快捷键" />
+                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}" Text="手柄快捷键" />
                             <CheckBox Name="EnableGamepadCheckBox" Margin="0,8,0,0" Content="启用 Xbox 手柄" />
                             <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions>
@@ -333,38 +308,35 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                    <TextBlock FontSize="11" Opacity="0.5" Foreground="{StaticResource TextTertiary}" Text="上一首" />
+                                    <TextBlock FontSize="11" Opacity="0.6" Foreground="{StaticResource TextMuted}" Text="上一首" />
                                     <TextBox Name="GamepadPrevHotkeyBox" Margin="0,2,0,0" Height="30" Text="LB+Left" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Margin="4,0,4,0">
-                                    <TextBlock FontSize="11" Opacity="0.5" Foreground="{StaticResource TextTertiary}" Text="下一首" />
+                                    <TextBlock FontSize="11" Opacity="0.6" Foreground="{StaticResource TextMuted}" Text="下一首" />
                                     <TextBox Name="GamepadNextHotkeyBox" Margin="0,2,0,0" Height="30" Text="RB+Right" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Margin="8,0,0,0">
-                                    <TextBlock FontSize="11" Opacity="0.5" Foreground="{StaticResource TextTertiary}" Text="播放/暂停" />
+                                    <TextBlock FontSize="11" Opacity="0.6" Foreground="{StaticResource TextMuted}" Text="播放/暂停" />
                                     <TextBox Name="GamepadToggleHotkeyBox" Margin="0,2,0,0" Height="30" Text="LT+RT+Y" />
                                 </StackPanel>
                             </Grid>
 
-                            <Border Height="1" Background="{StaticResource Divider}" Margin="0,14,0,0" />
+                            <Border Height="1" Background="#263350" Margin="0,14,0,0" />
 
                             <!-- System -->
-                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextTertiary}" Text="系统" />
+                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}" Text="系统" />
                             <CheckBox Name="MinimizeToTrayCheckBox" Margin="0,8,0,0" Content="关闭窗口时最小化到系统托盘" IsChecked="True" />
                             <CheckBox Name="AutoStartCheckBox" Margin="0,6,0,0" Content="开机自启动" />
 
                             <!-- Actions -->
                             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                                <Button Height="34" Padding="20,0" Background="#25402E" BorderBrush="#3A6040" BorderThickness="1"
-                                        Click="SaveOverlaySettings_Click">
+                                <Button Height="34" Padding="24,0" Background="#25402E" BorderBrush="#3A6040" Click="SaveOverlaySettings_Click">
                                     <TextBlock Text="保存" />
                                 </Button>
-                                <Button Height="34" Margin="8,0,0,0" Padding="20,0" Background="#252D3D" BorderBrush="{StaticResource GlassBorder}" BorderThickness="1"
-                                        Click="ResetOverlaySettings_Click">
+                                <Button Height="34" Margin="8,0,0,0" Padding="24,0" Click="ResetOverlaySettings_Click">
                                     <TextBlock Text="重置" />
                                 </Button>
-                                <Button Height="34" Margin="8,0,0,0" Padding="20,0" Background="#1E2536" BorderBrush="{StaticResource GlassBorder}" BorderThickness="1"
-                                        Click="TestOverlay_Click">
+                                <Button Height="34" Margin="8,0,0,0" Padding="24,0" Click="TestOverlay_Click">
                                     <TextBlock Text="测试" />
                                 </Button>
                             </StackPanel>
@@ -374,8 +346,8 @@
             </Grid>
 
             <!-- Footer -->
-            <Border Grid.Row="2" Margin="0,16,0,0" Padding="16,10" Background="{StaticResource GlassBg}" BorderThickness="1" BorderBrush="{StaticResource GlassBorder}" CornerRadius="12">
-                <TextBlock Name="StatusText" FontSize="11" Opacity="0.6" Foreground="{StaticResource TextSecondary}" Text="状态：空闲" />
+            <Border Grid.Row="2" Margin="0,16,0,0" Padding="16,10" Background="{StaticResource CardBg}" BorderThickness="1" BorderBrush="{StaticResource CardBorder}" CornerRadius="12">
+                <TextBlock Name="StatusText" FontSize="11" Foreground="{StaticResource TextSecondary}" Text="状态：空闲" />
             </Border>
         </Grid>
     </Border>
