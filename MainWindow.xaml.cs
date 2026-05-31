@@ -511,6 +511,11 @@ public partial class MainWindow : Window
             GamepadToggleHotkeyBox.Text = settings.GamepadToggleHotkey;
             MinimizeToTrayCheckBox.IsChecked = settings.MinimizeToTray;
             AutoStartCheckBox.IsChecked = settings.AutoStartOnBoot;
+            SelectTitleColor(settings.TitleColor);
+            SelectArtistColor(settings.ArtistColor);
+            TitleOpacitySlider.Value = settings.TitleOpacity * 100.0;
+            ArtistOpacitySlider.Value = settings.ArtistOpacity * 100.0;
+            ApplyDisplayColors(settings);
             UpdateOverlayControlLabels();
         }
         finally
@@ -971,13 +976,18 @@ public partial class MainWindow : Window
             GamepadNextHotkey = GamepadNextHotkeyBox.Text.Trim(),
             GamepadToggleHotkey = GamepadToggleHotkeyBox.Text.Trim(),
             MinimizeToTray = MinimizeToTrayCheckBox.IsChecked == true,
-            AutoStartOnBoot = AutoStartCheckBox.IsChecked == true
+            AutoStartOnBoot = AutoStartCheckBox.IsChecked == true,
+            TitleColor = GetSelectedTitleColor(),
+            ArtistColor = GetSelectedArtistColor(),
+            TitleOpacity = TitleOpacitySlider.Value / 100.0,
+            ArtistOpacity = ArtistOpacitySlider.Value / 100.0
         };
 
         _activeSettings = settings;
         _overlayWindow.ApplySettings(settings);
         ApplyGamepadSettings(settings);
         ApplyAutoStart(settings.AutoStartOnBoot);
+        ApplyDisplayColors(settings);
         UpdateOverlayControlLabels();
     }
 
@@ -991,6 +1001,91 @@ public partial class MainWindow : Window
         HorizontalValueText.Text = $"{HorizontalSlider.Value:0}%";
         BottomOffsetValueText.Text = $"{BottomOffsetSlider.Value:0}%";
         ScaleValueText.Text = $"{ScaleSlider.Value:0}%";
+        TitleOpacityValueText.Text = $"{TitleOpacitySlider.Value:0}%";
+        ArtistOpacityValueText.Text = $"{ArtistOpacitySlider.Value:0}%";
+    }
+
+    private void SelectTitleColor(string color)
+    {
+        color = color.ToUpperInvariant();
+        TitleColor_White.IsChecked = color == "#FFFFFF";
+        TitleColor_Light.IsChecked = color == "#D0E0F0";
+        TitleColor_Yellow.IsChecked = color == "#F0E080";
+        TitleColor_Green.IsChecked = color == "#90EE90";
+        TitleColor_Orange.IsChecked = color == "#FFB366";
+    }
+
+    private void SelectArtistColor(string color)
+    {
+        color = color.ToUpperInvariant();
+        ArtistColor_Light.IsChecked = color == "#C0D0E0";
+        ArtistColor_White.IsChecked = color == "#FFFFFF";
+        ArtistColor_Yellow.IsChecked = color == "#F0E080";
+        ArtistColor_Green.IsChecked = color == "#90EE90";
+        ArtistColor_Orange.IsChecked = color == "#FFB366";
+    }
+
+    private string GetSelectedTitleColor()
+    {
+        if (TitleColor_White.IsChecked == true) return "#FFFFFF";
+        if (TitleColor_Light.IsChecked == true) return "#D0E0F0";
+        if (TitleColor_Yellow.IsChecked == true) return "#F0E080";
+        if (TitleColor_Green.IsChecked == true) return "#90EE90";
+        if (TitleColor_Orange.IsChecked == true) return "#FFB366";
+        return "#FFFFFF";
+    }
+
+    private string GetSelectedArtistColor()
+    {
+        if (ArtistColor_Light.IsChecked == true) return "#C0D0E0";
+        if (ArtistColor_White.IsChecked == true) return "#FFFFFF";
+        if (ArtistColor_Yellow.IsChecked == true) return "#F0E080";
+        if (ArtistColor_Green.IsChecked == true) return "#90EE90";
+        if (ArtistColor_Orange.IsChecked == true) return "#FFB366";
+        return "#C0D0E0";
+    }
+
+    private void ApplyDisplayColors(OverlaySettings settings)
+    {
+        try
+        {
+            var titleColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(settings.TitleColor);
+            CurrentTitle.Foreground = new System.Windows.Media.SolidColorBrush(titleColor);
+            CurrentTitle.Opacity = settings.TitleOpacity;
+        }
+        catch { }
+
+        try
+        {
+            var artistColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(settings.ArtistColor);
+            CurrentArtist.Foreground = new System.Windows.Media.SolidColorBrush(artistColor);
+            CurrentArtist.Opacity = settings.ArtistOpacity;
+        }
+        catch { }
+    }
+
+    private void TitleColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializingOverlayControls) return;
+        ApplyOverlaySettingsFromControls();
+    }
+
+    private void ArtistColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializingOverlayControls) return;
+        ApplyOverlaySettingsFromControls();
+    }
+
+    private void TitleOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isInitializingOverlayControls) return;
+        ApplyOverlaySettingsFromControls();
+    }
+
+    private void ArtistOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isInitializingOverlayControls) return;
+        ApplyOverlaySettingsFromControls();
     }
 
     private bool RebindGlobalHotkeys()

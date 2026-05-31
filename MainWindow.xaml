@@ -90,7 +90,7 @@
         <!-- 主内容区：左右布局 -->
         <Grid Grid.Row="1" Margin="16,12">
         <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="340" />
+                    <ColumnDefinition Width="380" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
@@ -99,7 +99,7 @@
                 <StackPanel VerticalAlignment="Top">
                     <TextBlock Text="正在播放" FontSize="14" FontWeight="SemiBold" Foreground="#8899AA" />
 
-                    <Border Margin="0,12,0,0" Width="140" Height="140" CornerRadius="12" ClipToBounds="True"
+                    <Border Margin="0,12,0,0" Width="150" Height="150" CornerRadius="12" ClipToBounds="True"
                             HorizontalAlignment="Center" Background="#2A394B" BorderThickness="1" BorderBrush="#49637A">
                         <Image Name="CoverPreview" Stretch="UniformToFill" />
                     </Border>
@@ -113,11 +113,199 @@
                                FontSize="12" TextAlignment="Center" Text="来源：-" />
 
                     <StackPanel Orientation="Horizontal" Margin="0,16,0,0" HorizontalAlignment="Center">
-                        <Button Width="75" Height="34" Content="⏮" Click="Prev_Click" />
-                        <Button Width="75" Height="34" Margin="8,0,0,0" Content="⏯" Click="PlayPause_Click" Background="#2E4358" BorderBrush="#4D6B85" />
-                        <Button Width="75" Height="34" Margin="8,0,0,0" Content="⏭" Click="Next_Click" />
-                        <Button Width="75" Height="34" Margin="8,0,0,0" Content="⟳" Click="Refresh_Click" Background="#6B3A21" BorderBrush="#905437" />
+                        <Button Width="68" Height="32" Content="⏮" Click="Prev_Click" />
+                        <Button Width="68" Height="32" Margin="6,0,0,0" Content="⏯" Click="PlayPause_Click" Background="#2E4358" BorderBrush="#4D6B85" />
+                        <Button Width="68" Height="32" Margin="6,0,0,0" Content="⏭" Click="Next_Click" />
+                        <Button Width="68" Height="32" Margin="6,0,0,0" Content="⟳" Click="Refresh_Click" Background="#6B3A21" BorderBrush="#905437" />
                     </StackPanel>
+
+                    <!-- 歌名/歌手颜色设置 -->
+                    <Border Margin="0,16,0,0" Padding="12" CornerRadius="10" Background="{StaticResource PanelSoftBrush}" BorderThickness="1" BorderBrush="#2E4254">
+                        <StackPanel>
+                            <TextBlock FontSize="13" FontWeight="Bold" Foreground="#EEF5FC" Text="显示颜色" />
+                            <TextBlock Margin="0,2,0,0" Opacity="0.7" Foreground="#8899AA" FontSize="11" Text="点击色块选择颜色" />
+
+                            <TextBlock Margin="0,10,0,0" Opacity="0.85" Foreground="#D1DEE9" Text="歌名颜色" />
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0" HorizontalAlignment="Center">
+                                <RadioButton x:Name="TitleColor_White" GroupName="TitleColor" IsChecked="True"
+                                             Tag="#FFFFFF" Click="TitleColor_Click" ToolTip="白色">
+                                    <RadioButton.Template>
+                                        <ControlTemplate TargetType="RadioButton">
+                                            <Border x:Name="b" Width="26" Height="26" CornerRadius="13" Background="#FFFFFF"
+                                                    BorderBrush="#555" BorderThickness="2" Margin="3" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="b" Property="BorderBrush" Value="#D96A2F" />
+                                                    <Setter TargetName="b" Property="BorderThickness" Value="3" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </RadioButton.Template>
+                                </RadioButton>
+                                <RadioButton x:Name="TitleColor_Light" GroupName="TitleColor"
+                                             Tag="#D0E0F0" Click="TitleColor_Click" ToolTip="浅蓝">
+                                    <RadioButton.Template>
+                                        <ControlTemplate TargetType="RadioButton">
+                                            <Border x:Name="b" Width="26" Height="26" CornerRadius="13" Background="#D0E0F0"
+                                                    BorderBrush="#555" BorderThickness="2" Margin="3" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="b" Property="BorderBrush" Value="#D96A2F" />
+                                                    <Setter TargetName="b" Property="BorderThickness" Value="3" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </RadioButton.Template>
+                                </RadioButton>
+                                <RadioButton x:Name="TitleColor_Yellow" GroupName="TitleColor"
+                                             Tag="#F0E080" Click="TitleColor_Click" ToolTip="暖黄">
+                                    <RadioButton.Template>
+                                        <ControlTemplate TargetType="RadioButton">
+                                            <Border x:Name="b" Width="26" Height="26" CornerRadius="13" Background="#F0E080"
+                                                    BorderBrush="#555" BorderThickness="2" Margin="3" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="b" Property="BorderBrush" Value="#D96A2F" />
+                                                    <Setter TargetName="b" Property="BorderThickness" Value="3" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </RadioButton.Template>
+                                </RadioButton>
+                                <RadioButton x:Name="TitleColor_Green" GroupName="TitleColor"
+                                             Tag="#90EE90" Click="TitleColor_Click" ToolTip="淡绿">
+                                    <RadioButton.Template>
+                                        <ControlTemplate TargetType="RadioButton">
+                                            <Border x:Name="b" Width="26" Height="26" CornerRadius="13" Background="#90EE90"
+                                                    BorderBrush="#555" BorderThickness="2" Margin="3" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="b" Property="BorderBrush" Value="#D96A2F" />
+                                                    <Setter TargetName="b" Property="BorderThickness" Value="3" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </RadioButton.Template>
+                                </RadioButton>
+                                <RadioButton x:Name="TitleColor_Orange" GroupName="TitleColor"
+                                             Tag="#FFB366" Click="TitleColor_Click" ToolTip="橙色">
+                                    <RadioButton.Template>
+                                        <ControlTemplate TargetType="RadioButton">
+                                            <Border x:Name="b" Width="26" Height="26" CornerRadius="13" Background="#FFB366"
+                                                    BorderBrush="#555" BorderThickness="2" Margin="3" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="b" Property="BorderBrush" Value="#D96A2F" />
+                                                    <Setter TargetName="b" Property="BorderThickness" Value="3" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </RadioButton.Template>
+                                </RadioButton>
+                            </StackPanel>
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.7" Foreground="#A0B0C0" FontSize="11" Text="透明度" />
+                                <Slider Name="TitleOpacitySlider" Grid.Column="1" Margin="8,0" Minimum="20" Maximum="100" Value="100" ValueChanged="TitleOpacitySlider_ValueChanged" />
+                                <TextBlock Name="TitleOpacityValueText" Grid.Column="2" VerticalAlignment="Center" Opacity="0.8" Foreground="#DCE7F2" FontSize="11" Text="100%" Width="35" TextAlignment="Right" />
+                            </Grid>
+
+                            <Border Height="1" Background="#2A3545" Margin="0,10,0,0" />
+
+                            <TextBlock Margin="0,10,0,0" Opacity="0.85" Foreground="#D1DEE9" Text="歌手颜色" />
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0" HorizontalAlignment="Center">
+                                <RadioButton x:Name="ArtistColor_Light" GroupName="ArtistColor" IsChecked="True"
+                                             Tag="#C0D0E0" Click="ArtistColor_Click" ToolTip="浅灰蓝">
+                                    <RadioButton.Template>
+                                        <ControlTemplate TargetType="RadioButton">
+                                            <Border x:Name="b" Width="26" Height="26" CornerRadius="13" Background="#C0D0E0"
+                                                    BorderBrush="#555" BorderThickness="2" Margin="3" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="b" Property="BorderBrush" Value="#D96A2F" />
+                                                    <Setter TargetName="b" Property="BorderThickness" Value="3" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </RadioButton.Template>
+                                </RadioButton>
+                                <RadioButton x:Name="ArtistColor_White" GroupName="ArtistColor"
+                                             Tag="#FFFFFF" Click="ArtistColor_Click" ToolTip="白色">
+                                    <RadioButton.Template>
+                                        <ControlTemplate TargetType="RadioButton">
+                                            <Border x:Name="b" Width="26" Height="26" CornerRadius="13" Background="#FFFFFF"
+                                                    BorderBrush="#555" BorderThickness="2" Margin="3" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="b" Property="BorderBrush" Value="#D96A2F" />
+                                                    <Setter TargetName="b" Property="BorderThickness" Value="3" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </RadioButton.Template>
+                                </RadioButton>
+                                <RadioButton x:Name="ArtistColor_Yellow" GroupName="ArtistColor"
+                                             Tag="#F0E080" Click="ArtistColor_Click" ToolTip="暖黄">
+                                    <RadioButton.Template>
+                                        <ControlTemplate TargetType="RadioButton">
+                                            <Border x:Name="b" Width="26" Height="26" CornerRadius="13" Background="#F0E080"
+                                                    BorderBrush="#555" BorderThickness="2" Margin="3" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="b" Property="BorderBrush" Value="#D96A2F" />
+                                                    <Setter TargetName="b" Property="BorderThickness" Value="3" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </RadioButton.Template>
+                                </RadioButton>
+                                <RadioButton x:Name="ArtistColor_Green" GroupName="ArtistColor"
+                                             Tag="#90EE90" Click="ArtistColor_Click" ToolTip="淡绿">
+                                    <RadioButton.Template>
+                                        <ControlTemplate TargetType="RadioButton">
+                                            <Border x:Name="b" Width="26" Height="26" CornerRadius="13" Background="#90EE90"
+                                                    BorderBrush="#555" BorderThickness="2" Margin="3" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="b" Property="BorderBrush" Value="#D96A2F" />
+                                                    <Setter TargetName="b" Property="BorderThickness" Value="3" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </RadioButton.Template>
+                                </RadioButton>
+                                <RadioButton x:Name="ArtistColor_Orange" GroupName="ArtistColor"
+                                             Tag="#FFB366" Click="ArtistColor_Click" ToolTip="橙色">
+                                    <RadioButton.Template>
+                                        <ControlTemplate TargetType="RadioButton">
+                                            <Border x:Name="b" Width="26" Height="26" CornerRadius="13" Background="#FFB366"
+                                                    BorderBrush="#555" BorderThickness="2" Margin="3" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="b" Property="BorderBrush" Value="#D96A2F" />
+                                                    <Setter TargetName="b" Property="BorderThickness" Value="3" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </RadioButton.Template>
+                                </RadioButton>
+                            </StackPanel>
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.7" Foreground="#A0B0C0" FontSize="11" Text="透明度" />
+                                <Slider Name="ArtistOpacitySlider" Grid.Column="1" Margin="8,0" Minimum="20" Maximum="100" Value="86" ValueChanged="ArtistOpacitySlider_ValueChanged" />
+                                <TextBlock Name="ArtistOpacityValueText" Grid.Column="2" VerticalAlignment="Center" Opacity="0.8" Foreground="#DCE7F2" FontSize="11" Text="86%" Width="35" TextAlignment="Right" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
 
