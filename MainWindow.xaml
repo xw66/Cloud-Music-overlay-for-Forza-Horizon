@@ -381,21 +381,21 @@
                                     <StackPanel Grid.Column="0" Margin="0,0,8,0">
                                         <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#E8F0F8" Text="应用快捷键（游戏内按）" />
                                         <TextBlock Margin="0,8,0,0" Opacity="0.8" Foreground="#B0C0D0" Text="上一首" />
-                                        <TextBox Name="AppPrevHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Shift+Left" />
+                                        <TextBox Name="AppPrevHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Shift+Left" LostFocus="HotkeyBox_LostFocus" />
                                         <TextBlock Margin="0,6,0,0" Opacity="0.8" Foreground="#B0C0D0" Text="下一首" />
-                                        <TextBox Name="AppNextHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Shift+Right" />
+                                        <TextBox Name="AppNextHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Shift+Right" LostFocus="HotkeyBox_LostFocus" />
                                         <TextBlock Margin="0,6,0,0" Opacity="0.8" Foreground="#B0C0D0" Text="播放/暂停" />
-                                        <TextBox Name="AppToggleHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Shift+Down" />
+                                        <TextBox Name="AppToggleHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Shift+Down" LostFocus="HotkeyBox_LostFocus" />
                                     </StackPanel>
 
                                     <StackPanel Grid.Column="1" Margin="8,0,0,0">
                                         <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#E8F0F8" Text="网易云快捷键（转发）" />
                                         <TextBlock Margin="0,8,0,0" Opacity="0.8" Foreground="#B0C0D0" Text="上一首" />
-                                        <TextBox Name="NeteasePrevHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Alt+Left" />
+                                        <TextBox Name="NeteasePrevHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Alt+Left" LostFocus="HotkeyBox_LostFocus" />
                                         <TextBlock Margin="0,6,0,0" Opacity="0.8" Foreground="#B0C0D0" Text="下一首" />
-                                        <TextBox Name="NeteaseNextHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Alt+Right" />
+                                        <TextBox Name="NeteaseNextHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Alt+Right" LostFocus="HotkeyBox_LostFocus" />
                                         <TextBlock Margin="0,6,0,0" Opacity="0.8" Foreground="#B0C0D0" Text="播放/暂停" />
-                                        <TextBox Name="NeteaseToggleHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Alt+P" />
+                                        <TextBox Name="NeteaseToggleHotkeyBox" Margin="0,2,0,0" Height="26" Text="Ctrl+Alt+P" LostFocus="HotkeyBox_LostFocus" />
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -411,23 +411,23 @@
                             <!-- 手柄 -->
                             <StackPanel Grid.Column="0" Margin="0,0,8,0">
                                 <TextBlock FontSize="14" FontWeight="Bold" Foreground="#EEF5FC" Text="手柄快捷键" />
-                                <CheckBox Name="EnableGamepadCheckBox" Margin="0,8,0,0" Content="启用 Xbox 手柄" Foreground="#E8F0F8" />
+                                <CheckBox Name="EnableGamepadCheckBox" Margin="0,8,0,0" Content="启用 Xbox 手柄" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
                                 <TextBlock Margin="0,4,0,0" Opacity="0.7" Foreground="#8899AA" FontSize="11" Text="组合键用 + 连接，如 LT+RT+Y" />
 
                                 <TextBlock Margin="0,10,0,0" Opacity="0.8" Foreground="#B0C0D0" Text="上一首" />
-                                <TextBox Name="GamepadPrevHotkeyBox" Margin="0,2,0,0" Height="26" VerticalAlignment="Center" Text="LB+Left" />
+                                <TextBox Name="GamepadPrevHotkeyBox" Margin="0,2,0,0" Height="26" VerticalAlignment="Center" Text="LB+Left" LostFocus="HotkeyBox_LostFocus" />
                                 <TextBlock Margin="0,6,0,0" Opacity="0.8" Foreground="#B0C0D0" Text="下一首" />
-                                <TextBox Name="GamepadNextHotkeyBox" Margin="0,2,0,0" Height="26" VerticalAlignment="Center" Text="RB+Right" />
+                                <TextBox Name="GamepadNextHotkeyBox" Margin="0,2,0,0" Height="26" VerticalAlignment="Center" Text="RB+Right" LostFocus="HotkeyBox_LostFocus" />
                                 <TextBlock Margin="0,6,0,0" Opacity="0.8" Foreground="#B0C0D0" Text="播放/暂停" />
-                                <TextBox Name="GamepadToggleHotkeyBox" Margin="0,2,0,0" Height="26" VerticalAlignment="Center" Text="LT+RT+Y" />
+                                <TextBox Name="GamepadToggleHotkeyBox" Margin="0,2,0,0" Height="26" VerticalAlignment="Center" Text="LT+RT+Y" LostFocus="HotkeyBox_LostFocus" />
                             </StackPanel>
 
                             <!-- 其他设置 -->
                             <StackPanel Grid.Column="1" Margin="8,0,0,0">
                                 <TextBlock FontSize="14" FontWeight="Bold" Foreground="#EEF5FC" Text="其他设置" />
-                                <CheckBox Name="MinimizeToTrayCheckBox" Margin="0,10,0,0" Content="关闭时最小化到托盘" Foreground="#E8F0F8" IsChecked="True" />
-                                <CheckBox Name="AutoStartCheckBox" Margin="0,8,0,0" Content="开机自启动" Foreground="#E8F0F8" />
-                                <CheckBox Name="AlwaysShowCheckBox" Margin="0,8,0,0" Content="悬浮窗始终显示（切换歌曲时淡入淡出）" Foreground="#E8F0F8" />
+                                <CheckBox Name="MinimizeToTrayCheckBox" Margin="0,10,0,0" Content="关闭时最小化到托盘" Foreground="#E8F0F8" IsChecked="True" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
+                                <CheckBox Name="AutoStartCheckBox" Margin="0,8,0,0" Content="开机自启动" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
+                                <CheckBox Name="AlwaysShowCheckBox" Margin="0,8,0,0" Content="悬浮窗始终显示（切换歌曲时淡入淡出）" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
 
                                 <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
                                     <Button Width="88" Height="30" Content="保存" Click="SaveOverlaySettings_Click" Background="#2F5A3A" BorderBrush="#4A7E57" />

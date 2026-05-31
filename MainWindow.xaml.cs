@@ -600,6 +600,20 @@ public partial class MainWindow : Window
         }
     }
 
+    private void SettingCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializingOverlayControls) return;
+        ApplyOverlaySettingsFromControls();
+        _overlaySettingsService.Save(_activeSettings);
+    }
+
+    private void HotkeyBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializingOverlayControls) return;
+        ApplyOverlaySettingsFromControls();
+        _overlaySettingsService.Save(_activeSettings);
+    }
+
     private void ResetOverlaySettings_Click(object sender, RoutedEventArgs e)
     {
         _activeSettings = new OverlaySettings();
