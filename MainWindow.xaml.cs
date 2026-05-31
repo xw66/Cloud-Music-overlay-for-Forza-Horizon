@@ -76,7 +76,6 @@ public partial class MainWindow : Window
         ApplyGamepadSettings(loadedSettings);
 
         InitializeComponent();
-        InitializeTrayIcon();
         ApplyAutoWindowSize();
 
         _pollTimer = new DispatcherTimer
@@ -157,6 +156,7 @@ public partial class MainWindow : Window
         _trayIcon = new TrayIconService();
         var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
         _trayIcon.Initialize(hwnd, "网易云悬浮窗", () => RestoreFromTray());
+        _trayIcon.SetVisible(true);
     }
 
     private void RestoreFromTray()
@@ -190,6 +190,9 @@ public partial class MainWindow : Window
         var source = System.Windows.Interop.HwndSource.FromHwnd(
             new System.Windows.Interop.WindowInteropHelper(this).Handle);
         source?.AddHook(WndProc);
+
+        // 初始化托盘图标（此时 HWND 已就绪）
+        InitializeTrayIcon();
 
         bool ok = RebindGlobalHotkeys();
         if (ok)

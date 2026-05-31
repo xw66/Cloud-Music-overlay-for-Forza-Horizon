@@ -51,6 +51,7 @@ public sealed class TrayIconService : IDisposable
         Shell_NotifyIconW(NIM_ADD, ref _nid);
         Shell_NotifyIconW(NIM_SETVERSION, ref _nid);
 
+        // 创建右键菜单
         _hMenu = CreatePopupMenu();
     }
 
@@ -132,6 +133,7 @@ public sealed class TrayIconService : IDisposable
         }
         catch { }
 
+        // 备用：从文件加载
         try
         {
             string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.ico");
@@ -139,6 +141,18 @@ public sealed class TrayIconService : IDisposable
             {
                 var icon = new System.Drawing.Icon(iconPath);
                 return icon.Handle;
+            }
+        }
+        catch { }
+
+        // 最后备用：加载系统默认图标
+        try
+        {
+            string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
+            if (File.Exists(exePath))
+            {
+                var icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
+                if (icon != null) return icon.Handle;
             }
         }
         catch { }
