@@ -419,6 +419,19 @@ public sealed class NeteaseLocalDataService
 
     private async Task<byte[]?> TryGetCoverBytesFromPlayingListAsync(string name, string artist)
     {
+        // 先尝试从 playingList 精确匹配
+        byte[]? result = await TryMatchFromPlayingListAsync(name, artist);
+        if (result != null)
+        {
+            return result;
+        }
+
+        // playingList 没找到（漫游模式等），尝试通过搜索 API 获取封面
+        return await TrySearchCoverFromApiAsync(name, artist);
+    }
+
+    private async Task<byte[]?> TryMatchFromPlayingListAsync(string name, string artist)
+    {
         if (!File.Exists(_playingListPath))
         {
             return null;
@@ -447,20 +460,12 @@ public sealed class NeteaseLocalDataService
                 return null;
             }
 
-            JsonElement? exactTrack = null;
-            JsonElement? firstTrack = null;
-
             foreach (JsonElement item in list.EnumerateArray())
             {
                 JsonElement trackElement = item;
                 if (item.TryGetProperty("track", out JsonElement trackObj))
                 {
                     trackElement = trackObj;
-                }
-
-                if (firstTrack == null)
-                {
-                    firstTrack = trackElement;
                 }
 
                 string? itemName = ReadString(trackElement, "name");
@@ -471,24 +476,68 @@ public sealed class NeteaseLocalDataService
                     !string.IsNullOrWhiteSpace(itemArtist) &&
                     IsArtistMatch(itemArtist, artist))
                 {
-                    exactTrack = trackElement;
-                    break;
+                    string? url = ReadCoverUrl(trackElement);
+                    return await DownloadCoverBytesAsync(url);
                 }
             }
+        }
+        catch
+        {
+        }
 
-            JsonElement? targetTrack = exactTrack;
-            if (targetTrack == null)
+        return null;
+    }
+
+    private async Task<byte[]?> TrySearchCoverFromApiAsync(string name, string artist)
+    {
+        try
+        {
+            string query = Uri.EscapeDataString($"{name} {artist}");
+            string apiUrl = $"https://music.163.com/api/search/get?s={query}&type=1&limit=5";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+            request.Headers.Referrer = new Uri("https://music.163.com/");
+
+            using var response = await HttpClient.SendAsync(request);
+            string json = await response.Content.ReadAsStringAsync();
+
+            using JsonDocument doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("result", out JsonElement result))
             {
                 return null;
             }
 
-            string? url = ReadCoverUrl(targetTrack.Value);
-            return await DownloadCoverBytesAsync(url);
+            if (!result.TryGetProperty("songs", out JsonElement songs) || songs.GetArrayLength() == 0)
+            {
+                return null;
+            }
+
+            foreach (JsonElement song in songs.EnumerateArray())
+            {
+                string? songName = ReadString(song, "name");
+                if (!string.IsNullOrWhiteSpace(songName) &&
+                    string.Equals(songName.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    if (song.TryGetProperty("album", out JsonElement album))
+                    {
+                        string? picUrl = ReadString(album, "picUrl");
+                        if (!string.IsNullOrWhiteSpace(picUrl))
+                        {
+                            if (!picUrl.StartsWith("http"))
+                            {
+                                picUrl = "https:" + picUrl;
+                            }
+                            return await DownloadCoverBytesAsync(picUrl);
+                        }
+                    }
+                }
+            }
         }
         catch
         {
-            return null;
         }
+
+        return null;
     }
 
     private static bool IsArtistMatch(string left, string right)
