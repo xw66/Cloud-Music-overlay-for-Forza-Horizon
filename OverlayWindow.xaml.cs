@@ -84,19 +84,64 @@ public partial class OverlayWindow : Window
 
     public Task ShowTrackAsync(TrackInfo track)
     {
-        TitleText.Text = track.Name;
-        ArtistText.Text = track.Artist;
-        SetCover(track.CoverBytes);
-
         _hideCts?.Cancel();
         _hideCts = new CancellationTokenSource();
 
-        Show();
-        Visibility = Visibility.Visible;
-        BeginShowAnimation();
-        ScheduleHide(_hideCts.Token);
+        bool isCurrentlyVisible = Visibility == Visibility.Visible && OverlayRoot.Opacity > 0.5;
+
+        if (CurrentSettings.AlwaysShowOverlay && isCurrentlyVisible)
+        {
+            _ = CrossfadeToTrackAsync(track, _hideCts.Token);
+        }
+        else
+        {
+            TitleText.Text = track.Name;
+            ArtistText.Text = track.Artist;
+            SetCover(track.CoverBytes);
+            ApplyTextColors();
+
+            Show();
+            Visibility = Visibility.Visible;
+            BeginShowAnimation();
+
+            if (!CurrentSettings.AlwaysShowOverlay)
+            {
+                ScheduleHide(_hideCts.Token);
+            }
+        }
 
         return Task.CompletedTask;
+    }
+
+    private async Task CrossfadeToTrackAsync(TrackInfo track, CancellationToken token)
+    {
+        var fadeOut = new DoubleAnimation
+        {
+            From = 1,
+            To = 0,
+            Duration = TimeSpan.FromMilliseconds(250),
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+        };
+
+        OverlayRoot.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+        await Task.Delay(260, token);
+
+        if (token.IsCancellationRequested) return;
+
+        TitleText.Text = track.Name;
+        ArtistText.Text = track.Artist;
+        SetCover(track.CoverBytes);
+        ApplyTextColors();
+
+        var fadeIn = new DoubleAnimation
+        {
+            From = 0,
+            To = 1,
+            Duration = TimeSpan.FromMilliseconds(300),
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+        };
+
+        OverlayRoot.BeginAnimation(UIElement.OpacityProperty, fadeIn);
     }
 
     private async void ScheduleHide(CancellationToken token)

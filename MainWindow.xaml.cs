@@ -511,6 +511,7 @@ public partial class MainWindow : Window
             GamepadToggleHotkeyBox.Text = settings.GamepadToggleHotkey;
             MinimizeToTrayCheckBox.IsChecked = settings.MinimizeToTray;
             AutoStartCheckBox.IsChecked = settings.AutoStartOnBoot;
+            AlwaysShowCheckBox.IsChecked = settings.AlwaysShowOverlay;
             SelectTitleColor(settings.TitleColor);
             SelectArtistColor(settings.ArtistColor);
             TitleOpacitySlider.Value = settings.TitleOpacity * 100.0;
@@ -977,6 +978,7 @@ public partial class MainWindow : Window
             GamepadToggleHotkey = GamepadToggleHotkeyBox.Text.Trim(),
             MinimizeToTray = MinimizeToTrayCheckBox.IsChecked == true,
             AutoStartOnBoot = AutoStartCheckBox.IsChecked == true,
+            AlwaysShowOverlay = AlwaysShowCheckBox.IsChecked == true,
             TitleColor = GetSelectedTitleColor(),
             ArtistColor = GetSelectedArtistColor(),
             TitleOpacity = TitleOpacitySlider.Value / 100.0,

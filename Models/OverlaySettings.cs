@@ -23,6 +23,7 @@ public sealed class OverlaySettings
 
     public bool MinimizeToTray { get; set; } = true;
     public bool AutoStartOnBoot { get; set; } = false;
+    public bool AlwaysShowOverlay { get; set; } = false;
 
     public string TitleColor { get; set; } = "#FFFFFF";
     public string ArtistColor { get; set; } = "#C0D0E0";
