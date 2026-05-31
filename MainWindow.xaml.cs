@@ -77,6 +77,7 @@ public partial class MainWindow : Window
 
         InitializeComponent();
         InitializeTrayIcon();
+        ApplyAutoWindowSize();
 
         _pollTimer = new DispatcherTimer
         {
@@ -97,6 +98,20 @@ public partial class MainWindow : Window
         SourceInitialized += MainWindow_SourceInitialized;
         Closing += MainWindow_Closing;
         Closed += MainWindow_Closed;
+    }
+
+    private void ApplyAutoWindowSize()
+    {
+        var screen = SystemParameters.WorkArea;
+        double dpiScale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+        double screenWidth = screen.Width / dpiScale;
+        double screenHeight = screen.Height / dpiScale;
+
+        double targetWidth = Math.Max(900, Math.Min(screenWidth * 0.75, 1200));
+        double targetHeight = Math.Max(500, Math.Min(screenHeight * 0.7, 750));
+
+        Width = targetWidth;
+        Height = targetHeight;
     }
 
     private void LoadEmbeddedResources()
