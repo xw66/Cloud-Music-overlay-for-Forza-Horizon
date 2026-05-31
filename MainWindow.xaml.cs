@@ -22,7 +22,6 @@ public partial class MainWindow : Window
 
     private const int DwmwaSystemBackdropType = 38;
     private const int DwmsbtMainwindow = 2;
-    private const int DwmsbtTransientwindow = 3;
     private readonly NeteaseLocalDataService _neteaseLocalDataService;
     private readonly SmtcTrackService _smtcTrackService;
     private readonly OverlaySettingsService _overlaySettingsService;
