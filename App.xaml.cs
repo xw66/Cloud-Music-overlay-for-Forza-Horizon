@@ -1,73 +1,55 @@
 ﻿using System;
 using System.IO;
-using System.Reflection;
-using Microsoft.UI.Xaml;
+using System.Windows;
 
 namespace HorizonRadioOverlay;
 
 public partial class App : Application
 {
-    private static readonly string LogDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "HorizonRadioOverlay");
-    private static readonly string LogFile = Path.Combine(LogDir, "crash.log");
+    private MainWindow? _mainWindow;
 
-    private Window? _window;
-
-    public App()
+    protected override void OnStartup(StartupEventArgs e)
     {
-        this.InitializeComponent();
-        UnhandledException += OnUnhandledException;
-    }
-
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
-    {
-        WriteLog($"[Startup] v{Assembly.GetExecutingAssembly().GetName().Version} OK");
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            string log = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "HorizonRadioOverlay", "crash.log");
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(log)!);
+                File.WriteAllText(log,
+                    $"Time: {DateTime.Now}\r\n" +
+                    $"Type: {args.ExceptionObject.GetType()}\r\n" +
+                    $"Exception: {args.ExceptionObject}\r\n" +
+                    $"Terminating: {args.IsTerminating}\r\n");
+            }
+            catch { }
+        };
 
         try
         {
-            bool startMinimized = args.Arguments.Contains("--autostart", StringComparison.OrdinalIgnoreCase);
+            base.OnStartup(e);
 
-            _window = new MainWindow(startMinimized);
-            _window.Activate();
+            _mainWindow = new MainWindow();
+            MainWindow = _mainWindow;
+            _mainWindow.Show();
         }
         catch (Exception ex)
         {
-            WriteCrash(ex.ToString());
+            string log = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "HorizonRadioOverlay", "crash.log");
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(log)!);
+                File.WriteAllText(log,
+                    $"Time: {DateTime.Now}\r\n" +
+                    $"Type: {ex.GetType()}\r\n" +
+                    $"Exception: {ex}\r\n");
+            }
+            catch { }
             throw;
         }
-    }
-
-    private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
-    {
-        WriteCrash($"[UnhandledException] {e.Exception}");
-        e.Handled = true;
-    }
-
-    private static void WriteCrash(string text)
-    {
-        try
-        {
-            Directory.CreateDirectory(LogDir);
-            File.WriteAllText(LogFile, $"Time: {DateTime.Now}\r\n{text}\r\n");
-        }
-        catch { }
-
-        try
-        {
-            string local = Path.Combine(AppContext.BaseDirectory, "crash.log");
-            File.WriteAllText(local, $"Time: {DateTime.Now}\r\n{text}\r\n");
-        }
-        catch { }
-    }
-
-    private static void WriteLog(string text)
-    {
-        try
-        {
-            Directory.CreateDirectory(LogDir);
-            File.AppendAllText(LogFile, $"Time: {DateTime.Now} {text}\r\n");
-        }
-        catch { }
     }
 }
