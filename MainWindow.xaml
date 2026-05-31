@@ -9,7 +9,6 @@
          Width="1000"
          MinHeight="1150"
          MinWidth="1000"
-         Icon="pack://application:,,,/icon.ico"
          WindowStyle="SingleBorderWindow"
          ResizeMode="CanResizeWithGrip"
          WindowStartupLocation="CenterScreen"
@@ -77,7 +76,7 @@
                     <Button Grid.Column="1" VerticalAlignment="Top" Width="40" Height="40" Padding="6"
                             Background="#2D3F50" BorderBrush="#4A6787" Click="GitHubButton_Click"
                             ToolTip="在 GitHub 上查看源码">
-                        <Image Source="pack://application:,,,/Assets/Icons/icons8-github-50.png" Stretch="Uniform" />
+                         <Image Name="GitHubImage" Stretch="Uniform" />
                     </Button>
                 </Grid>
             </Border>

@@ -1,4 +1,6 @@
-﻿using System.Windows;
+﻿using System;
+using System.IO;
+using System.Windows;
 
 namespace HorizonRadioOverlay;
 
@@ -8,11 +10,46 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        base.OnStartup(e);
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            string log = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "HorizonRadioOverlay", "crash.log");
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(log)!);
+                File.WriteAllText(log,
+                    $"Time: {DateTime.Now}\r\n" +
+                    $"Type: {args.ExceptionObject.GetType()}\r\n" +
+                    $"Exception: {args.ExceptionObject}\r\n" +
+                    $"Terminating: {args.IsTerminating}\r\n");
+            }
+            catch { }
+        };
 
-        _mainWindow = new MainWindow();
-        MainWindow = _mainWindow;
-        _mainWindow.Show();
+        try
+        {
+            base.OnStartup(e);
+
+            _mainWindow = new MainWindow();
+            MainWindow = _mainWindow;
+            _mainWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            string log = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "HorizonRadioOverlay", "crash.log");
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(log)!);
+                File.WriteAllText(log,
+                    $"Time: {DateTime.Now}\r\n" +
+                    $"Type: {ex.GetType()}\r\n" +
+                    $"Exception: {ex}\r\n");
+            }
+            catch { }
+            throw;
+        }
     }
 }
-

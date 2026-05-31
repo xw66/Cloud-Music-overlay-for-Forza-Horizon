@@ -12,7 +12,7 @@
         ShowActivated="False"
         Topmost="True"
         Focusable="False"
-        FontFamily="./Assets/Fonts/#MiSans Demibold">
+        FontFamily="pack://application:,,,/Assets/Fonts/#MiSans Demibold">
     <Window.Resources>
         <DropShadowEffect x:Key="TextGlow" Color="#0B1017" BlurRadius="14" ShadowDepth="0" Opacity="0.95" />
         <DropShadowEffect x:Key="CoverShadow" Color="#091019" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.55" />

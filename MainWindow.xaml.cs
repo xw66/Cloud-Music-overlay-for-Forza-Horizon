@@ -89,9 +89,49 @@ public partial class MainWindow : Window
         InitializeOverlayControls(loadedSettings);
         SetupHotkeyCaptureInputs();
 
+        LoadEmbeddedResources();
+
         SourceInitialized += MainWindow_SourceInitialized;
         Closing += MainWindow_Closing;
         Closed += MainWindow_Closed;
+    }
+
+    private void LoadEmbeddedResources()
+    {
+        try
+        {
+            var iconUri = new Uri("pack://application:,,,/icon.ico");
+            var iconStream = Application.GetResourceStream(iconUri)?.Stream;
+            if (iconStream != null)
+            {
+                var decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(
+                    iconStream,
+                    System.Windows.Media.Imaging.BitmapCreateOptions.None,
+                    System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+                Icon = decoder.Frames[0];
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            var imgUri = new Uri("pack://application:,,,/Assets/Icons/icons8-github-50.png");
+            var imgStream = Application.GetResourceStream(imgUri)?.Stream;
+            if (imgStream != null && GitHubImage != null)
+            {
+                var img = new System.Windows.Media.Imaging.BitmapImage();
+                img.BeginInit();
+                img.StreamSource = imgStream;
+                img.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                img.EndInit();
+                GitHubImage.Source = img;
+            }
+        }
+        catch
+        {
+        }
     }
 
     private void InitializeTrayIcon()
