@@ -175,6 +175,7 @@ public partial class OverlayWindow : Window
             using MemoryStream stream = new(coverBytes);
             image.BeginInit();
             image.CacheOption = BitmapCacheOption.OnLoad;
+            image.DecodePixelWidth = 200;
             image.StreamSource = stream;
             image.EndInit();
             image.Freeze();

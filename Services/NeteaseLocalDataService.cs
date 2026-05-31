@@ -65,7 +65,7 @@ public sealed class NeteaseLocalDataService
 
     public async Task<TrackInfo?> GetCurrentTrackAsync()
     {
-        TrackInfo? liveTrack = GetTrackFromRunningProcess();
+        TrackInfo? liveTrack = await Task.Run(() => GetTrackFromRunningProcess());
         if (liveTrack == null)
         {
             return null;
@@ -80,7 +80,7 @@ public sealed class NeteaseLocalDataService
         }
         else
         {
-            coverBytes = await TryGetCoverBytesFromPlayingListAsync(liveTrack.Name, liveTrack.Artist);
+            coverBytes = await Task.Run(() => TryGetCoverBytesFromPlayingListAsync(liveTrack.Name, liveTrack.Artist));
             _lastCoverTrackKey = key;
             _lastCoverBytes = coverBytes;
         }

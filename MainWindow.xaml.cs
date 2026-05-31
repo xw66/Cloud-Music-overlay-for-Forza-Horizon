@@ -36,7 +36,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<TextBox, DispatcherTimer> _gamepadCommitTimers = new();
     private bool _gamepadEnabledBeforeCapture;
     private int _gamepadCaptureFocusCount;
-    private System.Windows.Forms.NotifyIcon? _trayIcon;
+    private TrayIconService? _trayIcon;
     private bool _isRealExit;
 
     private static readonly (GamepadButton Button, string Token)[] GamepadTokenOrder =
@@ -154,37 +154,9 @@ public partial class MainWindow : Window
 
     private void InitializeTrayIcon()
     {
-        System.Drawing.Icon? icon = null;
-        try
-        {
-            var uri = new Uri("pack://application:,,,/icon.ico");
-            var streamInfo = Application.GetResourceStream(uri);
-            if (streamInfo?.Stream != null)
-            {
-                icon = new System.Drawing.Icon(streamInfo.Stream);
-            }
-        }
-        catch
-        {
-            string iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.ico");
-            if (System.IO.File.Exists(iconPath))
-            {
-                try { icon = new System.Drawing.Icon(iconPath); } catch { }
-            }
-        }
-
-        _trayIcon = new System.Windows.Forms.NotifyIcon
-        {
-            Icon = icon,
-            Text = "网易云悬浮窗",
-            Visible = false
-        };
-
-        var contextMenu = new System.Windows.Forms.ContextMenuStrip();
-        contextMenu.Items.Add("显示主窗口", null, (_, _) => RestoreFromTray());
-        contextMenu.Items.Add("退出", null, (_, _) => RealExit());
-        _trayIcon.ContextMenuStrip = contextMenu;
-        _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
+        _trayIcon = new TrayIconService();
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        _trayIcon.Initialize(hwnd, "网易云悬浮窗", () => RestoreFromTray());
     }
 
     private void RestoreFromTray()
@@ -192,10 +164,7 @@ public partial class MainWindow : Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
-        if (_trayIcon != null)
-        {
-            _trayIcon.Visible = false;
-        }
+        _trayIcon?.SetVisible(false);
     }
 
     private void RealExit()
@@ -213,15 +182,15 @@ public partial class MainWindow : Window
 
         e.Cancel = true;
         Hide();
-        if (_trayIcon != null)
-        {
-            _trayIcon.Visible = true;
-            _trayIcon.ShowBalloonTip(2000, "网易云悬浮窗", "已最小化到托盘，双击图标恢复。", System.Windows.Forms.ToolTipIcon.Info);
-        }
+        _trayIcon?.SetVisible(true);
     }
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)
     {
+        var source = System.Windows.Interop.HwndSource.FromHwnd(
+            new System.Windows.Interop.WindowInteropHelper(this).Handle);
+        source?.AddHook(WndProc);
+
         bool ok = RebindGlobalHotkeys();
         if (ok)
         {
@@ -237,6 +206,12 @@ public partial class MainWindow : Window
         }
 
         _ = SilentCheckUpdateAsync();
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        _trayIcon?.HandleMessage(msg, lParam);
+        return IntPtr.Zero;
     }
 
     private void MainWindow_Closed(object? sender, EventArgs e)
@@ -453,6 +428,7 @@ public partial class MainWindow : Window
             using MemoryStream stream = new(coverBytes);
             image.BeginInit();
             image.CacheOption = BitmapCacheOption.OnLoad;
+            image.DecodePixelWidth = 200;
             image.StreamSource = stream;
             image.EndInit();
             image.Freeze();

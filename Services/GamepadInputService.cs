@@ -25,7 +25,7 @@ public sealed class GamepadInputService : IDisposable
     {
         _timer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(50)
+            Interval = TimeSpan.FromMilliseconds(100)
         };
         _timer.Tick += Timer_Tick;
     }
