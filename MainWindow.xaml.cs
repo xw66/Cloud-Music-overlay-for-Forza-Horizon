@@ -107,11 +107,11 @@ public partial class MainWindow : Window
         double screenWidth = screen.Width / dpiScale;
         double screenHeight = screen.Height / dpiScale;
 
-        double targetWidth = Math.Max(920, Math.Min(screenWidth * 0.78, 1240));
-        double targetHeight = Math.Max(500, Math.Min(screenHeight * 0.7, 750));
+        double targetWidth = Math.Min(1080, screenWidth * 0.42);
+        double targetHeight = Math.Min(720, screenHeight * 0.52);
 
-        Width = targetWidth;
-        Height = targetHeight;
+        Width = Math.Max(920, targetWidth);
+        Height = Math.Max(600, targetHeight);
     }
 
     private void LoadEmbeddedResources()
