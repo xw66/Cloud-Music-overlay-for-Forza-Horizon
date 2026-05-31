@@ -16,16 +16,16 @@
         Background="Transparent"
         FontFamily="Segoe UI">
     <Window.Resources>
-        <SolidColorBrush x:Key="Accent" Color="#7C6BF0" />
-        <SolidColorBrush x:Key="TextPrimary" Color="#E8ECF0" />
-        <SolidColorBrush x:Key="TextSecondary" Color="#8899AA" />
-        <SolidColorBrush x:Key="TextMuted" Color="#5A6880" />
-        <SolidColorBrush x:Key="InputBg" Color="#1C2438" />
-        <SolidColorBrush x:Key="InputBorder" Color="#2E3D56" />
-        <SolidColorBrush x:Key="CardBg" Color="#151D2E" />
-        <SolidColorBrush x:Key="CardBorder" Color="#263350" />
-        <SolidColorBrush x:Key="BtnBg" Color="#252F44" />
-        <SolidColorBrush x:Key="BtnBorder" Color="#364866" />
+        <SolidColorBrush x:Key="Accent" Color="#8B7BF5" />
+        <SolidColorBrush x:Key="TextPrimary" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="TextSecondary" Color="#B0BAC8" />
+        <SolidColorBrush x:Key="TextMuted" Color="#7A889E" />
+        <SolidColorBrush x:Key="InputBg" Color="#1A2236" />
+        <SolidColorBrush x:Key="InputBorder" Color="#2E3D58" />
+        <SolidColorBrush x:Key="CardBg" Color="#121A2A" />
+        <SolidColorBrush x:Key="CardBorder" Color="#222E44" />
+        <SolidColorBrush x:Key="BtnBg" Color="#222E44" />
+        <SolidColorBrush x:Key="BtnBorder" Color="#34466A" />
 
         <Style TargetType="Button">
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
@@ -49,10 +49,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#2E3D56" />
+                                <Setter TargetName="border" Property="Background" Value="#2E3D58" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#1C2438" />
+                                <Setter TargetName="border" Property="Background" Value="#1A2236" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -94,7 +94,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="#0D1117" CornerRadius="20" BorderThickness="1" BorderBrush="#263350">
+    <Border Background="#0A0F1A" CornerRadius="20" BorderThickness="1" BorderBrush="#222E44">
         <Grid Margin="24">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -103,7 +103,7 @@
             </Grid.RowDefinitions>
 
             <!-- Header -->
-            <Border Grid.Row="0" Padding="20,16" Background="{StaticResource CardBg}" BorderThickness="1" BorderBrush="{StaticResource CardBorder}" CornerRadius="16">
+            <Border Grid.Row="0" Padding="20,16" Background="#141C2C" BorderThickness="1" BorderBrush="#1E2A40" CornerRadius="16">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -134,7 +134,7 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Left: Now Playing -->
-                <Border Grid.Column="0" Padding="20" Background="{StaticResource CardBg}" BorderThickness="1" BorderBrush="{StaticResource CardBorder}" CornerRadius="16">
+                <Border Grid.Column="0" Padding="20" Background="#121A2C" BorderThickness="1" BorderBrush="#1E2A40" CornerRadius="16">
                     <StackPanel>
                         <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}" Text="正在播放" />
                         <Border Margin="0,12,0,0" Width="120" Height="120" CornerRadius="16" ClipToBounds="True"
@@ -167,7 +167,7 @@
                 </Border>
 
                 <!-- Right: Settings -->
-                <Border Grid.Column="1" Margin="16,0,0,0" Padding="20" Background="{StaticResource CardBg}" BorderThickness="1" BorderBrush="{StaticResource CardBorder}" CornerRadius="16">
+                <Border Grid.Column="1" Margin="16,0,0,0" Padding="20" Background="#121A2C" BorderThickness="1" BorderBrush="#1E2A40" CornerRadius="16">
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel>
                             <!-- Overlay -->
@@ -265,7 +265,7 @@
                                 </StackPanel>
                             </Grid>
 
-                            <Border Height="1" Background="#263350" Margin="0,14,0,0" />
+                            <Border Height="1" Background="#1E2A40" Margin="0,14,0,0" />
 
                             <!-- Hotkeys -->
                             <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}" Text="快捷键映射" />
@@ -296,7 +296,7 @@
                                 </StackPanel>
                             </Grid>
 
-                            <Border Height="1" Background="#263350" Margin="0,14,0,0" />
+                            <Border Height="1" Background="#1E2A40" Margin="0,14,0,0" />
 
                             <!-- Gamepad -->
                             <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}" Text="手柄快捷键" />
@@ -321,7 +321,7 @@
                                 </StackPanel>
                             </Grid>
 
-                            <Border Height="1" Background="#263350" Margin="0,14,0,0" />
+                            <Border Height="1" Background="#1E2A40" Margin="0,14,0,0" />
 
                             <!-- System -->
                             <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}" Text="系统" />
@@ -346,7 +346,7 @@
             </Grid>
 
             <!-- Footer -->
-            <Border Grid.Row="2" Margin="0,16,0,0" Padding="16,10" Background="{StaticResource CardBg}" BorderThickness="1" BorderBrush="{StaticResource CardBorder}" CornerRadius="12">
+            <Border Grid.Row="2" Margin="0,16,0,0" Padding="16,10" Background="#121A2C" BorderThickness="1" BorderBrush="#1E2A40" CornerRadius="12">
                 <TextBlock Name="StatusText" FontSize="11" Foreground="{StaticResource TextSecondary}" Text="状态：空闲" />
             </Border>
         </Grid>

@@ -2,10 +2,12 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using System.Windows.Media.Imaging;
 using HorizonRadioOverlay.Models;
@@ -15,6 +17,12 @@ namespace HorizonRadioOverlay;
 
 public partial class MainWindow : Window
 {
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    private const int DwmwaSystemBackdropType = 38;
+    private const int DwmsbtMainwindow = 2;
+    private const int DwmsbtTransientwindow = 3;
     private readonly NeteaseLocalDataService _neteaseLocalDataService;
     private readonly SmtcTrackService _smtcTrackService;
     private readonly OverlaySettingsService _overlaySettingsService;
@@ -217,6 +225,10 @@ public partial class MainWindow : Window
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)
     {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        int backdropType = DwmsbtMainwindow;
+        _ = DwmSetWindowAttribute(hwnd, DwmwaSystemBackdropType, ref backdropType, sizeof(int));
+
         EnsureAutoStartRegistry(_activeSettings);
 
         bool ok = RebindGlobalHotkeys();
