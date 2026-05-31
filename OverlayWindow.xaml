@@ -1,99 +1,43 @@
-<Window x:Class="HorizonRadioOverlay.OverlayWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Overlay"
-        Width="210"
-        Height="198"
-        WindowStyle="None"
-        ResizeMode="NoResize"
-        AllowsTransparency="True"
-        Background="Transparent"
-        ShowInTaskbar="False"
-        ShowActivated="False"
-        Topmost="True"
-        Focusable="False"
-        FontFamily="pack://application:,,,/Assets/Fonts/#MiSans Demibold">
-    <Window.Resources>
-        <DropShadowEffect x:Key="TextGlow" Color="#0B1017" BlurRadius="14" ShadowDepth="0" Opacity="0.95" />
-        <DropShadowEffect x:Key="CoverShadow" Color="#091019" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.55" />
-        <LinearGradientBrush x:Key="InfoGlow" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#1A273545" Offset="0" />
-            <GradientStop Color="#00273545" Offset="1" />
-        </LinearGradientBrush>
-    </Window.Resources>
+﻿<Window
+    x:Class="HorizonRadioOverlay.OverlayWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Overlay">
 
-    <Viewbox Stretch="Fill">
-        <Grid Name="OverlayRoot" Width="210" Height="198" Background="Transparent" Margin="0" Opacity="0">
-            <Grid.RenderTransform>
-                <TranslateTransform x:Name="RootTransform" Y="8" />
-            </Grid.RenderTransform>
+    <Grid x:Name="OverlayRoot" Opacity="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="106" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
+        <Border Grid.Row="0"
+                Width="96" Height="96" CornerRadius="8"
+                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,0,0,4"
+                Background="#22000000" BorderThickness="1" BorderBrush="#66E6EEF7">
+            <Image Name="CoverImage" Stretch="UniformToFill" />
+        </Border>
+
+        <Grid Grid.Row="1" Width="188" Height="70" Margin="0,4,0,0" VerticalAlignment="Top" HorizontalAlignment="Center">
             <Grid.RowDefinitions>
-                <RowDefinition Height="106" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="42" />
+                <RowDefinition Height="26" />
             </Grid.RowDefinitions>
 
-            <Border Name="CoverFrame"
-                    Width="96"
-                    Height="96"
-                    CornerRadius="4"
-                    ClipToBounds="True"
-                    Background="#22000000"
-                    BorderThickness="1"
-                    BorderBrush="#66E6EEF7"
-                    VerticalAlignment="Top"
-                    HorizontalAlignment="Center"
-                    Margin="0,0,0,4"
-                    Effect="{StaticResource CoverShadow}">
-                <Image Name="CoverImage" Stretch="UniformToFill" />
-            </Border>
+            <Viewbox Grid.Row="0" Width="188" Height="42" Stretch="Uniform" StretchDirection="DownOnly">
+                <TextBlock Name="TitleText"
+                           FontSize="19" FontWeight="Bold"
+                           Foreground="#F4F9FF"
+                           TextWrapping="NoWrap" TextAlignment="Center"
+                           VerticalAlignment="Center" HorizontalAlignment="Center" />
+            </Viewbox>
 
-            <Border Grid.Row="1"
-                    Width="192"
-                    Height="84"
-                    CornerRadius="6"
-                    Background="{StaticResource InfoGlow}"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Top" />
-
-            <Grid Grid.Row="1"
-                  Width="188"
-                  Height="70"
-                  Margin="0,4,0,0"
-                  VerticalAlignment="Top"
-                  HorizontalAlignment="Center">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="42" />
-                    <RowDefinition Height="26" />
-                </Grid.RowDefinitions>
-
-                <Viewbox Grid.Row="0" Width="188" Height="42" Stretch="Uniform" StretchDirection="DownOnly">
-                    <TextBlock Name="TitleText"
-                               FontSize="19"
-                               FontWeight="Bold"
-                               FontStretch="Expanded"
-                               Foreground="#F4F9FF"
-                               TextWrapping="NoWrap"
-                               TextTrimming="None"
-                               TextAlignment="Center"
-                               VerticalAlignment="Center"
-                               HorizontalAlignment="Center"
-                               Effect="{StaticResource TextGlow}" />
-                </Viewbox>
-
-                <Viewbox Grid.Row="1" Width="188" Height="26" Stretch="Uniform" StretchDirection="DownOnly">
-                    <TextBlock Name="ArtistText"
-                               FontSize="15"
-                               FontStretch="Expanded"
-                               Foreground="#E2ECF7"
-                               TextWrapping="NoWrap"
-                               TextTrimming="None"
-                               TextAlignment="Center"
-                               VerticalAlignment="Center"
-                               HorizontalAlignment="Center"
-                               Effect="{StaticResource TextGlow}" />
-                </Viewbox>
-            </Grid>
+            <Viewbox Grid.Row="1" Width="188" Height="26" Stretch="Uniform" StretchDirection="DownOnly">
+                <TextBlock Name="ArtistText"
+                           FontSize="15"
+                           Foreground="#E2ECF7"
+                           TextWrapping="NoWrap" TextAlignment="Center"
+                           VerticalAlignment="Center" HorizontalAlignment="Center" />
+            </Viewbox>
         </Grid>
-    </Viewbox>
+    </Grid>
 </Window>
