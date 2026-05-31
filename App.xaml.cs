@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Reflection;
-using Microsoft.UI.Xaml;
+using System.Windows;
 
 namespace HorizonRadioOverlay;
 
@@ -12,36 +12,35 @@ public partial class App : Application
         "HorizonRadioOverlay");
     private static readonly string LogFile = Path.Combine(LogDir, "crash.log");
 
-    private Window? _window;
+    private MainWindow? _mainWindow;
 
     public App()
     {
-        this.InitializeComponent();
-        UnhandledException += OnUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += (_, args) => WriteCrash(
+            $"[UnhandledException] Terminating={args.IsTerminating}\r\n{args.ExceptionObject}");
+        DispatcherUnhandledException += (_, args) => WriteCrash(
+            $"[DispatcherUnhandledException]\r\n{args.Exception}");
     }
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override void OnStartup(StartupEventArgs e)
     {
+        base.OnStartup(e);
+
         WriteLog($"[Startup] v{Assembly.GetExecutingAssembly().GetName().Version} OK");
 
         try
         {
-            bool startMinimized = args.Arguments.Contains("--autostart", StringComparison.OrdinalIgnoreCase);
+            bool startMinimized = e.Args.Contains("--autostart", StringComparer.OrdinalIgnoreCase);
 
-            _window = new MainWindow(startMinimized);
-            _window.Activate();
+            _mainWindow = new MainWindow(startMinimized);
+            MainWindow = _mainWindow;
+            _mainWindow.Show();
         }
         catch (Exception ex)
         {
             WriteCrash(ex.ToString());
             throw;
         }
-    }
-
-    private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
-    {
-        WriteCrash($"[UnhandledException] {e.Exception}");
-        e.Handled = true;
     }
 
     private static void WriteCrash(string text)
