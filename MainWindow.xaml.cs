@@ -96,9 +96,28 @@ public partial class MainWindow : Window
 
     private void InitializeTrayIcon()
     {
+        System.Drawing.Icon? icon = null;
+        try
+        {
+            var uri = new Uri("pack://application:,,,/icon.ico");
+            var streamInfo = Application.GetResourceStream(uri);
+            if (streamInfo?.Stream != null)
+            {
+                icon = new System.Drawing.Icon(streamInfo.Stream);
+            }
+        }
+        catch
+        {
+            string iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.ico");
+            if (System.IO.File.Exists(iconPath))
+            {
+                try { icon = new System.Drawing.Icon(iconPath); } catch { }
+            }
+        }
+
         _trayIcon = new System.Windows.Forms.NotifyIcon
         {
-            Icon = new System.Drawing.Icon(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.ico")),
+            Icon = icon,
             Text = "网易云悬浮窗",
             Visible = false
         };
