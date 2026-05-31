@@ -19,6 +19,10 @@ public sealed class TrayIconService : IDisposable
     private const int WM_USER_TRAYICON = 0x0400 + 1;
     private const int WM_LBUTTONDBLCLK = 0x0203;
     private const int WM_RBUTTONUP = 0x0205;
+    private const int WM_COMMAND = 0x0111;
+
+    private const int MENU_ID_SHOW = 1;
+    private const int MENU_ID_EXIT = 2;
 
     private const int TPM_RIGHTBUTTON = 0x0002;
     private const int TPM_BOTTOMALIGN = 0x0020;
@@ -28,12 +32,14 @@ public sealed class TrayIconService : IDisposable
     private IntPtr _hIcon;
     private IntPtr _hMenu;
     private Action? _onDoubleClick;
+    private Action? _onExit;
     private bool _disposed;
 
-    public void Initialize(IntPtr hWnd, string tipText, Action onDoubleClick)
+    public void Initialize(IntPtr hWnd, string tipText, Action onDoubleClick, Action onExit)
     {
         _hWnd = hWnd;
         _onDoubleClick = onDoubleClick;
+        _onExit = onExit;
 
         _hIcon = LoadIconFromResource();
 
@@ -77,24 +83,35 @@ public sealed class TrayIconService : IDisposable
         while (GetMenuItemCount(_hMenu) > 0)
             RemoveMenu(_hMenu, 0, 0x0400);
 
-        AppendMenuW(_hMenu, 0, 1, "显示主窗口");
+        AppendMenuW(_hMenu, 0, MENU_ID_SHOW, "显示主窗口");
         AppendMenuW(_hMenu, 0x00000800, 0, "");
-        AppendMenuW(_hMenu, 0, 2, "退出");
+        AppendMenuW(_hMenu, 0, MENU_ID_EXIT, "退出");
 
+        SetForegroundWindow(_hWnd);
         GetCursorPos(out POINT pt);
         TrackPopupMenu(_hMenu, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
             pt.X, pt.Y, 0, _hWnd, IntPtr.Zero);
+        PostMessage(_hWnd, 0, IntPtr.Zero, IntPtr.Zero);
     }
 
-    public void HandleMessage(int msg, IntPtr lParam)
+    public void HandleMessage(int msg, IntPtr wParam, IntPtr lParam)
     {
-        if (msg != WM_USER_TRAYICON) return;
-
-        int l = (int)lParam;
-        if (l == WM_LBUTTONDBLCLK)
-            _onDoubleClick?.Invoke();
-        else if (l == WM_RBUTTONUP)
-            ShowContextMenu();
+        if (msg == WM_USER_TRAYICON)
+        {
+            int l = (int)lParam;
+            if (l == WM_LBUTTONDBLCLK)
+                _onDoubleClick?.Invoke();
+            else if (l == WM_RBUTTONUP)
+                ShowContextMenu();
+        }
+        else if (msg == WM_COMMAND)
+        {
+            int menuId = (int)wParam & 0xFFFF;
+            if (menuId == MENU_ID_SHOW)
+                _onDoubleClick?.Invoke();
+            else if (menuId == MENU_ID_EXIT)
+                _onExit?.Invoke();
+        }
     }
 
     public void Dispose()
@@ -192,7 +209,7 @@ public sealed class TrayIconService : IDisposable
     [DllImport("user32.dll")]
     private static extern IntPtr CreatePopupMenu();
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool AppendMenuW(IntPtr hMenu, int uFlags, int uIDNewItem, string lpNewItem);
 
     [DllImport("user32.dll")]
@@ -209,6 +226,12 @@ public sealed class TrayIconService : IDisposable
 
     [DllImport("user32.dll")]
     private static extern bool DestroyIcon(IntPtr hIcon);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT

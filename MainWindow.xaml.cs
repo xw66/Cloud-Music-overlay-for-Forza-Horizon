@@ -155,7 +155,7 @@ public partial class MainWindow : Window
     {
         _trayIcon = new TrayIconService();
         var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        _trayIcon.Initialize(hwnd, "网易云悬浮窗", () => RestoreFromTray());
+        _trayIcon.Initialize(hwnd, "网易云悬浮窗", () => RestoreFromTray(), () => RealExit());
         _trayIcon.SetVisible(true);
     }
 
@@ -213,7 +213,7 @@ public partial class MainWindow : Window
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        _trayIcon?.HandleMessage(msg, lParam);
+        _trayIcon?.HandleMessage(msg, wParam, lParam);
         return IntPtr.Zero;
     }
 
