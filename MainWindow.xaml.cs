@@ -59,7 +59,7 @@ public partial class MainWindow : Window
         (GamepadButton.Start, "Start")
     };
 
-    public MainWindow()
+    public MainWindow(bool startMinimized = false)
     {
         _isInitializingOverlayControls = true;
 
@@ -97,6 +97,16 @@ public partial class MainWindow : Window
         SourceInitialized += MainWindow_SourceInitialized;
         Closing += MainWindow_Closing;
         Closed += MainWindow_Closed;
+
+        if (startMinimized)
+        {
+            WindowState = WindowState.Minimized;
+            ShowInTaskbar = false;
+            SourceInitialized += (_, _) =>
+            {
+                if (_trayIcon != null) _trayIcon.Visible = true;
+            };
+        }
     }
 
     private void LoadEmbeddedResources()
@@ -1051,7 +1061,7 @@ public partial class MainWindow : Window
                 string? exePath = Environment.ProcessPath;
                 if (!string.IsNullOrWhiteSpace(exePath))
                 {
-                    key.SetValue("HorizonRadioOverlay", $"\"{exePath}\"");
+                    key.SetValue("HorizonRadioOverlay", $"\"{exePath}\" --autostart");
                 }
             }
             else

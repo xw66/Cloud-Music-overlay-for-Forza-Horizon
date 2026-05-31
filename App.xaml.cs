@@ -30,7 +30,9 @@ public partial class App : Application
 
         try
         {
-            _mainWindow = new MainWindow();
+            bool startMinimized = e.Args.Contains("--autostart", StringComparer.OrdinalIgnoreCase);
+
+            _mainWindow = new MainWindow(startMinimized);
             MainWindow = _mainWindow;
             _mainWindow.Show();
         }
