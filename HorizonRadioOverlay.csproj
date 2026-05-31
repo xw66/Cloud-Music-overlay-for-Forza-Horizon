@@ -10,6 +10,8 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <AssemblyTitle>网易云悬浮窗</AssemblyTitle>
     <Product>网易云悬浮窗</Product>
+    <Version>1.1.0</Version>
+    <FileVersion>1.1.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

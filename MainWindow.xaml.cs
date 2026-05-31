@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -20,6 +21,7 @@ public partial class MainWindow : Window
     private readonly OverlayWindow _overlayWindow;
     private readonly NeteaseShortcutSender _neteaseShortcutSender;
     private readonly GamepadInputService _gamepadInputService;
+    private readonly UpdateService _updateService;
     private readonly DispatcherTimer _pollTimer;
 
     private GlobalHotkeyService? _hotkeyService;
@@ -67,6 +69,7 @@ public partial class MainWindow : Window
         _overlayWindow = new OverlayWindow();
         _neteaseShortcutSender = new NeteaseShortcutSender();
         _gamepadInputService = new GamepadInputService();
+        _updateService = new UpdateService();
         OverlaySettings loadedSettings = _overlaySettingsService.Load();
         _activeSettings = loadedSettings;
         _overlayWindow.ApplySettings(loadedSettings);
@@ -210,12 +213,15 @@ public partial class MainWindow : Window
             SetStatus("状态：快捷键已就绪，按应用快捷键会转发网易云快捷键。", false);
             _ = RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
             _pollTimer.Start();
-            return;
+        }
+        else
+        {
+            SetStatus("状态：应用快捷键注册失败（被占用或格式无效）。", false);
+            _ = RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
+            _pollTimer.Start();
         }
 
-        SetStatus("状态：应用快捷键注册失败（被占用或格式无效）。", false);
-        _ = RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
-        _pollTimer.Start();
+        _ = SilentCheckUpdateAsync();
     }
 
     private void MainWindow_Closed(object? sender, EventArgs e)
@@ -231,6 +237,7 @@ public partial class MainWindow : Window
         _hotkeyService?.Dispose();
         _pollTimer.Stop();
         _gamepadInputService.Dispose();
+        _updateService.Dispose();
         _overlayWindow.Close();
         _trayIcon?.Dispose();
     }
@@ -591,6 +598,66 @@ public partial class MainWindow : Window
 
         await _overlayWindow.ShowTrackAsync(previewTrack);
         SetStatus("状态：已显示悬浮窗预览。", false);
+    }
+
+    private async Task SilentCheckUpdateAsync()
+    {
+        try
+        {
+            UpdateInfo info = await _updateService.CheckForUpdateAsync();
+            if (info.HasUpdate && string.IsNullOrEmpty(info.ErrorMessage))
+            {
+                SetStatus($"状态：发现新版本 {info.LatestVersion}，点击“检查更新”查看。", false);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        SetStatus("状态：正在检查更新…", false);
+        UpdateInfo info = await _updateService.CheckForUpdateAsync();
+
+        if (!string.IsNullOrEmpty(info.ErrorMessage))
+        {
+            SetStatus($"状态：{info.ErrorMessage}", true);
+            return;
+        }
+
+        if (!info.HasUpdate)
+        {
+            string ver = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
+            SetStatus($"状态：已是最新版本（v{ver}）。", false);
+            return;
+        }
+
+        string msg = $"发现新版本 {info.LatestVersion}！\n\n";
+        if (!string.IsNullOrEmpty(info.ReleaseNotes))
+        {
+            msg += $"更新内容：\n{info.ReleaseNotes}\n\n";
+        }
+        msg += "是否前往 GitHub 下载？";
+
+        var result = System.Windows.MessageBox.Show(msg, "发现更新",
+            System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Information);
+
+        if (result == System.Windows.MessageBoxResult.Yes)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = info.DownloadUrl,
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                SetStatus("状态：无法打开下载链接。", true);
+            }
+        }
     }
 
     private void GitHubButton_Click(object sender, RoutedEventArgs e)

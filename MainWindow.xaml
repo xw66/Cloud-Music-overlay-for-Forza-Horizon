@@ -73,11 +73,18 @@
                         <TextBlock Margin="0,6,0,0" Opacity="0.88" Foreground="#D6E0EA"
                                    Text="支持自定义游戏快捷键，歌曲变化时悬浮窗自动弹出。数据来源支持网易云窗口标题和 SMTC（QQ音乐/Apple Music 等）。" />
                     </StackPanel>
-                    <Button Grid.Column="1" VerticalAlignment="Top" Width="40" Height="40" Padding="6"
-                            Background="#2D3F50" BorderBrush="#4A6787" Click="GitHubButton_Click"
-                            ToolTip="在 GitHub 上查看源码">
-                         <Image Name="GitHubImage" Stretch="Uniform" />
-                    </Button>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                        <Button Width="80" Height="34" Padding="6" Margin="0,3,8,0"
+                                Background="#2D3F50" BorderBrush="#4A6787" Click="CheckUpdate_Click"
+                                ToolTip="检查 GitHub 是否有新版本">
+                            <TextBlock Text="检查更新" FontSize="12" />
+                        </Button>
+                        <Button Width="40" Height="40" Padding="6"
+                                Background="#2D3F50" BorderBrush="#4A6787" Click="GitHubButton_Click"
+                                ToolTip="在 GitHub 上查看源码">
+                            <Image Name="GitHubImage" Stretch="Uniform" />
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 
