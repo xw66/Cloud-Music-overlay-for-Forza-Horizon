@@ -97,11 +97,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="#0D1117" CornerRadius="20" BorderThickness="1" BorderBrush="#2A3245" Opacity="0.95">
-        <Border.Effect>
-            <BlurEffect Radius="40" />
-        </Border.Effect>
-
+    <Border Background="#0D1117" CornerRadius="20" BorderThickness="1" BorderBrush="#2A3245">
         <Grid Margin="24">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
