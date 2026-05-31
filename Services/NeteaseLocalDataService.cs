@@ -24,6 +24,7 @@ public sealed class NeteaseLocalDataService
     private const int VkSpace = 0x20;
 
     private readonly string _playingListPath;
+    private readonly string _fmPlayPath;
     private static readonly HttpClient HttpClient = new()
     {
         Timeout = TimeSpan.FromMilliseconds(1200)
@@ -36,6 +37,7 @@ public sealed class NeteaseLocalDataService
     {
         string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         _playingListPath = Path.Combine(localAppData, "Netease", "CloudMusic", "webdata", "file", "playingList");
+        _fmPlayPath = Path.Combine(localAppData, "Netease", "CloudMusic", "webdata", "file", "fmPlay");
     }
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -420,19 +422,26 @@ public sealed class NeteaseLocalDataService
     private async Task<byte[]?> TryGetCoverBytesFromPlayingListAsync(string name, string artist)
     {
         // 先尝试从 playingList 精确匹配
-        byte[]? result = await TryMatchFromPlayingListAsync(name, artist);
+        byte[]? result = await TryMatchFromFileAsync(_playingListPath, name, artist, hasTrackWrapper: true);
         if (result != null)
         {
             return result;
         }
 
-        // playingList 没找到（漫游模式等），尝试通过搜索 API 获取封面
+        // playingList 没找到，尝试从 fmPlay（漫游模式）获取
+        result = await TryMatchFromFileAsync(_fmPlayPath, name, artist, hasTrackWrapper: false);
+        if (result != null)
+        {
+            return result;
+        }
+
+        // 都没找到，尝试通过搜索 API 获取封面
         return await TrySearchCoverFromApiAsync(name, artist);
     }
 
-    private async Task<byte[]?> TryMatchFromPlayingListAsync(string name, string artist)
+    private async Task<byte[]?> TryMatchFromFileAsync(string filePath, string name, string artist, bool hasTrackWrapper)
     {
-        if (!File.Exists(_playingListPath))
+        if (!File.Exists(filePath))
         {
             return null;
         }
@@ -440,7 +449,7 @@ public sealed class NeteaseLocalDataService
         string json;
         try
         {
-            json = await File.ReadAllTextAsync(_playingListPath);
+            json = await File.ReadAllTextAsync(filePath);
         }
         catch
         {
@@ -455,15 +464,21 @@ public sealed class NeteaseLocalDataService
         try
         {
             using JsonDocument doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("list", out JsonElement list) || list.ValueKind != JsonValueKind.Array)
+
+            // playingList 用 "list" 键，fmPlay 用 "queue" 键
+            JsonElement list;
+            if (!doc.RootElement.TryGetProperty("list", out list) || list.ValueKind != JsonValueKind.Array)
             {
-                return null;
+                if (!doc.RootElement.TryGetProperty("queue", out list) || list.ValueKind != JsonValueKind.Array)
+                {
+                    return null;
+                }
             }
 
             foreach (JsonElement item in list.EnumerateArray())
             {
                 JsonElement trackElement = item;
-                if (item.TryGetProperty("track", out JsonElement trackObj))
+                if (hasTrackWrapper && item.TryGetProperty("track", out JsonElement trackObj))
                 {
                     trackElement = trackObj;
                 }
