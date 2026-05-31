@@ -476,7 +476,7 @@ public sealed class NeteaseLocalDataService
                 }
             }
 
-            JsonElement? targetTrack = exactTrack ?? firstTrack;
+            JsonElement? targetTrack = exactTrack;
             if (targetTrack == null)
             {
                 return null;
