@@ -217,6 +217,8 @@ public partial class MainWindow : Window
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)
     {
+        EnsureAutoStartRegistry(_activeSettings);
+
         bool ok = RebindGlobalHotkeys();
         if (ok)
         {
@@ -1072,6 +1074,40 @@ public partial class MainWindow : Window
         catch
         {
             // Registry access failure is non-fatal.
+        }
+    }
+
+    private static void EnsureAutoStartRegistry(OverlaySettings settings)
+    {
+        if (!settings.AutoStartOnBoot)
+        {
+            return;
+        }
+
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Run", false);
+
+            string? currentValue = key?.GetValue("HorizonRadioOverlay") as string;
+            string? exePath = Environment.ProcessPath;
+
+            if (string.IsNullOrWhiteSpace(exePath))
+            {
+                return;
+            }
+
+            string correctValue = $"\"{exePath}\" --autostart";
+
+            if (!string.Equals(currentValue, correctValue, StringComparison.Ordinal))
+            {
+                using var writeKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Run", true);
+                writeKey?.SetValue("HorizonRadioOverlay", correctValue);
+            }
+        }
+        catch
+        {
         }
     }
 }
