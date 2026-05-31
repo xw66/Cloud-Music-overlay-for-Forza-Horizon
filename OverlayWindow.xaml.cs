@@ -43,7 +43,8 @@ public partial class OverlayWindow : Window
             TitleColor = settings.TitleColor,
             ArtistColor = settings.ArtistColor,
             TitleOpacity = Clamp(settings.TitleOpacity, 0.2, 1.0),
-            ArtistOpacity = Clamp(settings.ArtistOpacity, 0.2, 1.0)
+            ArtistOpacity = Clamp(settings.ArtistOpacity, 0.2, 1.0),
+            AlwaysShowOverlay = settings.AlwaysShowOverlay
         };
 
         Width = BaseWidth * CurrentSettings.Scale;
