@@ -88,10 +88,11 @@ public partial class OverlayWindow : Window
         _hideCts?.Cancel();
         _hideCts = new CancellationTokenSource();
 
-        bool isCurrentlyVisible = Visibility == Visibility.Visible && OverlayRoot.Opacity > 0.5;
+        bool isCurrentlyVisible = Visibility == Visibility.Visible && OverlayRoot.Opacity > 0.3;
 
-        if (CurrentSettings.AlwaysShowOverlay && isCurrentlyVisible)
+        if (isCurrentlyVisible)
         {
+            // 已经可见时用淡入淡出，避免闪烁
             _ = CrossfadeToTrackAsync(track, _hideCts.Token);
         }
         else
@@ -104,11 +105,11 @@ public partial class OverlayWindow : Window
             Show();
             Visibility = Visibility.Visible;
             BeginShowAnimation();
+        }
 
-            if (!CurrentSettings.AlwaysShowOverlay)
-            {
-                ScheduleHide(_hideCts.Token);
-            }
+        if (!CurrentSettings.AlwaysShowOverlay)
+        {
+            ScheduleHide(_hideCts.Token);
         }
 
         return Task.CompletedTask;
@@ -116,29 +117,35 @@ public partial class OverlayWindow : Window
 
     private async Task CrossfadeToTrackAsync(TrackInfo track, CancellationToken token)
     {
+        // 淡出
+        OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null); // 清除旧动画
+        OverlayRoot.Opacity = OverlayRoot.Opacity; // 从当前位置开始
+
         var fadeOut = new DoubleAnimation
         {
-            From = 1,
+            From = OverlayRoot.Opacity,
             To = 0,
-            Duration = TimeSpan.FromMilliseconds(250),
+            Duration = TimeSpan.FromMilliseconds(200),
             EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
         };
 
         OverlayRoot.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-        await Task.Delay(260, token);
+        await Task.Delay(210, token);
 
         if (token.IsCancellationRequested) return;
 
+        // 更新内容
         TitleText.Text = track.Name;
         ArtistText.Text = track.Artist;
         SetCover(track.CoverBytes);
         ApplyTextColors();
 
+        // 淡入
         var fadeIn = new DoubleAnimation
         {
             From = 0,
             To = 1,
-            Duration = TimeSpan.FromMilliseconds(300),
+            Duration = TimeSpan.FromMilliseconds(250),
             EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
         };
 
