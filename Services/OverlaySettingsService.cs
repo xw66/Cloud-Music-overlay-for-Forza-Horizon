@@ -58,6 +58,12 @@ public sealed class OverlaySettingsService
 
     private static OverlaySettings Normalize(OverlaySettings settings)
     {
+        if (!string.Equals(settings.TrackSource, "NeteaseProcess", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(settings.TrackSource, "SMTC", StringComparison.OrdinalIgnoreCase))
+        {
+            settings.TrackSource = "NeteaseProcess";
+        }
+
         settings.LeftPercent = Clamp(settings.LeftPercent, 0.0, 1.0);
         settings.TopPercent = Clamp(settings.TopPercent, 0.0, 1.0);
         settings.Scale = Clamp(settings.Scale, 0.8, 1.8);

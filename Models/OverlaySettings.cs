@@ -2,6 +2,8 @@ namespace HorizonRadioOverlay.Models;
 
 public sealed class OverlaySettings
 {
+    public string TrackSource { get; set; } = "NeteaseProcess";
+
     public double LeftPercent { get; set; } = 0.0;
     public double TopPercent { get; set; } = 0.59;
     public double Scale { get; set; } = 1.0;
@@ -18,4 +20,7 @@ public sealed class OverlaySettings
     public string GamepadPrevHotkey { get; set; } = "LB+Left";
     public string GamepadNextHotkey { get; set; } = "RB+Right";
     public string GamepadToggleHotkey { get; set; } = "LT+RT+Y";
+
+    public bool MinimizeToTray { get; set; } = true;
+    public bool AutoStartOnBoot { get; set; } = false;
 }

@@ -15,6 +15,7 @@ namespace HorizonRadioOverlay;
 public partial class MainWindow : Window
 {
     private readonly NeteaseLocalDataService _neteaseLocalDataService;
+    private readonly SmtcTrackService _smtcTrackService;
     private readonly OverlaySettingsService _overlaySettingsService;
     private readonly OverlayWindow _overlayWindow;
     private readonly NeteaseShortcutSender _neteaseShortcutSender;
@@ -33,6 +34,8 @@ public partial class MainWindow : Window
     private readonly Dictionary<TextBox, DispatcherTimer> _gamepadCommitTimers = new();
     private bool _gamepadEnabledBeforeCapture;
     private int _gamepadCaptureFocusCount;
+    private System.Windows.Forms.NotifyIcon? _trayIcon;
+    private bool _isRealExit;
 
     private static readonly (GamepadButton Button, string Token)[] GamepadTokenOrder =
     {
@@ -59,6 +62,7 @@ public partial class MainWindow : Window
         _isInitializingOverlayControls = true;
 
         _neteaseLocalDataService = new NeteaseLocalDataService();
+        _smtcTrackService = new SmtcTrackService();
         _overlaySettingsService = new OverlaySettingsService();
         _overlayWindow = new OverlayWindow();
         _neteaseShortcutSender = new NeteaseShortcutSender();
@@ -69,6 +73,7 @@ public partial class MainWindow : Window
         ApplyGamepadSettings(loadedSettings);
 
         InitializeComponent();
+        InitializeTrayIcon();
 
         _pollTimer = new DispatcherTimer
         {
@@ -85,7 +90,57 @@ public partial class MainWindow : Window
         SetupHotkeyCaptureInputs();
 
         SourceInitialized += MainWindow_SourceInitialized;
+        Closing += MainWindow_Closing;
         Closed += MainWindow_Closed;
+    }
+
+    private void InitializeTrayIcon()
+    {
+        _trayIcon = new System.Windows.Forms.NotifyIcon
+        {
+            Icon = new System.Drawing.Icon(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.ico")),
+            Text = "网易云悬浮窗",
+            Visible = false
+        };
+
+        var contextMenu = new System.Windows.Forms.ContextMenuStrip();
+        contextMenu.Items.Add("显示主窗口", null, (_, _) => RestoreFromTray());
+        contextMenu.Items.Add("退出", null, (_, _) => RealExit());
+        _trayIcon.ContextMenuStrip = contextMenu;
+        _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
+    }
+
+    private void RestoreFromTray()
+    {
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+        if (_trayIcon != null)
+        {
+            _trayIcon.Visible = false;
+        }
+    }
+
+    private void RealExit()
+    {
+        _isRealExit = true;
+        Close();
+    }
+
+    private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_isRealExit || !_activeSettings.MinimizeToTray)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        Hide();
+        if (_trayIcon != null)
+        {
+            _trayIcon.Visible = true;
+            _trayIcon.ShowBalloonTip(2000, "网易云悬浮窗", "已最小化到托盘，双击图标恢复。", System.Windows.Forms.ToolTipIcon.Info);
+        }
     }
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)
@@ -118,6 +173,7 @@ public partial class MainWindow : Window
         _pollTimer.Stop();
         _gamepadInputService.Dispose();
         _overlayWindow.Close();
+        _trayIcon?.Dispose();
     }
 
     private async void PollTimer_Tick(object? sender, EventArgs e)
@@ -160,11 +216,23 @@ public partial class MainWindow : Window
 
     private async Task PrevAsync()
     {
-        bool ok = _neteaseShortcutSender.Send(_activeSettings.NeteasePrevHotkey);
-        if (!ok)
+        if (IsSmtcSource())
         {
-            SetStatus("状态：发送“上一首”快捷键失败，请检查快捷键格式。", false);
-            return;
+            bool ok = await _smtcTrackService.PreviousAsync();
+            if (!ok)
+            {
+                SetStatus("状态：SMTC 发送“上一首”失败。", false);
+                return;
+            }
+        }
+        else
+        {
+            bool ok = _neteaseShortcutSender.Send(_activeSettings.NeteasePrevHotkey);
+            if (!ok)
+            {
+                SetStatus("状态：发送“上一首”快捷键失败，请检查快捷键格式。", false);
+                return;
+            }
         }
 
         await RefreshAfterControlAsync();
@@ -172,11 +240,23 @@ public partial class MainWindow : Window
 
     private async Task NextAsync()
     {
-        bool ok = _neteaseShortcutSender.Send(_activeSettings.NeteaseNextHotkey);
-        if (!ok)
+        if (IsSmtcSource())
         {
-            SetStatus("状态：发送“下一首”快捷键失败，请检查快捷键格式。", false);
-            return;
+            bool ok = await _smtcTrackService.NextAsync();
+            if (!ok)
+            {
+                SetStatus("状态：SMTC 发送“下一首”失败。", false);
+                return;
+            }
+        }
+        else
+        {
+            bool ok = _neteaseShortcutSender.Send(_activeSettings.NeteaseNextHotkey);
+            if (!ok)
+            {
+                SetStatus("状态：发送“下一首”快捷键失败，请检查快捷键格式。", false);
+                return;
+            }
         }
 
         await RefreshAfterControlAsync();
@@ -184,15 +264,32 @@ public partial class MainWindow : Window
 
     private async void TogglePlayPause()
     {
-        bool ok = _neteaseShortcutSender.Send(_activeSettings.NeteaseToggleHotkey);
-        if (!ok)
+        if (IsSmtcSource())
         {
-            SetStatus("状态：发送“播放/暂停”快捷键失败，请检查快捷键格式。", false);
-            return;
+            bool ok = await _smtcTrackService.TogglePlayPauseAsync();
+            if (!ok)
+            {
+                SetStatus("状态：SMTC 发送“播放/暂停”失败。", false);
+                return;
+            }
+        }
+        else
+        {
+            bool ok = _neteaseShortcutSender.Send(_activeSettings.NeteaseToggleHotkey);
+            if (!ok)
+            {
+                SetStatus("状态：发送“播放/暂停”快捷键失败，请检查快捷键格式。", false);
+                return;
+            }
         }
 
-        SetStatus("状态：已发送播放/暂停快捷键。", false);
+        SetStatus("状态：已发送播放/暂停指令。", false);
         await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
+    }
+
+    private bool IsSmtcSource()
+    {
+        return string.Equals(_activeSettings.TrackSource, "SMTC", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task RefreshAfterControlAsync()
@@ -205,18 +302,22 @@ public partial class MainWindow : Window
     {
         try
         {
-            TrackInfo? track = await _neteaseLocalDataService.GetCurrentTrackAsync();
+            bool useSmtc = string.Equals(_activeSettings.TrackSource, "SMTC", StringComparison.OrdinalIgnoreCase);
+            TrackInfo? track = useSmtc
+                ? await _smtcTrackService.GetCurrentTrackAsync()
+                : await _neteaseLocalDataService.GetCurrentTrackAsync();
+
             if (track == null)
             {
                 if (!string.IsNullOrEmpty(_lastDisplayTrackKey))
                 {
-                    CurrentTitle.Text = "未检测到网易云歌曲";
-                    CurrentArtist.Text = "请打开网易云音乐并播放歌曲";
-                    CurrentMeta.Text = "来源：CloudMusic(ProcessTitle)";
+                    CurrentTitle.Text = useSmtc ? "未检测到系统媒体会话" : "未检测到网易云歌曲";
+                    CurrentArtist.Text = useSmtc ? "请先播放任意媒体内容" : "请打开网易云音乐并播放歌曲";
+                    CurrentMeta.Text = useSmtc ? "来源：SMTC" : "来源：CloudMusic(ProcessTitle)";
                     SetCover(null);
                 }
 
-                SetStatus("状态：未读取到网易云窗口标题。", false);
+                SetStatus(useSmtc ? "状态：未读取到 SMTC 媒体会话。" : "状态：未读取到网易云窗口标题。", false);
                 _lastTrackKey = string.Empty;
                 _lastDisplayTrackKey = string.Empty;
                 return;
@@ -241,11 +342,11 @@ public partial class MainWindow : Window
                 await _overlayWindow.ShowTrackAsync(track);
             }
 
-            SetStatus("状态：已从网易云窗口标题同步。", false);
+            SetStatus(useSmtc ? "状态：已从 SMTC 同步。" : "状态：已从网易云窗口标题同步。", false);
         }
         catch (Exception ex)
         {
-            SetStatus($"状态：读取网易云数据失败。{ex.Message}", true);
+            SetStatus($"状态：读取歌曲数据失败。{ex.Message}", true);
         }
     }
 
@@ -313,6 +414,7 @@ public partial class MainWindow : Window
         _isInitializingOverlayControls = true;
         try
         {
+            SelectTrackSource(settings.TrackSource);
             HorizontalSlider.Value = settings.LeftPercent * 100.0;
             BottomOffsetSlider.Value = settings.TopPercent * 100.0;
             ScaleSlider.Value = settings.Scale * 100.0;
@@ -326,6 +428,8 @@ public partial class MainWindow : Window
             GamepadPrevHotkeyBox.Text = settings.GamepadPrevHotkey;
             GamepadNextHotkeyBox.Text = settings.GamepadNextHotkey;
             GamepadToggleHotkeyBox.Text = settings.GamepadToggleHotkey;
+            MinimizeToTrayCheckBox.IsChecked = settings.MinimizeToTray;
+            AutoStartCheckBox.IsChecked = settings.AutoStartOnBoot;
             UpdateOverlayControlLabels();
         }
         finally
@@ -362,6 +466,23 @@ public partial class MainWindow : Window
         }
 
         ApplyOverlaySettingsFromControls();
+    }
+
+    private async void TrackSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isInitializingOverlayControls)
+        {
+            return;
+        }
+
+        ApplyOverlaySettingsFromControls();
+        _lastTrackKey = string.Empty;
+        _lastDisplayTrackKey = string.Empty;
+        _lastPreviewCoverBytes = null;
+        SetCover(null);
+
+        await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
+        SetStatus("状态：数据来源已切换（点击“保存”可持久化）。", false);
     }
 
     private void SaveOverlaySettings_Click(object sender, RoutedEventArgs e)
@@ -654,6 +775,37 @@ public partial class MainWindow : Window
         };
     }
 
+    private void SelectTrackSource(string trackSource)
+    {
+        if (TrackSourceComboBox == null)
+        {
+            return;
+        }
+
+        foreach (object item in TrackSourceComboBox.Items)
+        {
+            if (item is ComboBoxItem combo &&
+                combo.Tag is string tag &&
+                string.Equals(tag, trackSource, StringComparison.OrdinalIgnoreCase))
+            {
+                TrackSourceComboBox.SelectedItem = combo;
+                return;
+            }
+        }
+
+        TrackSourceComboBox.SelectedIndex = 0;
+    }
+
+    private string GetSelectedTrackSource()
+    {
+        if (TrackSourceComboBox?.SelectedItem is ComboBoxItem combo && combo.Tag is string tag)
+        {
+            return tag;
+        }
+
+        return "NeteaseProcess";
+    }
+
     private void ApplyOverlaySettingsFromControls()
     {
         if (HorizontalSlider == null || BottomOffsetSlider == null || ScaleSlider == null)
@@ -663,6 +815,7 @@ public partial class MainWindow : Window
 
         OverlaySettings settings = new()
         {
+            TrackSource = GetSelectedTrackSource(),
             LeftPercent = HorizontalSlider.Value / 100.0,
             TopPercent = BottomOffsetSlider.Value / 100.0,
             Scale = ScaleSlider.Value / 100.0,
@@ -675,12 +828,15 @@ public partial class MainWindow : Window
             EnableGamepadHotkeys = EnableGamepadCheckBox.IsChecked == true,
             GamepadPrevHotkey = GamepadPrevHotkeyBox.Text.Trim(),
             GamepadNextHotkey = GamepadNextHotkeyBox.Text.Trim(),
-            GamepadToggleHotkey = GamepadToggleHotkeyBox.Text.Trim()
+            GamepadToggleHotkey = GamepadToggleHotkeyBox.Text.Trim(),
+            MinimizeToTray = MinimizeToTrayCheckBox.IsChecked == true,
+            AutoStartOnBoot = AutoStartCheckBox.IsChecked == true
         };
 
         _activeSettings = settings;
         _overlayWindow.ApplySettings(settings);
         ApplyGamepadSettings(settings);
+        ApplyAutoStart(settings.AutoStartOnBoot);
         UpdateOverlayControlLabels();
     }
 
@@ -752,4 +908,34 @@ public partial class MainWindow : Window
         }
     }
 
+    private static void ApplyAutoStart(bool enable)
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Run", true);
+
+            if (key == null)
+            {
+                return;
+            }
+
+            if (enable)
+            {
+                string? exePath = Environment.ProcessPath;
+                if (!string.IsNullOrWhiteSpace(exePath))
+                {
+                    key.SetValue("HorizonRadioOverlay", $"\"{exePath}\"");
+                }
+            }
+            else
+            {
+                key.DeleteValue("HorizonRadioOverlay", false);
+            }
+        }
+        catch
+        {
+            // Registry access failure is non-fatal.
+        }
+    }
 }

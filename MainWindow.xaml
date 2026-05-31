@@ -5,10 +5,10 @@
          xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
          mc:Ignorable="d"
          Title="网易云悬浮窗"
-         Height="1024"
-         Width="960"
-         MinHeight="1024"
-         MinWidth="960"
+         Height="1150"
+         Width="1000"
+         MinHeight="1150"
+         MinWidth="1000"
          Icon="pack://application:,,,/icon.ico"
          WindowStyle="SingleBorderWindow"
          ResizeMode="CanResizeWithGrip"
@@ -72,7 +72,7 @@
                     <StackPanel Grid.Column="0">
                         <TextBlock Text="网易云悬浮窗" FontSize="27" FontWeight="Bold" Foreground="#F4F8FC" />
                         <TextBlock Margin="0,6,0,0" Opacity="0.88" Foreground="#D6E0EA"
-                                   Text="支持自定义游戏快捷键，并自动转发网易云快捷键。歌曲变化时悬浮窗会自动弹出。" />
+                                   Text="支持自定义游戏快捷键，歌曲变化时悬浮窗自动弹出。数据来源支持网易云窗口标题和 SMTC（QQ音乐/Apple Music 等）。" />
                     </StackPanel>
                     <Button Grid.Column="1" VerticalAlignment="Top" Width="40" Height="40" Padding="6"
                             Background="#2D3F50" BorderBrush="#4A6787" Click="GitHubButton_Click"
@@ -108,6 +108,12 @@
                     <Border Margin="0,18,0,0" Padding="14" CornerRadius="12" Background="{StaticResource PanelSoftBrush}" BorderThickness="1" BorderBrush="#2E4254">
                         <StackPanel>
                             <TextBlock Text="悬浮窗位置与大小" FontSize="16" FontWeight="Bold" Foreground="#EEF5FC" />
+
+                            <TextBlock Margin="0,10,0,0" Opacity="0.88" Foreground="#D1DEE9" Text="歌曲数据来源" />
+                            <ComboBox Name="TrackSourceComboBox" Margin="0,4,0,0" Height="30" SelectedIndex="0" SelectionChanged="TrackSourceComboBox_SelectionChanged">
+                                <ComboBoxItem Tag="NeteaseProcess" Content="网易云窗口标题" />
+                                <ComboBoxItem Tag="SMTC" Content="QQ音乐 / Apple Music 等（SMTC）" />
+                            </ComboBox>
 
                             <TextBlock Margin="0,11,0,0" Opacity="0.88" Foreground="#D1DEE9" Text="水平位置（从左侧）" />
                             <Grid Margin="0,4,0,0">
@@ -193,6 +199,10 @@
                                 <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Opacity="0.9" Foreground="#D1DEE9" Text="播放/暂停" />
                                 <TextBox Name="GamepadToggleHotkeyBox" Grid.Row="2" Grid.Column="1" Margin="8,0,0,0" Height="28" VerticalAlignment="Center" Text="LT+RT+Y" />
                             </Grid>
+
+                            <TextBlock Margin="0,12,0,0" FontSize="15" FontWeight="Bold" Foreground="#EEF5FC" Text="其他设置" />
+                            <CheckBox Name="MinimizeToTrayCheckBox" Margin="0,8,0,0" Content="关闭窗口时最小化到系统托盘" Foreground="#E8F0F8" IsChecked="True" />
+                            <CheckBox Name="AutoStartCheckBox" Margin="0,6,0,0" Content="开机自启动" Foreground="#E8F0F8" />
 
                             <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                                 <Button Width="98" Height="32" Content="保存" Click="SaveOverlaySettings_Click" Background="#2F5A3A" BorderBrush="#4A7E57" />

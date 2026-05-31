@@ -47,6 +47,20 @@ public sealed class NeteaseLocalDataService
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowTextLength(IntPtr hWnd);
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
     public async Task<TrackInfo?> GetCurrentTrackAsync()
     {
         TrackInfo? liveTrack = GetTrackFromRunningProcess();
@@ -253,23 +267,69 @@ public sealed class NeteaseLocalDataService
     private static TrackInfo? GetTrackFromRunningProcess()
     {
         var processes = Process.GetProcessesByName("cloudmusic");
-        Process? live = processes
-            .Where(p => !string.IsNullOrWhiteSpace(p.MainWindowTitle))
-            .OrderByDescending(p => p.StartTime)
-            .FirstOrDefault();
-
-        if (live == null)
+        if (processes.Length == 0)
         {
             return null;
         }
 
-        string titleRaw = live.MainWindowTitle.Trim();
-        if (string.IsNullOrWhiteSpace(titleRaw))
+        HashSet<uint> cloudmusicPids = new(processes.Select(p => (uint)p.Id));
+        List<(string Title, uint Pid)> windows = new();
+
+        EnumWindows((hWnd, _) =>
+        {
+            GetWindowThreadProcessId(hWnd, out uint pid);
+            if (!cloudmusicPids.Contains(pid))
+            {
+                return true;
+            }
+
+            int len = GetWindowTextLength(hWnd);
+            if (len <= 0)
+            {
+                return true;
+            }
+
+            var sb = new System.Text.StringBuilder(len + 1);
+            GetWindowText(hWnd, sb, sb.Capacity);
+            string title = sb.ToString().Trim();
+
+            if (!string.IsNullOrEmpty(title))
+            {
+                windows.Add((title, pid));
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        string? bestTitle = null;
+
+        foreach (var (title, _) in windows)
+        {
+            if (title.Contains(" - ", StringComparison.Ordinal))
+            {
+                int idx = title.LastIndexOf(" - ", StringComparison.Ordinal);
+                string songPart = title[..idx].Trim();
+                string artistPart = title[(idx + 3)..].Trim();
+
+                if (!string.IsNullOrWhiteSpace(songPart) && !string.IsNullOrWhiteSpace(artistPart))
+                {
+                    bestTitle = title;
+                    break;
+                }
+            }
+        }
+
+        if (bestTitle == null && windows.Count > 0)
+        {
+            bestTitle = windows[0].Title;
+        }
+
+        if (string.IsNullOrWhiteSpace(bestTitle))
         {
             return null;
         }
 
-        ParseTitleArtist(titleRaw, out string songName, out string artistName);
+        ParseTitleArtist(bestTitle, out string songName, out string artistName);
 
         return new TrackInfo
         {
