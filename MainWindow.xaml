@@ -427,7 +427,7 @@
                                 <TextBlock FontSize="14" FontWeight="Bold" Foreground="#EEF5FC" Text="其他设置" />
                                 <CheckBox Name="MinimizeToTrayCheckBox" Margin="0,10,0,0" Content="关闭时最小化到托盘" Foreground="#E8F0F8" IsChecked="True" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
                                 <CheckBox Name="AutoStartCheckBox" Margin="0,8,0,0" Content="开机自启动" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
-                                <CheckBox Name="AlwaysShowCheckBox" Margin="0,8,0,0" Content="悬浮窗始终显示（切换歌曲时淡入淡出）" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
+                                <CheckBox Name="AlwaysShowCheckBox" Margin="0,8,0,0" Content="悬浮窗始终生效（下次切歌时生效）" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
 
                                 <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
                                     <Button Width="88" Height="30" Content="保存" Click="SaveOverlaySettings_Click" Background="#2F5A3A" BorderBrush="#4A7E57" />

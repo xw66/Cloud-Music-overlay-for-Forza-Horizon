@@ -107,7 +107,7 @@ public partial class MainWindow : Window
         double screenWidth = screen.Width / dpiScale;
         double screenHeight = screen.Height / dpiScale;
 
-        double targetWidth = Math.Max(900, Math.Min(screenWidth * 0.75, 1200));
+        double targetWidth = Math.Max(920, Math.Min(screenWidth * 0.78, 1240));
         double targetHeight = Math.Max(500, Math.Min(screenHeight * 0.7, 750));
 
         Width = targetWidth;
