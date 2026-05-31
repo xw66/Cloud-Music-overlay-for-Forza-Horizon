@@ -1,9 +1,13 @@
-﻿<Application x:Class="HorizonRadioOverlay.App"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:HorizonRadioOverlay"
-             ShutdownMode="OnMainWindowClose">
+﻿<Application
+    x:Class="HorizonRadioOverlay.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:HorizonRadioOverlay">
     <Application.Resources>
-         
+        <ResourceDictionary>
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="#202020" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="#333333" />
+            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="#1a1a1a" />
+        </ResourceDictionary>
     </Application.Resources>
 </Application>
