@@ -39,7 +39,11 @@ public partial class OverlayWindow : Window
         {
             LeftPercent = Clamp(settings.LeftPercent, 0.0, 1.0),
             TopPercent = Clamp(settings.TopPercent, 0.0, 1.0),
-            Scale = Clamp(settings.Scale, 0.8, 1.8)
+            Scale = Clamp(settings.Scale, 0.8, 1.8),
+            TitleColor = settings.TitleColor,
+            ArtistColor = settings.ArtistColor,
+            TitleOpacity = Clamp(settings.TitleOpacity, 0.0, 1.0),
+            ArtistOpacity = Clamp(settings.ArtistOpacity, 0.0, 1.0)
         };
 
         Width = BaseWidth * CurrentSettings.Scale;
@@ -49,6 +53,31 @@ public partial class OverlayWindow : Window
         double availableHeight = Math.Max(0, SystemParameters.PrimaryScreenHeight - Height);
         Left = availableWidth * CurrentSettings.LeftPercent;
         Top = availableHeight * CurrentSettings.TopPercent;
+
+        ApplyTextColors();
+    }
+
+    private void ApplyTextColors()
+    {
+        try
+        {
+            TitleText.Foreground = new System.Windows.Media.BrushConverter().ConvertFromString(CurrentSettings.TitleColor)
+                as System.Windows.Media.Brush ?? TitleText.Foreground;
+            TitleText.Opacity = CurrentSettings.TitleOpacity;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            ArtistText.Foreground = new System.Windows.Media.BrushConverter().ConvertFromString(CurrentSettings.ArtistColor)
+                as System.Windows.Media.Brush ?? ArtistText.Foreground;
+            ArtistText.Opacity = CurrentSettings.ArtistOpacity;
+        }
+        catch
+        {
+        }
     }
 
     [DllImport("user32.dll")]

@@ -120,6 +120,8 @@
                                 <ComboBoxItem Tag="NeteaseProcess" Content="网易云窗口标题" />
                                 <ComboBoxItem Tag="SMTC" Content="QQ音乐 / Apple Music 等（SMTC）" />
                             </ComboBox>
+                            <TextBlock Margin="0,4,0,0" Opacity="0.55" Foreground="#8FA0B3" FontSize="11"
+                                       Text="注：网易云漫游模式（私人FM）无播放列表，悬浮窗无法显示歌曲封面。" />
 
                             <TextBlock Margin="0,11,0,0" Opacity="0.88" Foreground="#D1DEE9" Text="水平位置（从左侧）" />
                             <Grid Margin="0,4,0,0">
@@ -149,6 +151,52 @@
                                 </Grid.ColumnDefinitions>
                                 <Slider Name="ScaleSlider" Grid.Column="0" Minimum="80" Maximum="180" ValueChanged="ScaleSlider_ValueChanged" />
                                 <TextBlock Name="ScaleValueText" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Opacity="0.92" Foreground="#E6EFF8" Text="100%" />
+                            </Grid>
+
+                            <TextBlock Margin="0,12,0,0" FontSize="15" FontWeight="Bold" Foreground="#EEF5FC" Text="歌名与歌手颜色" />
+
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Opacity="0.88" Foreground="#D1DEE9" Text="歌名颜色" />
+                                    <TextBox Name="TitleColorBox" Margin="0,4,8,0" Height="28" Text="#F4F9FF" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <TextBlock Opacity="0.88" Foreground="#D1DEE9" Text="透明度" />
+                                    <Grid Margin="0,4,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Slider Name="TitleOpacitySlider" Grid.Column="0" Minimum="0" Maximum="100" Value="100" ValueChanged="TitleOpacitySlider_ValueChanged" />
+                                        <TextBlock Name="TitleOpacityValueText" Grid.Column="1" Margin="6,0,0,0" VerticalAlignment="Center" Opacity="0.92" Foreground="#E6EFF8" Text="100%" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Opacity="0.88" Foreground="#D1DEE9" Text="歌手颜色" />
+                                    <TextBox Name="ArtistColorBox" Margin="0,4,8,0" Height="28" Text="#E2ECF7" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <TextBlock Opacity="0.88" Foreground="#D1DEE9" Text="透明度" />
+                                    <Grid Margin="0,4,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Slider Name="ArtistOpacitySlider" Grid.Column="0" Minimum="0" Maximum="100" Value="100" ValueChanged="ArtistOpacitySlider_ValueChanged" />
+                                        <TextBlock Name="ArtistOpacityValueText" Grid.Column="1" Margin="6,0,0,0" VerticalAlignment="Center" Opacity="0.92" Foreground="#E6EFF8" Text="100%" />
+                                    </Grid>
+                                </StackPanel>
                             </Grid>
 
                             <TextBlock Margin="0,12,0,0" FontSize="15" FontWeight="Bold" Foreground="#EEF5FC" Text="快捷键映射" />

@@ -8,6 +8,11 @@ public sealed class OverlaySettings
     public double TopPercent { get; set; } = 0.59;
     public double Scale { get; set; } = 1.0;
 
+    public string TitleColor { get; set; } = "#F4F9FF";
+    public string ArtistColor { get; set; } = "#E2ECF7";
+    public double TitleOpacity { get; set; } = 1.0;
+    public double ArtistOpacity { get; set; } = 1.0;
+
     public string AppPrevHotkey { get; set; } = "Ctrl+Shift+Left";
     public string AppNextHotkey { get; set; } = "Ctrl+Shift+Right";
     public string AppToggleHotkey { get; set; } = "Ctrl+Shift+Down";

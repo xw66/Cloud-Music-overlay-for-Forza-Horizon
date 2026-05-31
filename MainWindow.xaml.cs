@@ -508,7 +508,12 @@ public partial class MainWindow : Window
             GamepadToggleHotkeyBox.Text = settings.GamepadToggleHotkey;
             MinimizeToTrayCheckBox.IsChecked = settings.MinimizeToTray;
             AutoStartCheckBox.IsChecked = settings.AutoStartOnBoot;
+            TitleColorBox.Text = settings.TitleColor;
+            ArtistColorBox.Text = settings.ArtistColor;
+            TitleOpacitySlider.Value = settings.TitleOpacity * 100.0;
+            ArtistOpacitySlider.Value = settings.ArtistOpacity * 100.0;
             UpdateOverlayControlLabels();
+            UpdateColorLabels();
         }
         finally
         {
@@ -968,7 +973,11 @@ public partial class MainWindow : Window
             GamepadNextHotkey = GamepadNextHotkeyBox.Text.Trim(),
             GamepadToggleHotkey = GamepadToggleHotkeyBox.Text.Trim(),
             MinimizeToTray = MinimizeToTrayCheckBox.IsChecked == true,
-            AutoStartOnBoot = AutoStartCheckBox.IsChecked == true
+            AutoStartOnBoot = AutoStartCheckBox.IsChecked == true,
+            TitleColor = TitleColorBox.Text.Trim(),
+            ArtistColor = ArtistColorBox.Text.Trim(),
+            TitleOpacity = TitleOpacitySlider.Value / 100.0,
+            ArtistOpacity = ArtistOpacitySlider.Value / 100.0
         };
 
         _activeSettings = settings;
@@ -976,6 +985,7 @@ public partial class MainWindow : Window
         ApplyGamepadSettings(settings);
         ApplyAutoStart(settings.AutoStartOnBoot);
         UpdateOverlayControlLabels();
+        UpdateColorLabels();
     }
 
     private void UpdateOverlayControlLabels()
@@ -988,6 +998,37 @@ public partial class MainWindow : Window
         HorizontalValueText.Text = $"{HorizontalSlider.Value:0}%";
         BottomOffsetValueText.Text = $"{BottomOffsetSlider.Value:0}%";
         ScaleValueText.Text = $"{ScaleSlider.Value:0}%";
+    }
+
+    private void UpdateColorLabels()
+    {
+        if (TitleOpacityValueText == null || ArtistOpacityValueText == null)
+        {
+            return;
+        }
+
+        TitleOpacityValueText.Text = $"{TitleOpacitySlider.Value:0}%";
+        ArtistOpacityValueText.Text = $"{ArtistOpacitySlider.Value:0}%";
+    }
+
+    private void TitleOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isInitializingOverlayControls)
+        {
+            return;
+        }
+
+        ApplyOverlaySettingsFromControls();
+    }
+
+    private void ArtistOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isInitializingOverlayControls)
+        {
+            return;
+        }
+
+        ApplyOverlaySettingsFromControls();
     }
 
     private bool RebindGlobalHotkeys()
