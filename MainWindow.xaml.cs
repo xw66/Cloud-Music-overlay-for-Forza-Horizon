@@ -222,6 +222,42 @@ public partial class MainWindow : Window
         }
     }
 
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2)
+        {
+            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        }
+        else
+        {
+            DragMove();
+        }
+    }
+
+    private void TitleColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton rb && rb.Tag is string color)
+        {
+            TitleColorBox.Text = color;
+            if (!_isInitializingOverlayControls)
+            {
+                ApplyOverlaySettingsFromControls();
+            }
+        }
+    }
+
+    private void ArtistColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton rb && rb.Tag is string color)
+        {
+            ArtistColorBox.Text = color;
+            if (!_isInitializingOverlayControls)
+            {
+                ApplyOverlaySettingsFromControls();
+            }
+        }
+    }
+
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)
     {
         var hwnd = new WindowInteropHelper(this).Handle;
@@ -521,6 +557,8 @@ public partial class MainWindow : Window
             AutoStartCheckBox.IsChecked = settings.AutoStartOnBoot;
             TitleColorBox.Text = settings.TitleColor;
             ArtistColorBox.Text = settings.ArtistColor;
+            SelectColorRadio(TitleColorBox.Text, true);
+            SelectColorRadio(ArtistColorBox.Text, false);
             TitleOpacitySlider.Value = settings.TitleOpacity * 100.0;
             ArtistOpacitySlider.Value = settings.ArtistOpacity * 100.0;
             UpdateOverlayControlLabels();
@@ -1009,6 +1047,19 @@ public partial class MainWindow : Window
         HorizontalValueText.Text = $"{HorizontalSlider.Value:0}%";
         BottomOffsetValueText.Text = $"{BottomOffsetSlider.Value:0}%";
         ScaleValueText.Text = $"{ScaleSlider.Value:0}%";
+    }
+
+    private void SelectColorRadio(string color, bool isTitle)
+    {
+        string name = isTitle ? $"TitleColor_" : "ArtistColor_";
+        foreach (var child in ((WrapPanel)(isTitle ? TitleColor_White.Parent : ArtistColor_White.Parent)).Children)
+        {
+            if (child is RadioButton rb && string.Equals(rb.Tag as string, color, StringComparison.OrdinalIgnoreCase))
+            {
+                rb.IsChecked = true;
+                return;
+            }
+        }
     }
 
     private void UpdateColorLabels()
