@@ -354,7 +354,8 @@ public partial class MainWindow : Window
     private async Task RefreshAfterControlAsync()
     {
         await Task.Delay(650);
-        await RefreshCurrentTrackAsync(showOverlay: true, allowOverlayOnTrackChange: false);
+        // 轮询可能已经检测到变化并显示了悬浮窗，这里只刷新数据
+        await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: true);
     }
 
     private async Task RefreshCurrentTrackAsync(bool showOverlay, bool allowOverlayOnTrackChange)
