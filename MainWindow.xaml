@@ -89,34 +89,34 @@
 
         <!-- 主内容区：左右布局 -->
         <Grid Grid.Row="1" Margin="16,12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="260" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="340" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
             <!-- 左侧：正在播放 -->
-            <Border Grid.Column="0" Padding="16" CornerRadius="12" Background="{StaticResource PanelBrush}" BorderThickness="1" BorderBrush="#2C3E50" VerticalAlignment="Stretch">
+            <Border Grid.Column="0" Padding="20" CornerRadius="12" Background="{StaticResource PanelBrush}" BorderThickness="1" BorderBrush="#2C3E50" VerticalAlignment="Stretch">
                 <StackPanel VerticalAlignment="Top">
-                    <TextBlock Text="正在播放" FontSize="13" FontWeight="SemiBold" Foreground="#8899AA" />
+                    <TextBlock Text="正在播放" FontSize="14" FontWeight="SemiBold" Foreground="#8899AA" />
 
-                    <Border Margin="0,10,0,0" Width="120" Height="120" CornerRadius="10" ClipToBounds="True"
+                    <Border Margin="0,12,0,0" Width="140" Height="140" CornerRadius="12" ClipToBounds="True"
                             HorizontalAlignment="Center" Background="#2A394B" BorderThickness="1" BorderBrush="#49637A">
                         <Image Name="CoverPreview" Stretch="UniformToFill" />
                     </Border>
 
-                    <TextBlock Name="CurrentTitle" Margin="0,12,0,0" FontSize="18" FontWeight="Bold"
+                    <TextBlock Name="CurrentTitle" Margin="0,14,0,0" FontSize="20" FontWeight="Bold"
                                Foreground="#F6FAFF" TextWrapping="Wrap" TextAlignment="Center"
                                Text="未检测到播放中的歌曲" />
-                    <TextBlock Name="CurrentArtist" Margin="0,4,0,0" Opacity="0.86" Foreground="#D6E1EA"
-                               TextAlignment="Center" Text="请先打开网易云音乐并播放" />
+                    <TextBlock Name="CurrentArtist" Margin="0,6,0,0" Opacity="0.86" Foreground="#D6E1EA"
+                               FontSize="14" TextAlignment="Center" Text="请先打开网易云音乐并播放" />
                     <TextBlock Name="CurrentMeta" Margin="0,4,0,0" Opacity="0.7" Foreground="#AFC0D0"
                                FontSize="12" TextAlignment="Center" Text="来源：-" />
 
-                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0" HorizontalAlignment="Center">
-                        <Button Width="70" Height="32" Content="⏮" Click="Prev_Click" />
-                        <Button Width="70" Height="32" Margin="6,0,0,0" Content="⏯" Click="PlayPause_Click" Background="#2E4358" BorderBrush="#4D6B85" />
-                        <Button Width="70" Height="32" Margin="6,0,0,0" Content="⏭" Click="Next_Click" />
-                        <Button Width="70" Height="32" Margin="6,0,0,0" Content="⟳" Click="Refresh_Click" Background="#6B3A21" BorderBrush="#905437" />
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0" HorizontalAlignment="Center">
+                        <Button Width="75" Height="34" Content="⏮" Click="Prev_Click" />
+                        <Button Width="75" Height="34" Margin="8,0,0,0" Content="⏯" Click="PlayPause_Click" Background="#2E4358" BorderBrush="#4D6B85" />
+                        <Button Width="75" Height="34" Margin="8,0,0,0" Content="⏭" Click="Next_Click" />
+                        <Button Width="75" Height="34" Margin="8,0,0,0" Content="⟳" Click="Refresh_Click" Background="#6B3A21" BorderBrush="#905437" />
                     </StackPanel>
                 </StackPanel>
             </Border>
