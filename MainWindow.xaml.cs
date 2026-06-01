@@ -18,7 +18,7 @@ public partial class MainWindow : Window
     private readonly NeteaseLocalDataService _neteaseLocalDataService;
     private readonly SmtcTrackService _smtcTrackService;
     private readonly OverlaySettingsService _overlaySettingsService;
-    private readonly OverlayWindow _overlayWindow;
+    private OverlayWindow? _overlayWindow;
     private readonly NeteaseShortcutSender _neteaseShortcutSender;
     private readonly GamepadInputService _gamepadInputService;
     private readonly UpdateService _updateService;
@@ -66,13 +66,11 @@ public partial class MainWindow : Window
         _neteaseLocalDataService = new NeteaseLocalDataService();
         _smtcTrackService = new SmtcTrackService();
         _overlaySettingsService = new OverlaySettingsService();
-        _overlayWindow = new OverlayWindow();
         _neteaseShortcutSender = new NeteaseShortcutSender();
         _gamepadInputService = new GamepadInputService();
         _updateService = new UpdateService();
         OverlaySettings loadedSettings = _overlaySettingsService.Load();
         _activeSettings = loadedSettings;
-        _overlayWindow.ApplySettings(loadedSettings);
         ApplyGamepadSettings(loadedSettings);
 
         InitializeComponent();
@@ -97,6 +95,16 @@ public partial class MainWindow : Window
         SourceInitialized += MainWindow_SourceInitialized;
         Closing += MainWindow_Closing;
         Closed += MainWindow_Closed;
+
+        // 启动完成后强制回收内存
+        Loaded += (_, _) =>
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
+                GC.WaitForPendingFinalizers();
+            }), DispatcherPriority.Background);
+        };
     }
 
     private void ApplyAutoWindowSize()
@@ -149,6 +157,16 @@ public partial class MainWindow : Window
         catch
         {
         }
+    }
+
+    private OverlayWindow GetOverlayWindow()
+    {
+        if (_overlayWindow == null)
+        {
+            _overlayWindow = new OverlayWindow();
+            _overlayWindow.ApplySettings(_activeSettings);
+        }
+        return _overlayWindow;
     }
 
     private void InitializeTrayIcon()
@@ -231,7 +249,7 @@ public partial class MainWindow : Window
         _pollTimer.Stop();
         _gamepadInputService.Dispose();
         _updateService.Dispose();
-        _overlayWindow.Close();
+        _overlayWindow?.Close();
         _trayIcon?.Dispose();
     }
 
@@ -399,7 +417,7 @@ public partial class MainWindow : Window
 
             if (showOverlay || (allowOverlayOnTrackChange && changed))
             {
-                await _overlayWindow.ShowTrackAsync(track);
+                await GetOverlayWindow().ShowTrackAsync(track);
             }
 
             SetStatus(useSmtc ? "状态：已从 SMTC 同步。" : "状态：已从网易云窗口标题同步。", false);
@@ -467,7 +485,8 @@ public partial class MainWindow : Window
 
     private void InitializeOverlayControls()
     {
-        InitializeOverlayControls(_overlayWindow.CurrentSettings);
+        var settings = _overlayWindow != null ? _overlayWindow.CurrentSettings : _activeSettings;
+        InitializeOverlayControls(settings);
     }
 
     private void InitializeOverlayControls(OverlaySettings settings)
@@ -597,7 +616,7 @@ public partial class MainWindow : Window
     private void ResetOverlaySettings_Click(object sender, RoutedEventArgs e)
     {
         _activeSettings = new OverlaySettings();
-        _overlayWindow.ApplySettings(_activeSettings);
+        GetOverlayWindow().ApplySettings(_activeSettings);
         InitializeOverlayControls();
         SetStatus("状态：已重置为默认值，点击“保存”后生效并持久化。", false);
     }
@@ -611,7 +630,7 @@ public partial class MainWindow : Window
             SourceAppId = "预览"
         };
 
-        await _overlayWindow.ShowTrackAsync(previewTrack);
+        await GetOverlayWindow().ShowTrackAsync(previewTrack);
         SetStatus("状态：已显示悬浮窗预览。", false);
     }
 
@@ -980,7 +999,7 @@ public partial class MainWindow : Window
         };
 
         _activeSettings = settings;
-        _overlayWindow.ApplySettings(settings);
+        if (_overlayWindow != null) _overlayWindow.ApplySettings(settings);
         ApplyGamepadSettings(settings);
         ApplyAutoStart(settings.AutoStartOnBoot);
         ApplyDisplayColors(settings);
