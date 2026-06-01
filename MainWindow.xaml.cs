@@ -125,7 +125,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            var iconUri = new Uri("pack://application:,,,/icon.ico");
+            var iconUri = new Uri("pack://application:,,,/Assets/Icons/icon.ico");
             var iconStream = Application.GetResourceStream(iconUri)?.Stream;
             if (iconStream != null)
             {

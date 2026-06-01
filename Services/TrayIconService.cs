@@ -138,7 +138,7 @@ public sealed class TrayIconService : IDisposable
         try
         {
             var asm = typeof(TrayIconService).Assembly;
-            var stream = asm.GetManifestResourceStream("HorizonRadioOverlay.icon.ico");
+            var stream = asm.GetManifestResourceStream("HorizonRadioOverlay.Assets.Icons.icon.ico");
             if (stream != null)
             {
                 using var ms = new MemoryStream();
@@ -153,7 +153,7 @@ public sealed class TrayIconService : IDisposable
         // 备用：从文件加载
         try
         {
-            string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.ico");
+            string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Icons", "icon.ico");
             if (File.Exists(iconPath))
             {
                 var icon = new System.Drawing.Icon(iconPath);
