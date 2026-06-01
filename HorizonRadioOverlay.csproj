@@ -22,6 +22,7 @@
     <Resource Include="Assets\Fonts\MiSans-Demibold.ttf" />
     <Resource Include="Assets\Icons\icons8-github-50.png" />
     <Resource Include="Assets\Icons\icon.ico" />
+    <None Include="解锁并运行.bat" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
