@@ -1,0 +1,17 @@
+bin/
+obj/
+publish/
+
+.vs/
+.vscode/
+*.user
+*.suo
+*.cache
+*.pdb
+
+*.log
+Thumbs.db
+Desktop.ini
+
+*.tmp
+*.bak
