@@ -10,9 +10,14 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <AssemblyTitle>网易云悬浮窗</AssemblyTitle>
     <Product>网易云悬浮窗</Product>
-    <Version>1.3.4</Version>
-    <FileVersion>1.3.4</FileVersion>
+    <Company>网易云悬浮窗</Company>
+    <Description>游戏中显示当前播放歌曲的透明悬浮窗</Description>
+    <Copyright>Copyright © 2024-2026</Copyright>
+    <Version>1.4.1</Version>
+    <AssemblyVersion>1.4.1.0</AssemblyVersion>
+    <FileVersion>1.4.1</FileVersion>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>

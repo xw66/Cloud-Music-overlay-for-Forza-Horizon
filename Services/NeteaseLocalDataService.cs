@@ -9,20 +9,28 @@ namespace HorizonRadioOverlay.Services;
 
 public sealed class NeteaseLocalDataService
 {
-    private readonly string _playingListPath;
-    private readonly string _fmPlayPath;
     private readonly CoverCacheService _coverCache;
+    private readonly DiagnosticService _diagnostic;
     private static readonly HttpClient HttpClient = new()
     {
-        Timeout = TimeSpan.FromMilliseconds(1200)
+        Timeout = TimeSpan.FromSeconds(5)
     };
 
-    public NeteaseLocalDataService(CoverCacheService coverCache)
+    private static readonly string[] SearchApiUrls = [
+        "https://music.163.com/api/search/get?s={0}&type=1&limit=5",
+        "https://music.163.com/api/cloudsearch/pc?s={0}&type=1&limit=5"
+    ];
+
+    private static readonly string[] LocalDataDirs = [
+        "Netease\\CloudMusic",
+        "Netease\\cloudmusic",
+        "NetEase Music"
+    ];
+
+    public NeteaseLocalDataService(CoverCacheService coverCache, DiagnosticService diagnostic)
     {
         _coverCache = coverCache;
-        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        _playingListPath = Path.Combine(localAppData, "Netease", "CloudMusic", "webdata", "file", "playingList");
-        _fmPlayPath = Path.Combine(localAppData, "Netease", "CloudMusic", "webdata", "file", "fmPlay");
+        _diagnostic = diagnostic;
     }
 
     [DllImport("user32.dll")]
@@ -59,12 +67,15 @@ public sealed class NeteaseLocalDataService
             }
         }
 
+        double duration = await GetDurationAsync(liveTrack.Name, liveTrack.Artist);
+
         return new TrackInfo
         {
             Name = liveTrack.Name,
             Artist = liveTrack.Artist,
             SourceAppId = coverBytes == null ? "CloudMusic(ProcessTitle)" : "CloudMusic(ProcessTitle+Cover)",
-            CoverBytes = coverBytes
+            CoverBytes = coverBytes,
+            DurationSeconds = duration
         };
     }
 
@@ -223,13 +234,149 @@ public sealed class NeteaseLocalDataService
 
     private async Task<byte[]?> TryGetCoverBytesFromPlayingListAsync(string name, string artist)
     {
-        byte[]? result = await TryMatchFromFileAsync(_playingListPath, name, artist, hasTrackWrapper: true);
-        if (result != null) return result;
+        foreach (string dataDir in FindAllNeteaseDataDirs())
+        {
+            string playingList = Path.Combine(dataDir, "webdata", "file", "playingList");
+            byte[]? result = await TryMatchFromFileAsync(playingList, name, artist, hasTrackWrapper: true);
+            if (result != null) return result;
 
-        result = await TryMatchFromFileAsync(_fmPlayPath, name, artist, hasTrackWrapper: false);
-        if (result != null) return result;
+            string fmPlay = Path.Combine(dataDir, "webdata", "file", "fmPlay");
+            result = await TryMatchFromFileAsync(fmPlay, name, artist, hasTrackWrapper: false);
+            if (result != null) return result;
+        }
 
         return await TrySearchCoverFromApiAsync(name, artist);
+    }
+
+    public async Task<double> GetDurationAsync(string name, string artist)
+    {
+        foreach (string dataDir in FindAllNeteaseDataDirs())
+        {
+            string playingList = Path.Combine(dataDir, "webdata", "file", "playingList");
+            double duration = await TryGetDurationFromFileAsync(playingList, name, artist, hasTrackWrapper: true);
+            if (duration > 0) return duration;
+
+            string fmPlay = Path.Combine(dataDir, "webdata", "file", "fmPlay");
+            duration = await TryGetDurationFromFileAsync(fmPlay, name, artist, hasTrackWrapper: false);
+            if (duration > 0) return duration;
+        }
+
+        return 0;
+    }
+
+    private static List<string> FindAllNeteaseDataDirs()
+    {
+        var dirs = new List<string>();
+
+        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        foreach (string sub in LocalDataDirs)
+        {
+            string path = Path.Combine(localAppData, sub);
+            if (Directory.Exists(path)) dirs.Add(path);
+        }
+
+        string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        foreach (string sub in LocalDataDirs)
+        {
+            string path = Path.Combine(programData, sub);
+            if (Directory.Exists(path)) dirs.Add(path);
+        }
+
+        string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string appDataRoaming = Path.Combine(userProfile, "AppData", "Roaming");
+        foreach (string sub in LocalDataDirs)
+        {
+            string path = Path.Combine(appDataRoaming, sub);
+            if (Directory.Exists(path)) dirs.Add(path);
+        }
+
+        return dirs;
+    }
+
+    private static async Task<double> TryGetDurationFromFileAsync(string filePath, string name, string artist, bool hasTrackWrapper)
+    {
+        if (!File.Exists(filePath)) return 0;
+
+        string json;
+        try
+        {
+            json = await File.ReadAllTextAsync(filePath);
+        }
+        catch
+        {
+            return 0;
+        }
+
+        if (string.IsNullOrWhiteSpace(json)) return 0;
+
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(json);
+
+            JsonElement list;
+            if (!doc.RootElement.TryGetProperty("list", out list) || list.ValueKind != JsonValueKind.Array)
+            {
+                if (!doc.RootElement.TryGetProperty("queue", out list) || list.ValueKind != JsonValueKind.Array)
+                {
+                    return 0;
+                }
+            }
+
+            foreach (JsonElement item in list.EnumerateArray())
+            {
+                JsonElement trackElement = item;
+                if (hasTrackWrapper && item.TryGetProperty("track", out JsonElement trackObj))
+                {
+                    trackElement = trackObj;
+                }
+
+                string? itemName = ReadString(trackElement, "name");
+                string? itemArtist = ReadArtists(trackElement);
+
+                if (!string.IsNullOrWhiteSpace(itemName) &&
+                    string.Equals(itemName.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(itemArtist) &&
+                    IsArtistMatch(itemArtist, artist))
+                {
+                    if (trackElement.TryGetProperty("duration", out JsonElement durationEl) &&
+                        durationEl.ValueKind == JsonValueKind.Number)
+                    {
+                        double ms = durationEl.GetDouble();
+                        return ms / 1000.0;
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return 0;
+    }
+
+    private static string? FindNeteaseCloudMusicDir()
+    {
+        try
+        {
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string neteaseDir = Path.Combine(localAppData, "Netease", "CloudMusic");
+            if (Directory.Exists(neteaseDir))
+            {
+                return neteaseDir;
+            }
+
+            string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+            string altDir = Path.Combine(programData, "Netease", "CloudMusic");
+            if (Directory.Exists(altDir))
+            {
+                return altDir;
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
     }
 
     private async Task<byte[]?> TryMatchFromFileAsync(string filePath, string name, string artist, bool hasTrackWrapper)
@@ -297,51 +444,60 @@ public sealed class NeteaseLocalDataService
 
     private async Task<byte[]?> TrySearchCoverFromApiAsync(string name, string artist)
     {
-        try
+        string query = $"{name} {artist}";
+
+        foreach (string urlTemplate in SearchApiUrls)
         {
-            string query = Uri.EscapeDataString($"{name} {artist}");
-            string apiUrl = $"https://music.163.com/api/search/get?s={query}&type=1&limit=5";
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-            request.Headers.Referrer = new Uri("https://music.163.com/");
-
-            using var response = await HttpClient.SendAsync(request);
-            string json = await response.Content.ReadAsStringAsync();
-
-            using JsonDocument doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("result", out JsonElement result))
+            try
             {
-                return null;
-            }
-
-            if (!result.TryGetProperty("songs", out JsonElement songs) || songs.GetArrayLength() == 0)
-            {
-                return null;
-            }
-
-            foreach (JsonElement song in songs.EnumerateArray())
-            {
-                string? songName = ReadString(song, "name");
-                if (!string.IsNullOrWhiteSpace(songName) &&
-                    string.Equals(songName.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase))
+                string url = string.Format(urlTemplate, Uri.EscapeDataString(query));
+                string? picUrl = await SearchCoverUrlAsync(url);
+                if (!string.IsNullOrWhiteSpace(picUrl))
                 {
-                    if (song.TryGetProperty("album", out JsonElement album))
-                    {
-                        string? picUrl = ReadString(album, "picUrl");
-                        if (!string.IsNullOrWhiteSpace(picUrl))
-                        {
-                            if (!picUrl.StartsWith("http"))
-                            {
-                                picUrl = "https:" + picUrl;
-                            }
-                            return await DownloadCoverBytesAsync(picUrl);
-                        }
-                    }
+                    byte[]? cover = await DownloadCoverBytesAsync(picUrl);
+                    if (cover != null) return cover;
                 }
             }
+            catch
+            {
+            }
         }
-        catch
+
+        return null;
+    }
+
+    private async Task<string?> SearchCoverUrlAsync(string url)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Referrer = new Uri("https://music.163.com/");
+        request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
+        using var response = await HttpClient.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        string json = await response.Content.ReadAsStringAsync();
+
+        using JsonDocument doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("result", out JsonElement result))
         {
+            return null;
+        }
+
+        if (!result.TryGetProperty("songs", out JsonElement songs) || songs.GetArrayLength() == 0)
+        {
+            return null;
+        }
+
+        foreach (JsonElement song in songs.EnumerateArray())
+        {
+            if (song.TryGetProperty("album", out JsonElement album))
+            {
+                string? picUrl = ReadString(album, "picUrl");
+                if (!string.IsNullOrWhiteSpace(picUrl))
+                {
+                    if (!picUrl.StartsWith("http")) picUrl = "https:" + picUrl;
+                    return picUrl;
+                }
+            }
         }
 
         return null;
@@ -362,27 +518,44 @@ public sealed class NeteaseLocalDataService
 
     private static async Task<byte[]?> DownloadCoverBytesAsync(string? url)
     {
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(url)) return null;
 
-        const int maxRetries = 2;
+        url = EnsureHttps(url);
+
+        const int maxRetries = 3;
         for (int attempt = 0; attempt <= maxRetries; attempt++)
         {
             try
             {
-                return await HttpClient.GetByteArrayAsync(url);
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Referrer = new Uri("https://music.163.com/");
+                request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                using var response = await HttpClient.SendAsync(request);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadAsByteArrayAsync();
             }
             catch
             {
                 if (attempt < maxRetries)
                 {
-                    await Task.Delay(500 * (attempt + 1));
+                    await Task.Delay(300 * (1 << attempt));
                 }
             }
         }
 
         return null;
+    }
+
+    private static string EnsureHttps(string url)
+    {
+        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        {
+            return "https://" + url.Substring(7);
+        }
+        if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) && url.Contains("://"))
+        {
+            return "https://" + url;
+        }
+        return url;
     }
 }

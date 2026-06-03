@@ -1,4 +1,4 @@
-using HorizonRadioOverlay.Models;
+﻿using HorizonRadioOverlay.Models;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
 
@@ -30,12 +30,24 @@ public sealed class SmtcTrackService
         string artist = string.IsNullOrWhiteSpace(media.Artist) ? "Unknown Artist" : media.Artist.Trim();
         byte[]? cover = await ReadThumbnailBytesAsync(media.Thumbnail);
 
+        double duration = 0;
+        try
+        {
+            GlobalSystemMediaTransportControlsSessionTimelineProperties? timeline = session.GetTimelineProperties();
+            if (timeline != null)
+            {
+                duration = timeline.EndTime.TotalSeconds;
+            }
+        }
+        catch { }
+
         return new TrackInfo
         {
             Name = title,
             Artist = artist,
             SourceAppId = $"SMTC({session.SourceAppUserModelId})",
-            CoverBytes = cover
+            CoverBytes = cover,
+            DurationSeconds = duration
         };
     }
 
@@ -106,6 +118,27 @@ public sealed class SmtcTrackService
         catch
         {
             return false;
+        }
+    }
+
+    public async Task<(TimeSpan Position, bool IsPlaying)?> GetPlaybackStateAsync()
+    {
+        try
+        {
+            GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+            GlobalSystemMediaTransportControlsSession? session = manager.GetCurrentSession();
+            if (session == null) return null;
+
+            GlobalSystemMediaTransportControlsSessionTimelineProperties? timeline = session.GetTimelineProperties();
+            GlobalSystemMediaTransportControlsSessionPlaybackInfo? playback = session.GetPlaybackInfo();
+            if (timeline == null || playback == null) return null;
+
+            bool isPlaying = playback.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+            return (timeline.Position, isPlaying);
+        }
+        catch
+        {
+            return null;
         }
     }
 

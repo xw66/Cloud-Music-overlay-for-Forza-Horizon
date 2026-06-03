@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -44,7 +44,10 @@ public partial class OverlayWindow : Window
             ArtistColor = settings.ArtistColor,
             TitleOpacity = Clamp(settings.TitleOpacity, 0.2, 1.0),
             ArtistOpacity = Clamp(settings.ArtistOpacity, 0.2, 1.0),
-            AlwaysShowOverlay = settings.AlwaysShowOverlay
+            AlwaysShowOverlay = settings.AlwaysShowOverlay,
+            EnableLyrics = settings.EnableLyrics,
+            LyricsColor = settings.LyricsColor,
+            LyricsOpacity = Clamp(settings.LyricsOpacity, 0.2, 1.0)
         };
 
         Width = BaseWidth * CurrentSettings.Scale;
@@ -58,7 +61,7 @@ public partial class OverlayWindow : Window
         ApplyTextColors();
     }
 
-    private void ApplyTextColors()
+    public void ApplyTextColors()
     {
         try
         {
@@ -73,6 +76,14 @@ public partial class OverlayWindow : Window
             var artistColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(CurrentSettings.ArtistColor);
             ArtistText.Foreground = new System.Windows.Media.SolidColorBrush(artistColor);
             ArtistText.Opacity = CurrentSettings.ArtistOpacity;
+        }
+        catch { }
+
+        try
+        {
+            var lyricsColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(CurrentSettings.LyricsColor);
+            LyricsText.Foreground = new System.Windows.Media.SolidColorBrush(lyricsColor);
+            LyricsText.Opacity = CurrentSettings.LyricsOpacity;
         }
         catch { }
     }
@@ -190,11 +201,30 @@ public partial class OverlayWindow : Window
         }
     }
 
+    public void SetLyrics(string? lyrics)
+    {
+        if (!CurrentSettings.EnableLyrics || string.IsNullOrWhiteSpace(lyrics))
+        {
+            LyricsContainer.Visibility = Visibility.Collapsed;
+            LyricsText.Text = string.Empty;
+        }
+        else
+        {
+            LyricsText.Text = lyrics;
+            LyricsContainer.Visibility = Visibility.Visible;
+        }
+    }
+
     private void OverlayWindow_SourceInitialized(object? sender, EventArgs e)
     {
         var hwnd = new WindowInteropHelper(this).Handle;
         int exStyle = GetWindowLong(hwnd, GwlExstyle);
         SetWindowLong(hwnd, GwlExstyle, exStyle | WsExLayered | WsExTransparent | WsExToolwindow);
+    }
+
+    public void UpdateCover(byte[]? coverBytes)
+    {
+        SetCover(coverBytes);
     }
 
     private async Task HideWithAnimationAsync()

@@ -9,4 +9,6 @@ public sealed class TrackInfo
     public string SourceAppId { get; init; } = string.Empty;
 
     public byte[]? CoverBytes { get; init; }
+
+    public double DurationSeconds { get; init; }
 }

@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private readonly GamepadInputService _gamepadInputService;
     private readonly UpdateService _updateService;
     private readonly DiagnosticService _diagnostic;
+    private readonly LyricsService _lyricsService;
     private readonly DispatcherTimer _pollTimer;
 
     private GlobalHotkeyService? _hotkeyService;
@@ -35,6 +36,7 @@ public partial class MainWindow : Window
     private string _lastDisplayTrackKey = string.Empty;
     private byte[]? _lastPreviewCoverBytes;
     private string _lastStatusText = string.Empty;
+    private double _songDetectedTime;
     private long _pollBoostUntil;
     private readonly Dictionary<TextBox, HashSet<GamepadButton>> _gamepadPressed = new();
     private readonly Dictionary<TextBox, DispatcherTimer> _gamepadCommitTimers = new();
@@ -68,14 +70,15 @@ public partial class MainWindow : Window
         _isInitializingOverlayControls = true;
 
         var coverCache = new CoverCacheService();
-        _neteaseLocalDataService = new NeteaseLocalDataService(coverCache);
+        _diagnostic = new DiagnosticService();
+        _neteaseLocalDataService = new NeteaseLocalDataService(coverCache, _diagnostic);
         _smtcTrackService = new SmtcTrackService();
         _overlaySettingsService = new OverlaySettingsService();
         _overlayWindow = new OverlayWindow();
         _neteaseShortcutSender = new NeteaseShortcutSender();
         _gamepadInputService = new GamepadInputService();
         _updateService = new UpdateService();
-        _diagnostic = new DiagnosticService();
+        _lyricsService = new LyricsService();
         OverlaySettings loadedSettings = _overlaySettingsService.Load();
         _activeSettings = loadedSettings;
         _overlayWindow.ApplySettings(loadedSettings);
@@ -279,6 +282,21 @@ public partial class MainWindow : Window
         try
         {
             await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: true);
+
+            if (_activeSettings.EnableLyrics && IsSmtcSource())
+            {
+                var playbackState = await _smtcTrackService.GetPlaybackStateAsync();
+                if (playbackState is { } state)
+                {
+                    _lyricsService.SetPlaybackPosition(state.Position.TotalSeconds);
+                }
+
+                string? newLine = _lyricsService.UpdateCurrentLine();
+                if (newLine != null)
+                {
+                    Dispatcher.Invoke(() => _overlayWindow.SetLyrics(newLine));
+                }
+            }
         }
         finally
         {
@@ -451,8 +469,52 @@ public partial class MainWindow : Window
             if (showOverlay || (allowOverlayOnTrackChange && changed))
             {
                 _diagnostic.Info($"Track changed: {track.Name} - {track.Artist} (source={track.SourceAppId})");
+                _songDetectedTime = Environment.TickCount / 1000.0;
                 BoostPolling();
                 await _overlayWindow.ShowTrackAsync(track);
+
+                if (track.CoverBytes == null && useSmtc)
+                {
+                    string n = track.Name;
+                    string a = track.Artist;
+                    _ = Task.Run(async () =>
+                    {
+                        for (int i = 0; i < 5; i++)
+                        {
+                            await Task.Delay(400 * (i + 1));
+                            try
+                            {
+                                var r = await _smtcTrackService.GetCurrentTrackAsync();
+                                if (r?.CoverBytes != null && string.Equals(r.Name, n, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    Dispatcher.Invoke(() => _overlayWindow.UpdateCover(r.CoverBytes));
+                                    break;
+                                }
+                            }
+                            catch { }
+                        }
+                    });
+                }
+            }
+
+            if (_activeSettings.EnableLyrics && useSmtc)
+            {
+                double startTime = _songDetectedTime;
+                double duration = track.DurationSeconds;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _lyricsService.FetchLyricsAsync(track.Name, track.Artist, startTime, duration);
+                        string? line = _lyricsService.GetCurrentLine();
+                        Dispatcher.Invoke(() => _overlayWindow.SetLyrics(line));
+                    }
+                    catch { }
+                });
+            }
+            else if (!useSmtc)
+            {
+                Dispatcher.Invoke(() => _overlayWindow.SetLyrics(null));
             }
 
             SetStatus(useSmtc ? "状态：已从 SMTC 同步。" : "状态：已从网易云窗口标题同步。", false);
@@ -542,10 +604,13 @@ public partial class MainWindow : Window
             AutoStartCheckBox.IsChecked = settings.AutoStartOnBoot;
             AlwaysShowCheckBox.IsChecked = settings.AlwaysShowOverlay;
             DiagnosticCheckBox.IsChecked = settings.DiagnosticMode;
+            EnableLyricsCheckBox.IsChecked = settings.EnableLyrics;
             SelectTitleColor(settings.TitleColor);
             SelectArtistColor(settings.ArtistColor);
+            SelectLyricsColor(settings.LyricsColor);
             TitleOpacitySlider.Value = settings.TitleOpacity * 100.0;
             ArtistOpacitySlider.Value = settings.ArtistOpacity * 100.0;
+            LyricsOpacitySlider.Value = settings.LyricsOpacity * 100.0;
             ApplyDisplayColors(settings);
             UpdateOverlayControlLabels();
         }
@@ -734,6 +799,23 @@ public partial class MainWindow : Window
                 new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "https://github.com/xw66/Cloud-Music-overlay-for-Forza-Horizon",
+                    UseShellExecute = true
+                });
+        }
+        catch
+        {
+            SetStatus("状态：无法打开浏览器。", true);
+        }
+    }
+
+    private void BaiduPanButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://pan.baidu.com/s/1bWOQYrgYVhHSWJTunLNhBA?pwd=6666",
                     UseShellExecute = true
                 });
         }
@@ -1025,10 +1107,13 @@ public partial class MainWindow : Window
             AutoStartOnBoot = AutoStartCheckBox.IsChecked == true,
             AlwaysShowOverlay = AlwaysShowCheckBox.IsChecked == true,
             DiagnosticMode = DiagnosticCheckBox.IsChecked == true,
+            EnableLyrics = EnableLyricsCheckBox.IsChecked == true,
             TitleColor = GetSelectedTitleColor(),
             ArtistColor = GetSelectedArtistColor(),
+            LyricsColor = GetSelectedLyricsColor(),
             TitleOpacity = TitleOpacitySlider.Value / 100.0,
-            ArtistOpacity = ArtistOpacitySlider.Value / 100.0
+            ArtistOpacity = ArtistOpacitySlider.Value / 100.0,
+            LyricsOpacity = LyricsOpacitySlider.Value / 100.0
         };
 
         _activeSettings = settings;
@@ -1051,6 +1136,7 @@ public partial class MainWindow : Window
         ScaleValueText.Text = $"{ScaleSlider.Value:0}%";
         TitleOpacityValueText.Text = $"{TitleOpacitySlider.Value:0}%";
         ArtistOpacityValueText.Text = $"{ArtistOpacitySlider.Value:0}%";
+        LyricsOpacityValueText.Text = $"{LyricsOpacitySlider.Value:0}%";
     }
 
     private void SelectTitleColor(string color)
@@ -1093,6 +1179,26 @@ public partial class MainWindow : Window
         return "#C0D0E0";
     }
 
+    private void SelectLyricsColor(string color)
+    {
+        color = color.ToUpperInvariant();
+        LyricsColor_Light.IsChecked = color == "#A0B8D0";
+        LyricsColor_White.IsChecked = color == "#FFFFFF";
+        LyricsColor_Yellow.IsChecked = color == "#F0E080";
+        LyricsColor_Green.IsChecked = color == "#90EE90";
+        LyricsColor_Orange.IsChecked = color == "#FFB366";
+    }
+
+    private string GetSelectedLyricsColor()
+    {
+        if (LyricsColor_Light.IsChecked == true) return "#A0B8D0";
+        if (LyricsColor_White.IsChecked == true) return "#FFFFFF";
+        if (LyricsColor_Yellow.IsChecked == true) return "#F0E080";
+        if (LyricsColor_Green.IsChecked == true) return "#90EE90";
+        if (LyricsColor_Orange.IsChecked == true) return "#FFB366";
+        return "#A0B8D0";
+    }
+
     private void ApplyDisplayColors(OverlaySettings settings)
     {
         try
@@ -1131,6 +1237,18 @@ public partial class MainWindow : Window
     }
 
     private void ArtistOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isInitializingOverlayControls) return;
+        ApplyOverlaySettingsFromControls();
+    }
+
+    private void LyricsColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializingOverlayControls) return;
+        ApplyOverlaySettingsFromControls();
+    }
+
+    private void LyricsOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_isInitializingOverlayControls) return;
         ApplyOverlaySettingsFromControls();
