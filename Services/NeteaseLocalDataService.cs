@@ -9,17 +9,15 @@ namespace HorizonRadioOverlay.Services;
 
 public sealed class NeteaseLocalDataService
 {
+    internal readonly record struct LocalSongIdHint(string SongId, string Source);
+
     private readonly CoverCacheService _coverCache;
     private readonly DiagnosticService _diagnostic;
+    private readonly NeteaseOfficialResolver _officialResolver;
     private static readonly HttpClient HttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(5)
     };
-
-    private static readonly string[] SearchApiUrls = [
-        "https://music.163.com/api/search/get?s={0}&type=1&limit=5",
-        "https://music.163.com/api/cloudsearch/pc?s={0}&type=1&limit=5"
-    ];
 
     private static readonly string[] LocalDataDirs = [
         "Netease\\CloudMusic",
@@ -27,10 +25,11 @@ public sealed class NeteaseLocalDataService
         "NetEase Music"
     ];
 
-    public NeteaseLocalDataService(CoverCacheService coverCache, DiagnosticService diagnostic)
+    public NeteaseLocalDataService(CoverCacheService coverCache, DiagnosticService diagnostic, NeteaseOfficialResolver? resolver = null)
     {
         _coverCache = coverCache;
         _diagnostic = diagnostic;
+        _officialResolver = resolver ?? new NeteaseOfficialResolver(diagnostic);
     }
 
     [DllImport("user32.dll")]
@@ -45,41 +44,82 @@ public sealed class NeteaseLocalDataService
     [DllImport("user32.dll")]
     private static extern int GetWindowTextLength(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     public async Task<TrackInfo?> GetCurrentTrackAsync()
     {
-        TrackInfo? liveTrack = GetTrackFromRunningProcess();
+        TrackInfo? liveTrack = GetTrackFromRunningProcess(_diagnostic);
         if (liveTrack == null)
         {
             return null;
         }
 
-        string key = $"{liveTrack.Name}|{liveTrack.Artist}";
-        byte[]? coverBytes = _coverCache.TryGet(key);
-
-        if (coverBytes == null)
+        LocalSongIdHint? localHint = await TryGetSongIdHintAsync(liveTrack.Name, liveTrack.Artist);
+        string? preferredSongId = localHint?.SongId;
+        if (!string.IsNullOrWhiteSpace(preferredSongId))
         {
-            coverBytes = await TryGetCoverBytesFromPlayingListAsync(liveTrack.Name, liveTrack.Artist);
+            _diagnostic.Info($"CloudMusic local song id hint matched: {preferredSongId}, source={localHint?.Source} ({liveTrack.Name} / {liveTrack.Artist})");
+        }
+        else
+        {
+            _diagnostic.Warn($"CloudMusic local song id hint missing, falling back to official search: {liveTrack.Name} / {liveTrack.Artist}");
+        }
+
+        ResolvedSong? resolved = await _officialResolver.ResolveAsync(liveTrack.Name, liveTrack.Artist, preferredSongId);
+        string coverKey = !string.IsNullOrWhiteSpace(resolved?.SongId)
+            ? $"netease-song:{resolved.SongId}"
+            : $"{liveTrack.Name}|{liveTrack.Artist}";
+        byte[]? coverBytes = _coverCache.TryGet(coverKey);
+
+        if (resolved != null)
+        {
+            _diagnostic.Info($"CloudMusic official resolve result: songId={resolved.SongId}, source={resolved.ResolveSource}, confidence={resolved.Confidence:0.##}");
+        }
+        else
+        {
+            _diagnostic.Warn($"CloudMusic official resolve failed: {liveTrack.Name} / {liveTrack.Artist}");
+        }
+
+        if (coverBytes != null)
+        {
+            _diagnostic.Info($"CloudMusic cover cache hit: key={coverKey}");
+        }
+
+        if (coverBytes == null && !string.IsNullOrWhiteSpace(resolved?.CoverUrl))
+        {
+            coverBytes = await DownloadCoverBytesAsync(resolved.CoverUrl);
             if (coverBytes != null)
             {
-                _coverCache.Set(key, coverBytes);
+                _coverCache.Set(coverKey, coverBytes);
+                _diagnostic.Info($"CloudMusic cover downloaded and cached: songId={resolved.SongId}");
+            }
+            else
+            {
+                _diagnostic.Warn($"CloudMusic cover download failed: songId={resolved.SongId}, url={resolved.CoverUrl}");
             }
         }
 
-        double duration = await GetDurationAsync(liveTrack.Name, liveTrack.Artist);
-
         return new TrackInfo
         {
-            Name = liveTrack.Name,
-            Artist = liveTrack.Artist,
-            SourceAppId = coverBytes == null ? "CloudMusic(ProcessTitle)" : "CloudMusic(ProcessTitle+Cover)",
+            Name = resolved?.Title ?? liveTrack.Name,
+            Artist = resolved?.Artist ?? liveTrack.Artist,
+            SourceAppId = resolved == null
+                ? "CloudMusic(ProcessTitle)"
+                : (!string.IsNullOrWhiteSpace(preferredSongId)
+                    ? $"CloudMusic(OfficialById:{preferredSongId},{localHint?.Source})"
+                    : "CloudMusic(OfficialSearch)"),
+            SongId = resolved?.SongId ?? preferredSongId,
             CoverBytes = coverBytes,
-            DurationSeconds = duration
+            DurationSeconds = resolved?.DurationSeconds ?? 0,
+            CoverSource = resolved?.ResolveSource ?? "none"
         };
     }
 
-    private static TrackInfo? GetTrackFromRunningProcess()
+    private static TrackInfo? GetTrackFromRunningProcess(DiagnosticService? diagnostic)
     {
         var processes = Process.GetProcessesByName("cloudmusic");
         if (processes.Length == 0)
@@ -88,7 +128,7 @@ public sealed class NeteaseLocalDataService
         }
 
         HashSet<uint> cloudmusicPids = new(processes.Select(p => (uint)p.Id));
-        List<(string Title, uint Pid)> windows = new();
+        List<(string Title, uint Pid, bool IsVisible)> windows = new();
 
         EnumWindows((hWnd, _) =>
         {
@@ -110,37 +150,22 @@ public sealed class NeteaseLocalDataService
 
             if (!string.IsNullOrEmpty(title))
             {
-                windows.Add((title, pid));
+                windows.Add((title, pid, IsWindowVisible(hWnd)));
             }
 
             return true;
         }, IntPtr.Zero);
 
-        string? bestTitle = null;
-
-        foreach (var (title, _) in windows)
-        {
-            if (title.Contains(" - ", StringComparison.Ordinal))
-            {
-                int idx = title.LastIndexOf(" - ", StringComparison.Ordinal);
-                string songPart = title[..idx].Trim();
-                string artistPart = title[(idx + 3)..].Trim();
-
-                if (!string.IsNullOrWhiteSpace(songPart) && !string.IsNullOrWhiteSpace(artistPart))
-                {
-                    bestTitle = title;
-                    break;
-                }
-            }
-        }
-
-        if (bestTitle == null && windows.Count > 0)
-        {
-            bestTitle = windows[0].Title;
-        }
+        string? bestTitle = NeteaseWindowTitlePolicy.SelectBestTitle(
+            windows.Select(x => new NeteaseWindowCandidate(x.Title, x.IsVisible)));
 
         if (string.IsNullOrWhiteSpace(bestTitle))
         {
+            if (windows.Count > 0)
+            {
+                diagnostic?.Warn($"CloudMusic title detection skipped invalid titles: {string.Join(" | ", windows.Select(x => $"[{(x.IsVisible ? "visible" : "hidden")}]{x.Title}"))}");
+            }
+
             return null;
         }
 
@@ -232,36 +257,20 @@ public sealed class NeteaseLocalDataService
         return null;
     }
 
-    private async Task<byte[]?> TryGetCoverBytesFromPlayingListAsync(string name, string artist)
+    private async Task<LocalSongIdHint?> TryGetSongIdHintAsync(string name, string artist)
     {
         foreach (string dataDir in FindAllNeteaseDataDirs())
         {
             string playingList = Path.Combine(dataDir, "webdata", "file", "playingList");
-            byte[]? result = await TryMatchFromFileAsync(playingList, name, artist, hasTrackWrapper: true);
-            if (result != null) return result;
+            LocalSongIdHint? result = await TryGetSongIdFromFileAsync(playingList, name, artist, hasTrackWrapper: true);
+            if (result.HasValue) return result;
 
             string fmPlay = Path.Combine(dataDir, "webdata", "file", "fmPlay");
-            result = await TryMatchFromFileAsync(fmPlay, name, artist, hasTrackWrapper: false);
-            if (result != null) return result;
+            result = await TryGetSongIdFromFileAsync(fmPlay, name, artist, hasTrackWrapper: false);
+            if (result.HasValue) return result;
         }
 
-        return await TrySearchCoverFromApiAsync(name, artist);
-    }
-
-    public async Task<double> GetDurationAsync(string name, string artist)
-    {
-        foreach (string dataDir in FindAllNeteaseDataDirs())
-        {
-            string playingList = Path.Combine(dataDir, "webdata", "file", "playingList");
-            double duration = await TryGetDurationFromFileAsync(playingList, name, artist, hasTrackWrapper: true);
-            if (duration > 0) return duration;
-
-            string fmPlay = Path.Combine(dataDir, "webdata", "file", "fmPlay");
-            duration = await TryGetDurationFromFileAsync(fmPlay, name, artist, hasTrackWrapper: false);
-            if (duration > 0) return duration;
-        }
-
-        return 0;
+        return null;
     }
 
     private static List<string> FindAllNeteaseDataDirs()
@@ -293,93 +302,7 @@ public sealed class NeteaseLocalDataService
         return dirs;
     }
 
-    private static async Task<double> TryGetDurationFromFileAsync(string filePath, string name, string artist, bool hasTrackWrapper)
-    {
-        if (!File.Exists(filePath)) return 0;
-
-        string json;
-        try
-        {
-            json = await File.ReadAllTextAsync(filePath);
-        }
-        catch
-        {
-            return 0;
-        }
-
-        if (string.IsNullOrWhiteSpace(json)) return 0;
-
-        try
-        {
-            using JsonDocument doc = JsonDocument.Parse(json);
-
-            JsonElement list;
-            if (!doc.RootElement.TryGetProperty("list", out list) || list.ValueKind != JsonValueKind.Array)
-            {
-                if (!doc.RootElement.TryGetProperty("queue", out list) || list.ValueKind != JsonValueKind.Array)
-                {
-                    return 0;
-                }
-            }
-
-            foreach (JsonElement item in list.EnumerateArray())
-            {
-                JsonElement trackElement = item;
-                if (hasTrackWrapper && item.TryGetProperty("track", out JsonElement trackObj))
-                {
-                    trackElement = trackObj;
-                }
-
-                string? itemName = ReadString(trackElement, "name");
-                string? itemArtist = ReadArtists(trackElement);
-
-                if (!string.IsNullOrWhiteSpace(itemName) &&
-                    string.Equals(itemName.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(itemArtist) &&
-                    IsArtistMatch(itemArtist, artist))
-                {
-                    if (trackElement.TryGetProperty("duration", out JsonElement durationEl) &&
-                        durationEl.ValueKind == JsonValueKind.Number)
-                    {
-                        double ms = durationEl.GetDouble();
-                        return ms / 1000.0;
-                    }
-                }
-            }
-        }
-        catch
-        {
-        }
-
-        return 0;
-    }
-
-    private static string? FindNeteaseCloudMusicDir()
-    {
-        try
-        {
-            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string neteaseDir = Path.Combine(localAppData, "Netease", "CloudMusic");
-            if (Directory.Exists(neteaseDir))
-            {
-                return neteaseDir;
-            }
-
-            string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-            string altDir = Path.Combine(programData, "Netease", "CloudMusic");
-            if (Directory.Exists(altDir))
-            {
-                return altDir;
-            }
-        }
-        catch
-        {
-        }
-
-        return null;
-    }
-
-    private async Task<byte[]?> TryMatchFromFileAsync(string filePath, string name, string artist, bool hasTrackWrapper)
+    private static async Task<LocalSongIdHint?> TryGetSongIdFromFileAsync(string filePath, string name, string artist, bool hasTrackWrapper)
     {
         if (!File.Exists(filePath))
         {
@@ -401,6 +324,16 @@ public sealed class NeteaseLocalDataService
             return null;
         }
 
+        return ParseSongIdHintFromJson(json, name, artist, hasTrackWrapper, Path.GetFileName(filePath));
+    }
+
+    internal static LocalSongIdHint? ParseSongIdHintFromJson(string json, string name, string artist, bool hasTrackWrapper, string fileLabel = "unknown")
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
         try
         {
             using JsonDocument doc = JsonDocument.Parse(json);
@@ -414,6 +347,26 @@ public sealed class NeteaseLocalDataService
                 }
             }
 
+            string? rootSongIdHint = TryGetRootSongIdHint(doc.RootElement);
+            int? rootIndexHint = TryGetRootIndexHint(doc.RootElement);
+
+            if (!string.IsNullOrWhiteSpace(rootSongIdHint))
+            {
+                return new LocalSongIdHint(rootSongIdHint, $"{fileLabel}:root-id");
+            }
+
+            if (rootIndexHint.HasValue)
+            {
+                string? indexedSongId = TryGetIndexedSongId(list, rootIndexHint.Value, hasTrackWrapper);
+                if (!string.IsNullOrWhiteSpace(indexedSongId))
+                {
+                    return new LocalSongIdHint(indexedSongId, $"{fileLabel}:current-index");
+                }
+            }
+
+            List<NeteaseLocalTrackCandidate> candidates = new();
+            int index = 0;
+
             foreach (JsonElement item in list.EnumerateArray())
             {
                 JsonElement trackElement = item;
@@ -424,78 +377,114 @@ public sealed class NeteaseLocalDataService
 
                 string? itemName = ReadString(trackElement, "name");
                 string? itemArtist = ReadArtists(trackElement);
-
-                if (!string.IsNullOrWhiteSpace(itemName) &&
-                    string.Equals(itemName.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(itemArtist) &&
-                    IsArtistMatch(itemArtist, artist))
+                string? songId = ReadNumberAsString(trackElement, "id");
+                if (!string.IsNullOrWhiteSpace(songId) &&
+                    !string.IsNullOrWhiteSpace(itemName) &&
+                    !string.IsNullOrWhiteSpace(itemArtist))
                 {
-                    string? url = ReadCoverUrl(trackElement);
-                    return await DownloadCoverBytesAsync(url);
+                    candidates.Add(new NeteaseLocalTrackCandidate(
+                        songId,
+                        itemName,
+                        itemArtist,
+                        (rootIndexHint.HasValue && rootIndexHint.Value == index) ||
+                        HasCurrentTrackHint(item) ||
+                        HasCurrentTrackHint(trackElement)));
                 }
+
+                index++;
             }
+
+            string? matchedSongId = NeteaseLocalTrackMatchPolicy.SelectSongId(candidates, name, artist);
+            return !string.IsNullOrWhiteSpace(matchedSongId)
+                ? new LocalSongIdHint(matchedSongId, $"{fileLabel}:scored-match")
+                : null;
         }
         catch
         {
+            return null;
         }
-
-        return null;
     }
 
-    private async Task<byte[]?> TrySearchCoverFromApiAsync(string name, string artist)
+    private static string? TryGetIndexedSongId(JsonElement list, int index, bool hasTrackWrapper)
     {
-        string query = $"{name} {artist}";
-
-        foreach (string urlTemplate in SearchApiUrls)
-        {
-            try
-            {
-                string url = string.Format(urlTemplate, Uri.EscapeDataString(query));
-                string? picUrl = await SearchCoverUrlAsync(url);
-                if (!string.IsNullOrWhiteSpace(picUrl))
-                {
-                    byte[]? cover = await DownloadCoverBytesAsync(picUrl);
-                    if (cover != null) return cover;
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        return null;
-    }
-
-    private async Task<string?> SearchCoverUrlAsync(string url)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Referrer = new Uri("https://music.163.com/");
-        request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
-        using var response = await HttpClient.SendAsync(request);
-        response.EnsureSuccessStatusCode();
-        string json = await response.Content.ReadAsStringAsync();
-
-        using JsonDocument doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty("result", out JsonElement result))
+        if (index < 0 || list.ValueKind != JsonValueKind.Array)
         {
             return null;
         }
 
-        if (!result.TryGetProperty("songs", out JsonElement songs) || songs.GetArrayLength() == 0)
+        int current = 0;
+        foreach (JsonElement item in list.EnumerateArray())
         {
-            return null;
+            if (current == index)
+            {
+                JsonElement trackElement = item;
+                if (hasTrackWrapper && item.TryGetProperty("track", out JsonElement trackObj))
+                {
+                    trackElement = trackObj;
+                }
+
+                return ReadNumberAsString(trackElement, "id")
+                    ?? ReadNumberAsString(item, "id")
+                    ?? ReadNumberAsString(item, "trackId")
+                    ?? ReadNumberAsString(item, "resourceId");
+            }
+
+            current++;
         }
 
-        foreach (JsonElement song in songs.EnumerateArray())
+        return null;
+    }
+
+    private static bool HasCurrentTrackHint(JsonElement element)
+    {
+        foreach (string propertyName in new[] { "current", "isCurrent", "playing", "isPlaying", "selected" })
         {
-            if (song.TryGetProperty("album", out JsonElement album))
+            if (element.TryGetProperty(propertyName, out JsonElement boolEl) &&
+                (boolEl.ValueKind == JsonValueKind.True || boolEl.ValueKind == JsonValueKind.False))
             {
-                string? picUrl = ReadString(album, "picUrl");
-                if (!string.IsNullOrWhiteSpace(picUrl))
+                return boolEl.GetBoolean();
+            }
+        }
+
+        foreach (string propertyName in new[] { "playState", "state", "status" })
+        {
+            if (element.TryGetProperty(propertyName, out JsonElement stateEl) &&
+                stateEl.ValueKind == JsonValueKind.String)
+            {
+                string? state = stateEl.GetString();
+                if (!string.IsNullOrWhiteSpace(state) &&
+                    (state.Contains("play", StringComparison.OrdinalIgnoreCase) ||
+                     state.Contains("current", StringComparison.OrdinalIgnoreCase)))
                 {
-                    if (!picUrl.StartsWith("http")) picUrl = "https:" + picUrl;
-                    return picUrl;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static string? TryGetRootSongIdHint(JsonElement root)
+    {
+        foreach (string propertyName in new[] { "currentSongId", "songId", "trackId", "currentTrackId", "playingTrackId", "resourceId" })
+        {
+            string? value = ReadNumberAsString(root, propertyName);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        foreach (string propertyName in new[] { "currentTrack", "playingTrack", "track" })
+        {
+            if (root.TryGetProperty(propertyName, out JsonElement nested))
+            {
+                string? value = ReadNumberAsString(nested, "id")
+                    ?? ReadNumberAsString(nested, "songId")
+                    ?? ReadNumberAsString(nested, "trackId");
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
                 }
             }
         }
@@ -503,17 +492,34 @@ public sealed class NeteaseLocalDataService
         return null;
     }
 
-    private static bool IsArtistMatch(string left, string right)
+    private static int? TryGetRootIndexHint(JsonElement root)
     {
-        string a = left.Replace(" ", string.Empty, StringComparison.OrdinalIgnoreCase);
-        string b = right.Replace(" ", string.Empty, StringComparison.OrdinalIgnoreCase);
-
-        if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase))
+        foreach (string propertyName in new[] { "currentIndex", "playingIndex", "index", "playIndex" })
         {
-            return true;
+            if (root.TryGetProperty(propertyName, out JsonElement target) &&
+                target.ValueKind == JsonValueKind.Number &&
+                target.TryGetInt32(out int index))
+            {
+                return index;
+            }
         }
 
-        return a.Contains(b, StringComparison.OrdinalIgnoreCase) || b.Contains(a, StringComparison.OrdinalIgnoreCase);
+        return null;
+    }
+
+    private static string? ReadNumberAsString(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out JsonElement target))
+        {
+            return null;
+        }
+
+        return target.ValueKind switch
+        {
+            JsonValueKind.Number => target.GetInt64().ToString(),
+            JsonValueKind.String => target.GetString(),
+            _ => null
+        };
     }
 
     private static async Task<byte[]?> DownloadCoverBytesAsync(string? url)

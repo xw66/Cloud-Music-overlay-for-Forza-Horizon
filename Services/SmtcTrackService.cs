@@ -6,53 +6,100 @@ namespace HorizonRadioOverlay.Services;
 
 public sealed class SmtcTrackService
 {
+    private readonly DiagnosticService? _diagnostic;
+
+    public SmtcTrackService(DiagnosticService? diagnostic = null)
+    {
+        _diagnostic = diagnostic;
+    }
+
     public async Task<TrackInfo?> GetCurrentTrackAsync()
     {
-        GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-        GlobalSystemMediaTransportControlsSession? session = manager.GetCurrentSession();
-        if (session == null)
+        if (!RuntimeFeatureSupport.SupportsSmtc())
         {
+            _diagnostic?.Info("SMTC track read skipped: unsupported OS version.");
             return null;
         }
 
-        GlobalSystemMediaTransportControlsSessionMediaProperties media = await session.TryGetMediaPropertiesAsync();
-        if (media == null)
+        for (int attempt = 1; attempt <= SmtcReadPolicy.MaxTrackReadAttempts; attempt++)
         {
-            return null;
-        }
-
-        string title = media.Title?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(title))
-        {
-            return null;
-        }
-
-        string artist = string.IsNullOrWhiteSpace(media.Artist) ? "Unknown Artist" : media.Artist.Trim();
-        byte[]? cover = await ReadThumbnailBytesAsync(media.Thumbnail);
-
-        double duration = 0;
-        try
-        {
-            GlobalSystemMediaTransportControlsSessionTimelineProperties? timeline = session.GetTimelineProperties();
-            if (timeline != null)
+            try
             {
-                duration = timeline.EndTime.TotalSeconds;
+                GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+                GlobalSystemMediaTransportControlsSession? session = manager.GetCurrentSession();
+                if (session == null)
+                {
+                    if (attempt == 1)
+                    {
+                        _diagnostic?.Info("SMTC track read skipped: no active session.");
+                    }
+
+                    return null;
+                }
+
+                GlobalSystemMediaTransportControlsSessionMediaProperties media = await session.TryGetMediaPropertiesAsync();
+                if (media == null)
+                {
+                    if (attempt < SmtcReadPolicy.MaxTrackReadAttempts)
+                    {
+                        await Task.Delay(SmtcReadPolicy.GetRetryDelayMilliseconds(attempt));
+                        continue;
+                    }
+
+                    _diagnostic?.Warn("SMTC track read failed: media properties were null.");
+                    return null;
+                }
+
+                string title = SmtcReadPolicy.NormalizeTitle(media.Title);
+                if (SmtcReadPolicy.ShouldRetryMissingTrackMetadata(attempt, title))
+                {
+                    await Task.Delay(SmtcReadPolicy.GetRetryDelayMilliseconds(attempt));
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    _diagnostic?.Warn("SMTC track read failed: title was empty after retries.");
+                    return null;
+                }
+
+                string artist = string.IsNullOrWhiteSpace(media.Artist) ? "Unknown Artist" : media.Artist.Trim();
+                byte[]? cover = await ReadThumbnailBytesAsync(media.Thumbnail);
+                double duration = TryGetDurationSeconds(session);
+
+                return new TrackInfo
+                {
+                    Name = title,
+                    Artist = artist,
+                    SourceAppId = SmtcReadPolicy.FormatSourceAppId(session.SourceAppUserModelId),
+                    SongId = null,
+                    CoverBytes = cover,
+                    DurationSeconds = duration,
+                    CoverSource = SmtcReadPolicy.GetCoverSource(cover != null)
+                };
+            }
+            catch (Exception ex) when (attempt < SmtcReadPolicy.MaxTrackReadAttempts)
+            {
+                _diagnostic?.Warn($"SMTC track read attempt {attempt} failed, retrying: {ex.Message}");
+                await Task.Delay(SmtcReadPolicy.GetRetryDelayMilliseconds(attempt));
+            }
+            catch (Exception ex)
+            {
+                _diagnostic?.Error("SMTC track read failed.", ex);
+                return null;
             }
         }
-        catch { }
 
-        return new TrackInfo
-        {
-            Name = title,
-            Artist = artist,
-            SourceAppId = $"SMTC({session.SourceAppUserModelId})",
-            CoverBytes = cover,
-            DurationSeconds = duration
-        };
+        return null;
     }
 
     public async Task<bool> NextAsync()
     {
+        if (!RuntimeFeatureSupport.SupportsSmtc())
+        {
+            return false;
+        }
+
         try
         {
             GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
@@ -72,6 +119,11 @@ public sealed class SmtcTrackService
 
     public async Task<bool> PreviousAsync()
     {
+        if (!RuntimeFeatureSupport.SupportsSmtc())
+        {
+            return false;
+        }
+
         try
         {
             GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
@@ -91,6 +143,11 @@ public sealed class SmtcTrackService
 
     public async Task<bool> TogglePlayPauseAsync()
     {
+        if (!RuntimeFeatureSupport.SupportsSmtc())
+        {
+            return false;
+        }
+
         try
         {
             GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
@@ -123,6 +180,11 @@ public sealed class SmtcTrackService
 
     public async Task<(TimeSpan Position, bool IsPlaying)?> GetPlaybackStateAsync()
     {
+        if (!RuntimeFeatureSupport.SupportsSmtc())
+        {
+            return null;
+        }
+
         try
         {
             GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
@@ -140,6 +202,24 @@ public sealed class SmtcTrackService
         {
             return null;
         }
+    }
+
+    private double TryGetDurationSeconds(GlobalSystemMediaTransportControlsSession session)
+    {
+        try
+        {
+            GlobalSystemMediaTransportControlsSessionTimelineProperties? timeline = session.GetTimelineProperties();
+            if (timeline != null)
+            {
+                return timeline.EndTime.TotalSeconds;
+            }
+        }
+        catch (Exception ex)
+        {
+            _diagnostic?.Warn($"SMTC timeline read failed: {ex.Message}");
+        }
+
+        return 0;
     }
 
     private static async Task<byte[]?> ReadThumbnailBytesAsync(IRandomAccessStreamReference? thumbnail)

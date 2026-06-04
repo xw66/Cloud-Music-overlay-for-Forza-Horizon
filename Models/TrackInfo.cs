@@ -8,7 +8,11 @@ public sealed class TrackInfo
 
     public string SourceAppId { get; init; } = string.Empty;
 
+    public string? SongId { get; init; }
+
     public byte[]? CoverBytes { get; init; }
 
     public double DurationSeconds { get; init; }
+
+    public string CoverSource { get; init; } = "none";
 }

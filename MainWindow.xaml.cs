@@ -1,8 +1,10 @@
 ﻿using System.IO;
 using System.Reflection;
+using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using System.Windows.Media.Imaging;
 using HorizonRadioOverlay.Models;
@@ -10,6 +12,7 @@ using HorizonRadioOverlay.Services;
 
 namespace HorizonRadioOverlay;
 
+[SupportedOSPlatform("windows")]
 public partial class MainWindow : Window
 {
     private const int PollFastMs = 200;
@@ -24,6 +27,7 @@ public partial class MainWindow : Window
     private readonly GamepadInputService _gamepadInputService;
     private readonly UpdateService _updateService;
     private readonly DiagnosticService _diagnostic;
+    private readonly NeteaseOfficialResolver _neteaseOfficialResolver;
     private readonly LyricsService _lyricsService;
     private readonly DispatcherTimer _pollTimer;
 
@@ -35,6 +39,7 @@ public partial class MainWindow : Window
     private string _lastTrackKey = string.Empty;
     private string _lastDisplayTrackKey = string.Empty;
     private byte[]? _lastPreviewCoverBytes;
+    private CancellationTokenSource? _smtcCoverRefreshCts;
     private string _lastStatusText = string.Empty;
     private double _songDetectedTime;
     private long _pollBoostUntil;
@@ -71,14 +76,15 @@ public partial class MainWindow : Window
 
         var coverCache = new CoverCacheService();
         _diagnostic = new DiagnosticService();
-        _neteaseLocalDataService = new NeteaseLocalDataService(coverCache, _diagnostic);
-        _smtcTrackService = new SmtcTrackService();
+        _neteaseOfficialResolver = new NeteaseOfficialResolver(_diagnostic);
+        _neteaseLocalDataService = new NeteaseLocalDataService(coverCache, _diagnostic, _neteaseOfficialResolver);
+        _smtcTrackService = new SmtcTrackService(_diagnostic);
         _overlaySettingsService = new OverlaySettingsService();
         _overlayWindow = new OverlayWindow();
         _neteaseShortcutSender = new NeteaseShortcutSender();
         _gamepadInputService = new GamepadInputService();
         _updateService = new UpdateService();
-        _lyricsService = new LyricsService();
+        _lyricsService = new LyricsService(_diagnostic, _neteaseOfficialResolver);
         OverlaySettings loadedSettings = _overlaySettingsService.Load();
         _activeSettings = loadedSettings;
         _overlayWindow.ApplySettings(loadedSettings);
@@ -87,6 +93,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         InitializeTrayIcon();
         ApplyAutoWindowSize();
+        ApplyRuntimeFeatureAvailability();
 
         _pollTimer = new DispatcherTimer
         {
@@ -188,6 +195,12 @@ public partial class MainWindow : Window
 
     private void InitializeTrayIcon()
     {
+        if (!RuntimeFeatureSupport.SupportsTrayIcon())
+        {
+            _trayIcon = null;
+            return;
+        }
+
         System.Drawing.Icon? icon = null;
         try
         {
@@ -240,7 +253,7 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (_isRealExit || !_activeSettings.MinimizeToTray)
+        if (_isRealExit || !_activeSettings.MinimizeToTray || _trayIcon == null)
         {
             return;
         }
@@ -347,6 +360,12 @@ public partial class MainWindow : Window
     {
         if (IsSmtcSource())
         {
+            if (!RuntimeFeatureSupport.SupportsSmtc())
+            {
+                SetStatus("状态：当前系统版本不支持 SMTC 控制。", false);
+                return;
+            }
+
             bool ok = await _smtcTrackService.PreviousAsync();
             if (!ok)
             {
@@ -371,6 +390,12 @@ public partial class MainWindow : Window
     {
         if (IsSmtcSource())
         {
+            if (!RuntimeFeatureSupport.SupportsSmtc())
+            {
+                SetStatus("状态：当前系统版本不支持 SMTC 控制。", false);
+                return;
+            }
+
             bool ok = await _smtcTrackService.NextAsync();
             if (!ok)
             {
@@ -395,6 +420,12 @@ public partial class MainWindow : Window
     {
         if (IsSmtcSource())
         {
+            if (!RuntimeFeatureSupport.SupportsSmtc())
+            {
+                SetStatus("状态：当前系统版本不支持 SMTC 控制。", false);
+                return;
+            }
+
             bool ok = await _smtcTrackService.TogglePlayPauseAsync();
             if (!ok)
             {
@@ -423,8 +454,25 @@ public partial class MainWindow : Window
 
     private async Task RefreshAfterControlAsync()
     {
-        await Task.Delay(650);
-        await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: true);
+        if (!IsSmtcSource())
+        {
+            await Task.Delay(650);
+            await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: true);
+            return;
+        }
+
+        string previousTrackKey = _lastTrackKey;
+
+        for (int attempt = 1; attempt <= SmtcControlRefreshPolicy.MaxRefreshAttempts; attempt++)
+        {
+            await Task.Delay(SmtcControlRefreshPolicy.GetDelayMilliseconds(attempt));
+            await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: true);
+
+            if (SmtcControlRefreshPolicy.ShouldStopWaiting(previousTrackKey, _lastTrackKey, attempt))
+            {
+                return;
+            }
+        }
     }
 
     private async Task RefreshCurrentTrackAsync(bool showOverlay, bool allowOverlayOnTrackChange)
@@ -432,12 +480,23 @@ public partial class MainWindow : Window
         try
         {
             bool useSmtc = string.Equals(_activeSettings.TrackSource, "SMTC", StringComparison.OrdinalIgnoreCase);
+            if (useSmtc && !RuntimeFeatureSupport.SupportsSmtc())
+            {
+                SetStatus("状态：当前系统版本不支持 SMTC，请切换到网易云窗口标题模式。", false);
+                return;
+            }
+
             TrackInfo? track = useSmtc
                 ? await _smtcTrackService.GetCurrentTrackAsync()
                 : await _neteaseLocalDataService.GetCurrentTrackAsync();
 
             if (track == null)
             {
+                _smtcCoverRefreshCts?.Cancel();
+                _smtcCoverRefreshCts = null;
+                _lyricsService.Reset();
+                Dispatcher.Invoke(() => _overlayWindow.SetLyrics(null));
+
                 if (!string.IsNullOrEmpty(_lastDisplayTrackKey))
                 {
                     CurrentTitle.Text = useSmtc ? "未检测到系统媒体会话" : "未检测到网易云歌曲";
@@ -452,9 +511,17 @@ public partial class MainWindow : Window
                 return;
             }
 
-            string currentTrackKey = $"{track.Name}|{track.Artist}";
+            string currentTrackKey = TrackIdentity.BuildTrackKey(track, includeSourceAppId: useSmtc);
             bool changed = !string.Equals(_lastTrackKey, currentTrackKey, StringComparison.Ordinal);
             _lastTrackKey = currentTrackKey;
+            bool shouldDelayImmediateSmtcCover = useSmtc
+                && changed
+                && SmtcCoverRefreshPolicy.ShouldDelayImmediateCoverUpdate(
+                    trackChanged: true,
+                    previousDisplayedCoverBytes: _lastPreviewCoverBytes,
+                    currentCoverBytes: track.CoverBytes);
+            bool shouldRetrySmtcCover = useSmtc && changed && (track.CoverBytes == null || shouldDelayImmediateSmtcCover);
+            byte[]? immediateCoverBytes = shouldDelayImmediateSmtcCover ? null : track.CoverBytes;
 
             bool displayChanged = !string.Equals(_lastDisplayTrackKey, currentTrackKey, StringComparison.Ordinal);
             if (displayChanged)
@@ -462,8 +529,19 @@ public partial class MainWindow : Window
                 CurrentTitle.Text = track.Name;
                 CurrentArtist.Text = track.Artist;
                 CurrentMeta.Text = $"来源：{track.SourceAppId}";
-                SetCover(track.CoverBytes);
+                SetCover(immediateCoverBytes);
                 _lastDisplayTrackKey = currentTrackKey;
+            }
+
+            if (shouldRetrySmtcCover)
+            {
+                _diagnostic.Info($"SMTC cover pending refresh: {currentTrackKey} (reason={(track.CoverBytes == null ? "missing" : "stale-suspected")})");
+                StartSmtcCoverRefresh(currentTrackKey, track.CoverBytes);
+            }
+            else if (useSmtc && changed)
+            {
+                _smtcCoverRefreshCts?.Cancel();
+                _smtcCoverRefreshCts = null;
             }
 
             if (showOverlay || (allowOverlayOnTrackChange && changed))
@@ -471,49 +549,36 @@ public partial class MainWindow : Window
                 _diagnostic.Info($"Track changed: {track.Name} - {track.Artist} (source={track.SourceAppId})");
                 _songDetectedTime = Environment.TickCount / 1000.0;
                 BoostPolling();
-                await _overlayWindow.ShowTrackAsync(track);
-
-                if (track.CoverBytes == null && useSmtc)
-                {
-                    string n = track.Name;
-                    string a = track.Artist;
-                    _ = Task.Run(async () =>
-                    {
-                        for (int i = 0; i < 5; i++)
-                        {
-                            await Task.Delay(400 * (i + 1));
-                            try
-                            {
-                                var r = await _smtcTrackService.GetCurrentTrackAsync();
-                                if (r?.CoverBytes != null && string.Equals(r.Name, n, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    Dispatcher.Invoke(() => _overlayWindow.UpdateCover(r.CoverBytes));
-                                    break;
-                                }
-                            }
-                            catch { }
-                        }
-                    });
-                }
+                await _overlayWindow.ShowTrackAsync(CreateTrackWithCover(track, immediateCoverBytes));
             }
 
             if (_activeSettings.EnableLyrics && useSmtc)
             {
                 double startTime = _songDetectedTime;
                 double duration = track.DurationSeconds;
+                if (changed)
+                {
+                    _lyricsService.Reset();
+                    Dispatcher.Invoke(() => _overlayWindow.SetLyrics(null));
+                }
+
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        await _lyricsService.FetchLyricsAsync(track.Name, track.Artist, startTime, duration);
+                        await _lyricsService.FetchLyricsAsync(track.Name, track.Artist, startTime, duration, track.SongId);
                         string? line = _lyricsService.GetCurrentLine();
                         Dispatcher.Invoke(() => _overlayWindow.SetLyrics(line));
                     }
-                    catch { }
+                    catch
+                    {
+                        Dispatcher.Invoke(() => _overlayWindow.SetLyrics(null));
+                    }
                 });
             }
             else if (!useSmtc)
             {
+                _lyricsService.Reset();
                 Dispatcher.Invoke(() => _overlayWindow.SetLyrics(null));
             }
 
@@ -524,6 +589,97 @@ public partial class MainWindow : Window
             _diagnostic.Error("RefreshCurrentTrackAsync failed", ex);
             SetStatus($"状态：读取歌曲数据失败。{ex.Message}", true);
         }
+    }
+
+    private void StartSmtcCoverRefresh(string expectedTrackKey, byte[]? pendingCoverBytes)
+    {
+        _smtcCoverRefreshCts?.Cancel();
+        CancellationTokenSource cts = new();
+        _smtcCoverRefreshCts = cts;
+
+        _ = Task.Run(async () =>
+        {
+            int matchingCoverObservationCount = 0;
+
+            for (int i = 0; i < 6; i++)
+            {
+                try
+                {
+                    await Task.Delay(220 * (i + 1), cts.Token);
+                    TrackInfo? refreshed = await _smtcTrackService.GetCurrentTrackAsync();
+                    if (cts.IsCancellationRequested || refreshed == null)
+                    {
+                        return;
+                    }
+
+                    string candidateTrackKey = TrackIdentity.BuildTrackKey(refreshed, includeSourceAppId: true);
+                    if (!string.Equals(candidateTrackKey, expectedTrackKey, StringComparison.Ordinal))
+                    {
+                        _diagnostic.Info($"SMTC cover refresh skipped because track changed again: {candidateTrackKey}");
+                        return;
+                    }
+
+                    if (pendingCoverBytes is { Length: > 0 }
+                        && refreshed.CoverBytes is { Length: > 0 }
+                        && pendingCoverBytes.AsSpan().SequenceEqual(refreshed.CoverBytes))
+                    {
+                        matchingCoverObservationCount++;
+                    }
+                    else
+                    {
+                        matchingCoverObservationCount = 0;
+                    }
+
+                    if (!SmtcCoverRefreshPolicy.ShouldApplyRetriedCover(
+                            expectedTrackKey,
+                            candidateTrackKey,
+                            pendingCoverBytes,
+                            refreshed.CoverBytes,
+                            matchingCoverObservationCount))
+                    {
+                        continue;
+                    }
+
+                    Dispatcher.Invoke(() =>
+                    {
+                        if (!string.Equals(_lastDisplayTrackKey, expectedTrackKey, StringComparison.Ordinal))
+                        {
+                            return;
+                        }
+
+                        SetCover(refreshed.CoverBytes);
+                        _overlayWindow.UpdateCover(refreshed.CoverBytes);
+                    });
+
+                    _diagnostic.Info($"SMTC cover refresh applied: {expectedTrackKey}");
+                    return;
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _diagnostic.Warn($"SMTC cover refresh attempt failed: {ex.Message}");
+                }
+            }
+
+            _diagnostic.Warn($"SMTC cover refresh timed out: {expectedTrackKey}");
+        });
+    }
+
+    private static TrackInfo CreateTrackWithCover(TrackInfo track, byte[]? coverBytes)
+    {
+        return new TrackInfo
+        {
+            Name = track.Name,
+            Artist = track.Artist,
+            SourceAppId = track.SourceAppId,
+            SongId = track.SongId,
+            DurationSeconds = track.DurationSeconds,
+            CoverSource = track.CoverSource,
+            CoverBytes = coverBytes
+        };
     }
 
     private void SetCover(byte[]? coverBytes)
@@ -605,6 +761,7 @@ public partial class MainWindow : Window
             AlwaysShowCheckBox.IsChecked = settings.AlwaysShowOverlay;
             DiagnosticCheckBox.IsChecked = settings.DiagnosticMode;
             EnableLyricsCheckBox.IsChecked = settings.EnableLyrics;
+            EnableCoverWingEffectCheckBox.IsChecked = settings.EnableCoverWingEffect;
             SelectTitleColor(settings.TitleColor);
             SelectArtistColor(settings.ArtistColor);
             SelectLyricsColor(settings.LyricsColor);
@@ -613,6 +770,7 @@ public partial class MainWindow : Window
             LyricsOpacitySlider.Value = settings.LyricsOpacity * 100.0;
             ApplyDisplayColors(settings);
             UpdateOverlayControlLabels();
+            UpdateRuntimeDependentControls();
         }
         finally
         {
@@ -658,10 +816,15 @@ public partial class MainWindow : Window
         }
 
         ApplyOverlaySettingsFromControls();
+        UpdateRuntimeDependentControls();
+        _smtcCoverRefreshCts?.Cancel();
+        _smtcCoverRefreshCts = null;
+        _lyricsService.Reset();
         _lastTrackKey = string.Empty;
         _lastDisplayTrackKey = string.Empty;
         _lastPreviewCoverBytes = null;
         SetCover(null);
+        _overlayWindow.SetLyrics(null);
 
         await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
         SetStatus("状态：数据来源已切换（点击“保存”可持久化）。", false);
@@ -720,15 +883,76 @@ public partial class MainWindow : Window
 
     private async void TestOverlay_Click(object sender, RoutedEventArgs e)
     {
-        TrackInfo previewTrack = new()
-        {
-            Name = "正在播放",
-            Artist = "网易云音乐",
-            SourceAppId = "预览"
-        };
+        (string Name, string Artist, Color Color)[] previewTracks =
+        [
+            ("有些", "颜人中", Color.FromRgb(39, 94, 113)),
+            ("风景", "测试歌手", Color.FromRgb(112, 58, 72)),
+            ("夜航", "测试歌手", Color.FromRgb(58, 86, 131)),
+            ("岛屿", "测试歌手", Color.FromRgb(82, 112, 70)),
+            ("回声", "测试歌手", Color.FromRgb(130, 88, 48))
+        ];
 
-        await _overlayWindow.ShowTrackAsync(previewTrack);
+        foreach ((string name, string artist, Color color) in previewTracks)
+        {
+            TrackInfo previewTrack = new()
+            {
+                Name = name,
+                Artist = artist,
+                SourceAppId = "预览",
+                CoverBytes = CreatePreviewCoverBytes(name, artist, color)
+            };
+
+            await _overlayWindow.ShowTrackAsync(previewTrack);
+            await Task.Delay(450);
+        }
+
         SetStatus("状态：已显示悬浮窗预览。", false);
+    }
+
+    private static byte[] CreatePreviewCoverBytes(string title, string artist, Color accent)
+    {
+        const int size = 256;
+        DrawingVisual visual = new();
+        using (DrawingContext dc = visual.RenderOpen())
+        {
+            var background = new LinearGradientBrush(
+                Color.FromRgb(16, 20, 24),
+                accent,
+                new Point(0, 0),
+                new Point(1, 1));
+            dc.DrawRectangle(background, null, new Rect(0, 0, size, size));
+            dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(58, 255, 255, 255)), null, new Point(56, 46), 86, 54);
+            dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(44, 0, 0, 0)), null, new Point(204, 196), 92, 82);
+            dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(58, 0, 0, 0)), null, new Rect(0, 168, size, 88));
+
+            var titleText = new FormattedText(
+                title,
+                System.Globalization.CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Microsoft YaHei UI"),
+                46,
+                Brushes.White,
+                1.0);
+            var artistText = new FormattedText(
+                artist,
+                System.Globalization.CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Microsoft YaHei UI"),
+                24,
+                new SolidColorBrush(Color.FromRgb(220, 230, 240)),
+                1.0);
+
+            dc.DrawText(titleText, new Point(24, 130));
+            dc.DrawText(artistText, new Point(24, 190));
+        }
+
+        RenderTargetBitmap bitmap = new(size, size, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        PngBitmapEncoder encoder = new();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using MemoryStream stream = new();
+        encoder.Save(stream);
+        return stream.ToArray();
     }
 
     private async Task SilentCheckUpdateAsync()
@@ -1070,6 +1294,58 @@ public partial class MainWindow : Window
         TrackSourceComboBox.SelectedIndex = 0;
     }
 
+    private void ApplyRuntimeFeatureAvailability()
+    {
+        if (!RuntimeFeatureSupport.SupportsSmtc() &&
+            string.Equals(_activeSettings.TrackSource, "SMTC", StringComparison.OrdinalIgnoreCase))
+        {
+            _activeSettings.TrackSource = "NeteaseProcess";
+        }
+
+        UpdateRuntimeDependentControls();
+    }
+
+    private void UpdateRuntimeDependentControls()
+    {
+        if (TrackSourceComboBox == null || EnableLyricsCheckBox == null)
+        {
+            return;
+        }
+
+        bool smtcSupported = RuntimeFeatureSupport.SupportsSmtc();
+        ComboBoxItem? smtcItem = null;
+        foreach (object item in TrackSourceComboBox.Items)
+        {
+            if (item is ComboBoxItem combo &&
+                string.Equals(combo.Tag as string, "SMTC", StringComparison.OrdinalIgnoreCase))
+            {
+                smtcItem = combo;
+                break;
+            }
+        }
+
+        if (smtcItem != null)
+        {
+            smtcItem.IsEnabled = smtcSupported;
+            smtcItem.ToolTip = smtcSupported
+                ? "使用系统媒体会话读取歌曲信息"
+                : "当前系统版本不支持 SMTC";
+        }
+
+        if (!smtcSupported && string.Equals(GetSelectedTrackSource(), "SMTC", StringComparison.OrdinalIgnoreCase))
+        {
+            SelectTrackSource("NeteaseProcess");
+        }
+
+        bool useSmtc = smtcSupported &&
+            string.Equals(GetSelectedTrackSource(), "SMTC", StringComparison.OrdinalIgnoreCase);
+
+        EnableLyricsCheckBox.IsEnabled = useSmtc;
+        EnableLyricsCheckBox.ToolTip = useSmtc
+            ? "显示当前歌曲歌词；网易云 SMTC 暂不支持歌词滚动"
+            : "歌词功能仅在 SMTC 源可用";
+    }
+
     private string GetSelectedTrackSource()
     {
         if (TrackSourceComboBox?.SelectedItem is ComboBoxItem combo && combo.Tag is string tag)
@@ -1108,6 +1384,7 @@ public partial class MainWindow : Window
             AlwaysShowOverlay = AlwaysShowCheckBox.IsChecked == true,
             DiagnosticMode = DiagnosticCheckBox.IsChecked == true,
             EnableLyrics = EnableLyricsCheckBox.IsChecked == true,
+            EnableCoverWingEffect = EnableCoverWingEffectCheckBox.IsChecked == true,
             TitleColor = GetSelectedTitleColor(),
             ArtistColor = GetSelectedArtistColor(),
             LyricsColor = GetSelectedLyricsColor(),
@@ -1312,6 +1589,11 @@ public partial class MainWindow : Window
 
     private static void ApplyAutoStart(bool enable)
     {
+        if (!RuntimeFeatureSupport.SupportsRegistryAutoStart())
+        {
+            return;
+        }
+
         try
         {
             using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(

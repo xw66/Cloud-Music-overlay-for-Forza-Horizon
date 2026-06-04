@@ -34,6 +34,7 @@ public sealed class OverlaySettings
     public double ArtistOpacity { get; set; } = 0.86;
     public bool DiagnosticMode { get; set; } = false;
     public bool EnableLyrics { get; set; } = true;
+    public bool EnableCoverWingEffect { get; set; } = false;
     public string LyricsColor { get; set; } = "#A0B8D0";
     public double LyricsOpacity { get; set; } = 0.7;
 }

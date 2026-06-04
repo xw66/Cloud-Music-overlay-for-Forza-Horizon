@@ -29,9 +29,26 @@
             </Grid.RenderTransform>
 
             <Grid.RowDefinitions>
-                <RowDefinition Height="106" />
+                <RowDefinition x:Name="CoverRow" Height="106" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
+
+            <Viewport3D Name="CoverFlowViewport"
+                        Grid.Row="0"
+                        Width="760"
+                        Height="286"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Top"
+                        ClipToBounds="False"
+                        IsHitTestVisible="False"
+                        Visibility="Collapsed">
+                <Viewport3D.Camera>
+                    <PerspectiveCamera Position="0,0,1050"
+                                       LookDirection="0,0,-1050"
+                                       UpDirection="0,1,0"
+                                       FieldOfView="32.8" />
+                </Viewport3D.Camera>
+            </Viewport3D>
 
             <Border Name="CoverFrame"
                     Width="96"
@@ -48,7 +65,8 @@
                 <Image Name="CoverImage" Stretch="UniformToFill" />
             </Border>
 
-            <Border Grid.Row="1"
+            <Border Name="InfoBackdrop"
+                    Grid.Row="1"
                     Width="192"
                     Height="84"
                     CornerRadius="6"
@@ -56,12 +74,13 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Top" />
 
-            <Grid Grid.Row="1"
+            <Grid Name="InfoPanel"
+                  Grid.Row="1"
                   Width="188"
                   Height="80"
                   Margin="0,4,0,0"
                   VerticalAlignment="Top"
-                  HorizontalAlignment="Center">
+                  HorizontalAlignment="Left">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="42" />
                     <RowDefinition Height="22" />
@@ -73,8 +92,9 @@
                                FontSize="19"
                                FontWeight="Bold"
                                FontStretch="Expanded"
-                               TextWrapping="NoWrap"
-                               TextTrimming="None"
+                               MaxWidth="188"
+                               TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis"
                                TextAlignment="Center"
                                VerticalAlignment="Center"
                                HorizontalAlignment="Center"
@@ -85,8 +105,9 @@
                     <TextBlock Name="ArtistText"
                                FontSize="14"
                                FontStretch="Expanded"
+                               MaxWidth="188"
                                TextWrapping="NoWrap"
-                               TextTrimming="None"
+                               TextTrimming="CharacterEllipsis"
                                TextAlignment="Center"
                                VerticalAlignment="Center"
                                HorizontalAlignment="Center"

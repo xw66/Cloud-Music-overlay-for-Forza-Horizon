@@ -4,6 +4,5 @@
              xmlns:local="clr-namespace:HorizonRadioOverlay"
              ShutdownMode="OnMainWindowClose">
     <Application.Resources>
-         
     </Application.Resources>
 </Application>

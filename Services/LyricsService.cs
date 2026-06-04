@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
+using HorizonRadioOverlay.Models;
 
 namespace HorizonRadioOverlay.Services;
 
@@ -11,6 +12,7 @@ public sealed class LyricsService : IDisposable
         Timeout = TimeSpan.FromSeconds(3)
     };
 
+    private readonly NeteaseOfficialResolver _resolver;
     private string _lastLyricsKey = string.Empty;
     private List<(double Time, string Text)>? _cachedLyrics;
     private double _songStartTime;
@@ -19,9 +21,14 @@ public sealed class LyricsService : IDisposable
 
     public bool HasLyrics => _cachedLyrics is { Count: > 0 };
 
-    public async Task FetchLyricsAsync(string songName, string artist, double startTimeSeconds, double durationSeconds = 0)
+    public LyricsService(DiagnosticService diagnostic, NeteaseOfficialResolver? resolver = null)
     {
-        string key = $"{songName}|{artist}";
+        _resolver = resolver ?? new NeteaseOfficialResolver(diagnostic);
+    }
+
+    public async Task FetchLyricsAsync(string songName, string artist, double startTimeSeconds, double durationSeconds = 0, string? preferredSongId = null)
+    {
+        string key = $"{songName}|{artist}|{preferredSongId}";
         if (string.Equals(_lastLyricsKey, key, StringComparison.Ordinal))
         {
             return;
@@ -31,7 +38,7 @@ public sealed class LyricsService : IDisposable
         _songStartTime = startTimeSeconds;
         _songDuration = durationSeconds;
         _currentLine = string.Empty;
-        _cachedLyrics = await FetchLyricsFromApiAsync(songName, artist);
+        _cachedLyrics = await FetchLyricsFromApiAsync(songName, artist, preferredSongId);
     }
 
     public void SetPlaybackPosition(double positionSeconds)
@@ -69,6 +76,15 @@ public sealed class LyricsService : IDisposable
         return GetLineAtTime(_cachedLyrics, elapsed);
     }
 
+    public void Reset()
+    {
+        _cachedLyrics = null;
+        _lastLyricsKey = string.Empty;
+        _currentLine = string.Empty;
+        _songStartTime = 0;
+        _songDuration = 0;
+    }
+
     private static string? GetLineAtTime(List<(double Time, string Text)> lyrics, double time)
     {
         string? result = null;
@@ -86,14 +102,14 @@ public sealed class LyricsService : IDisposable
         return result;
     }
 
-    private async Task<List<(double Time, string Text)>?> FetchLyricsFromApiAsync(string songName, string artist)
+    private async Task<List<(double Time, string Text)>?> FetchLyricsFromApiAsync(string songName, string artist, string? preferredSongId)
     {
         try
         {
-            string? songId = await SearchSongIdAsync(songName, artist);
-            if (songId == null) return null;
+            ResolvedSong? resolved = await _resolver.ResolveAsync(songName, artist, preferredSongId);
+            if (string.IsNullOrWhiteSpace(resolved?.SongId)) return null;
 
-            string lrc = await FetchLrcAsync(songId);
+            string lrc = await FetchLrcAsync(resolved.SongId);
             if (string.IsNullOrWhiteSpace(lrc)) return null;
 
             return ParseLrc(lrc);
@@ -102,36 +118,6 @@ public sealed class LyricsService : IDisposable
         {
             return null;
         }
-    }
-
-    private static async Task<string?> SearchSongIdAsync(string songName, string artist)
-    {
-        try
-        {
-            string query = $"{songName} {artist}";
-            string url = $"https://music.163.com/api/search/get?s={Uri.EscapeDataString(query)}&type=1&limit=1";
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Referrer = new Uri("https://music.163.com/");
-            request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
-            using var response = await HttpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            string json = await response.Content.ReadAsStringAsync();
-
-            using var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("result", out var result)) return null;
-            if (!result.TryGetProperty("songs", out var songs) || songs.GetArrayLength() == 0) return null;
-
-            var song = songs[0];
-            if (song.TryGetProperty("id", out var id))
-            {
-                return id.GetInt64().ToString();
-            }
-        }
-        catch { }
-
-        return null;
     }
 
     private static async Task<string> FetchLrcAsync(string songId)
@@ -199,8 +185,6 @@ public sealed class LyricsService : IDisposable
 
     public void Dispose()
     {
-        _cachedLyrics = null;
-        _lastLyricsKey = string.Empty;
-        _currentLine = string.Empty;
+        Reset();
     }
 }
