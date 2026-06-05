@@ -49,6 +49,8 @@ public partial class MainWindow : Window
     private int _gamepadCaptureFocusCount;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
     private bool _isRealExit;
+    private readonly bool _startHiddenToTray;
+    private bool _startupInitialized;
 
     private static readonly (GamepadButton Button, string Token)[] GamepadTokenOrder =
     {
@@ -70,9 +72,10 @@ public partial class MainWindow : Window
         (GamepadButton.Start, "Start")
     };
 
-    public MainWindow()
+    public MainWindow(bool startHiddenToTray = false)
     {
         _isInitializingOverlayControls = true;
+        _startHiddenToTray = startHiddenToTray;
 
         var coverCache = new CoverCacheService();
         _diagnostic = new DiagnosticService();
@@ -238,6 +241,7 @@ public partial class MainWindow : Window
     {
         Show();
         WindowState = WindowState.Normal;
+        ShowInTaskbar = true;
         Activate();
         if (_trayIcon != null)
         {
@@ -269,6 +273,12 @@ public partial class MainWindow : Window
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)
     {
+        if (_startupInitialized)
+        {
+            return;
+        }
+
+        _startupInitialized = true;
         bool ok = RebindGlobalHotkeys();
         SetStatus(ok
             ? "状态：快捷键已就绪，按应用快捷键会转发网易云快捷键。"
@@ -277,6 +287,31 @@ public partial class MainWindow : Window
         _lifecycle.StartAll();
         _ = RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
         _ = SilentCheckUpdateAsync();
+
+        if (_startHiddenToTray)
+        {
+            BeginInvokeHideToTray();
+        }
+    }
+
+    public void PrepareAutoStartToTray()
+    {
+        ShowInTaskbar = false;
+        WindowState = WindowState.Minimized;
+    }
+
+    private void BeginInvokeHideToTray()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            ShowInTaskbar = false;
+            WindowState = WindowState.Minimized;
+            Hide();
+            if (_trayIcon != null)
+            {
+                _trayIcon.Visible = true;
+            }
+        }, DispatcherPriority.ApplicationIdle);
     }
 
     private void MainWindow_Closed(object? sender, EventArgs e)
@@ -1611,7 +1646,7 @@ public partial class MainWindow : Window
                 string? exePath = Environment.ProcessPath;
                 if (!string.IsNullOrWhiteSpace(exePath))
                 {
-                    key.SetValue("HorizonRadioOverlay", $"\"{exePath}\"");
+                    key.SetValue("HorizonRadioOverlay", AppLaunchPolicy.BuildAutoStartCommand(exePath));
                 }
             }
             else

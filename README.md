@@ -1,4 +1,4 @@
-﻿# 网易云悬浮窗 v1.7.0
+﻿# 网易云悬浮窗 v1.7.1
 
 一个 Windows 桌面工具：游戏中自定义快捷键转发网易云切歌，并显示透明悬浮窗（封面 + 歌名 + 歌手）。
 
@@ -110,11 +110,11 @@ dotnet run
 ## 打包发布
 
 ```powershell
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o .\publish\HorizonRadioOverlay_v1.7
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o .\publish\HorizonRadioOverlay_v1.7.1
 ```
 
-发布结果在 `publish\HorizonRadioOverlay_v1.7\HorizonRadioOverlay.exe`。  
-如需分发，建议压缩整个 `HorizonRadioOverlay_v1.7` 文件夹，不建议只单独拷贝 exe。
+发布结果在 `publish\HorizonRadioOverlay_v1.7.1\HorizonRadioOverlay.exe`。  
+如需分发，建议压缩整个 `HorizonRadioOverlay_v1.7.1` 文件夹，不建议只单独拷贝 exe。
 
 ## 常见问题
 
@@ -145,3 +145,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 ## 许可证
 
 MIT
+
+
+
+

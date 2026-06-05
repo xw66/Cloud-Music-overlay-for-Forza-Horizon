@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using HorizonRadioOverlay.Models;
+using HorizonRadioOverlay.Services;
 
 namespace HorizonRadioOverlay;
 
@@ -43,8 +44,14 @@ public partial class App : Application
                 return;
             }
 
-            _mainWindow = new MainWindow();
+            bool startHiddenToTray = AppLaunchPolicy.ShouldStartHiddenToTray(e.Args);
+
+            _mainWindow = new MainWindow(startHiddenToTray);
             MainWindow = _mainWindow;
+            if (startHiddenToTray)
+            {
+                _mainWindow.PrepareAutoStartToTray();
+            }
             _mainWindow.Show();
         }
         catch (Exception ex)
