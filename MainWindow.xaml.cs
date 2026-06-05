@@ -84,7 +84,7 @@ public partial class MainWindow : Window
         _neteaseShortcutSender = new NeteaseShortcutSender();
         _gamepadInputService = new GamepadInputService();
         _updateService = new UpdateService();
-        _lyricsService = new LyricsService(_diagnostic, _neteaseOfficialResolver);
+        _lyricsService = new LyricsService(_diagnostic);
         OverlaySettings loadedSettings = _overlaySettingsService.Load();
         _activeSettings = loadedSettings;
         _overlayWindow.ApplySettings(loadedSettings);
@@ -566,7 +566,11 @@ public partial class MainWindow : Window
                 {
                     try
                     {
-                        await _lyricsService.FetchLyricsAsync(track.Name, track.Artist, startTime, duration, track.SongId);
+                    await _lyricsService.FetchLyricsAsync(
+                        track.Name,
+                        track.Artist,
+                        startTime,
+                        duration);
                         string? line = _lyricsService.GetCurrentLine();
                         Dispatcher.Invoke(() => _overlayWindow.SetLyrics(line));
                     }
@@ -1341,9 +1345,7 @@ public partial class MainWindow : Window
             string.Equals(GetSelectedTrackSource(), "SMTC", StringComparison.OrdinalIgnoreCase);
 
         EnableLyricsCheckBox.IsEnabled = useSmtc;
-        EnableLyricsCheckBox.ToolTip = useSmtc
-            ? "显示当前歌曲歌词；网易云 SMTC 暂不支持歌词滚动"
-            : "歌词功能仅在 SMTC 源可用";
+        EnableLyricsCheckBox.ToolTip = TrackSourcePolicy.GetLyricsTooltip(useSmtc);
     }
 
     private string GetSelectedTrackSource()

@@ -12,7 +12,7 @@
         WindowStartupLocation="CenterScreen"
         Background="#0D1319"
         Foreground="#EDF2F7"
-        FontFamily="Segoe UI Semibold">
+        FontFamily="pack://application:,,,/Assets/Fonts/#MiSans Demibold">
     <Window.Resources>
         <SolidColorBrush x:Key="PanelBrush" Color="#1A2633" />
         <SolidColorBrush x:Key="PanelSoftBrush" Color="#141E29" />
@@ -525,7 +525,7 @@
                                 <CheckBox Name="AutoStartCheckBox" Margin="0,8,0,0" Content="开机自启动" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
                                 <CheckBox Name="AlwaysShowCheckBox" Margin="0,8,0,0" Content="悬浮窗始终生效（下次切歌时生效）" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
                                 <CheckBox Name="DiagnosticCheckBox" Margin="0,8,0,0" Content="诊断模式（记录运行日志）" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
-                                <CheckBox Name="EnableLyricsCheckBox" Margin="0,8,0,0" Content="显示歌词（仅 SMTC 源支持；网易云 SMTC 不支持歌词滚动）" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
+                                <CheckBox Name="EnableLyricsCheckBox" Margin="0,8,0,0" Content="显示歌词（仅 SMTC 源支持；歌词滚动仅跟随 SMTC 时间轴）" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
                                 <CheckBox Name="EnableCoverWingEffectCheckBox" Margin="0,8,0,0" Content="封面展开效果" Foreground="#E8F0F8" Checked="SettingCheckBox_Changed" Unchecked="SettingCheckBox_Changed" />
 
                                 <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
