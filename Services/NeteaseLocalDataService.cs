@@ -10,10 +10,12 @@ namespace HorizonRadioOverlay.Services;
 public sealed class NeteaseLocalDataService
 {
     internal readonly record struct LocalSongIdHint(string SongId, string Source);
+    private readonly record struct CoverDownloadResult(byte[]? Bytes, string RootCause, int? StatusCode, string? ContentType);
 
     private readonly CoverCacheService _coverCache;
     private readonly DiagnosticService _diagnostic;
     private readonly NeteaseOfficialResolver _officialResolver;
+    private long _lastWindowTitleFailureLogAt;
     private static readonly HttpClient HttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(5)
@@ -52,13 +54,29 @@ public sealed class NeteaseLocalDataService
 
     public async Task<TrackInfo?> GetCurrentTrackAsync()
     {
-        TrackInfo? liveTrack = GetTrackFromRunningProcess(_diagnostic);
+        string traceId = DiagnosticContext.NewTraceId();
+        Stopwatch pipelineStopwatch = Stopwatch.StartNew();
+        _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-cover", "start", ("status", "started")));
+
+        TrackInfo? liveTrack = GetTrackFromRunningProcess(_diagnostic, traceId);
         if (liveTrack == null)
         {
+            long now = Environment.TickCount64;
+            if (now - _lastWindowTitleFailureLogAt >= 5000)
+            {
+                _lastWindowTitleFailureLogAt = now;
+                _diagnostic.Warn(
+                    DiagnosticContext.Format(traceId, "netease-cover", "result",
+                        ("status", NeteaseCoverDiagnosticPolicy.WindowTitleMissing),
+                        ("rootCause", NeteaseCoverDiagnosticPolicy.WindowTitleMissing),
+                        ("elapsedMs", pipelineStopwatch.ElapsedMilliseconds),
+                        ("suggestion", "确认网易云正在运行且主窗口标题包含歌曲名和歌手")));
+            }
+
             return null;
         }
 
-        LocalSongIdHint? localHint = await TryGetSongIdHintAsync(liveTrack.Name, liveTrack.Artist);
+        LocalSongIdHint? localHint = await TryGetSongIdHintAsync(liveTrack.Name, liveTrack.Artist, traceId);
         string? preferredSongId = localHint?.SongId;
         if (!string.IsNullOrWhiteSpace(preferredSongId))
         {
@@ -69,11 +87,27 @@ public sealed class NeteaseLocalDataService
             _diagnostic.Warn($"CloudMusic local song id hint missing, falling back to official search: {liveTrack.Name} / {liveTrack.Artist}");
         }
 
-        ResolvedSong? resolved = await _officialResolver.ResolveAsync(liveTrack.Name, liveTrack.Artist, preferredSongId);
+        ResolvedSong? resolved = await _officialResolver.ResolveAsync(liveTrack.Name, liveTrack.Artist, preferredSongId, traceId);
+        bool usedPreferredSongId = !string.IsNullOrWhiteSpace(preferredSongId) &&
+            string.Equals(resolved?.ResolveSource, "netease-id", StringComparison.Ordinal);
+
+        if (usedPreferredSongId && resolved != null && !ShouldTrustPreferredSongId(liveTrack, resolved))
+        {
+            _diagnostic.Warn(
+                $"CloudMusic local song id hint mismatched process title, falling back to search: " +
+                $"title={liveTrack.Name} / {liveTrack.Artist}, " +
+                $"hint={preferredSongId}({localHint?.Source}), " +
+                $"resolved={resolved.Title} / {resolved.Artist}");
+            resolved = await _officialResolver.ResolveAsync(liveTrack.Name, liveTrack.Artist, traceId: traceId);
+            usedPreferredSongId = false;
+        }
+
         string coverKey = !string.IsNullOrWhiteSpace(resolved?.SongId)
             ? $"netease-song:{resolved.SongId}"
             : $"{liveTrack.Name}|{liveTrack.Artist}";
-        byte[]? coverBytes = _coverCache.TryGet(coverKey);
+        byte[]? coverBytes = _coverCache.TryGet(coverKey, traceId);
+        string coverSource;
+        string rootCause = "none";
 
         if (resolved != null)
         {
@@ -86,42 +120,96 @@ public sealed class NeteaseLocalDataService
 
         if (coverBytes != null)
         {
+            coverSource = NeteaseCoverDiagnosticPolicy.CacheHit;
             _diagnostic.Info($"CloudMusic cover cache hit: key={coverKey}");
         }
-
-        if (coverBytes == null && !string.IsNullOrWhiteSpace(resolved?.CoverUrl))
+        else if (resolved == null)
         {
-            coverBytes = await DownloadCoverBytesAsync(resolved.CoverUrl);
+            coverSource = NeteaseCoverDiagnosticPolicy.ResolveFailed;
+            rootCause = NeteaseCoverDiagnosticPolicy.ResolveFailed;
+        }
+        else if (string.IsNullOrWhiteSpace(resolved.CoverUrl))
+        {
+            coverSource = NeteaseCoverDiagnosticPolicy.CoverUrlMissing;
+            rootCause = NeteaseCoverDiagnosticPolicy.CoverUrlMissing;
+            _diagnostic.Warn($"CloudMusic official result has no cover URL: songId={resolved.SongId}, title={resolved.Title} / {resolved.Artist}");
+        }
+        else
+        {
+            CoverDownloadResult download = await DownloadCoverBytesAsync(resolved.CoverUrl, traceId);
+            coverBytes = download.Bytes;
             if (coverBytes != null)
             {
-                _coverCache.Set(coverKey, coverBytes);
+                coverSource = NeteaseCoverDiagnosticPolicy.Downloaded;
+                _coverCache.Set(coverKey, coverBytes, traceId);
                 _diagnostic.Info($"CloudMusic cover downloaded and cached: songId={resolved.SongId}");
             }
             else
             {
-                _diagnostic.Warn($"CloudMusic cover download failed: songId={resolved.SongId}, url={resolved.CoverUrl}");
+                coverSource = NeteaseCoverDiagnosticPolicy.DownloadFailed;
+                rootCause = download.RootCause;
+                _diagnostic.Warn(DiagnosticContext.Format(traceId, "netease-cover", "download-result",
+                    ("status", "failed"), ("rootCause", download.RootCause), ("statusCode", download.StatusCode),
+                    ("contentType", download.ContentType), ("songId", resolved.SongId), ("url", resolved.CoverUrl),
+                    ("suggestion", DiagnosticContext.GetSuggestion(download.RootCause))));
             }
+        }
+
+        string baseSourceAppId = resolved == null
+            ? "CloudMusic(ProcessTitle)"
+            : (usedPreferredSongId
+                ? $"CloudMusic(OfficialById:{preferredSongId},{localHint?.Source})"
+                : "CloudMusic(OfficialSearch)");
+        string sourceAppId = NeteaseCoverDiagnosticPolicy.FormatSourceAppId(baseSourceAppId, coverSource);
+        string pipelineSummary =
+            DiagnosticContext.Format(traceId, "netease-cover", "result",
+                ("status", coverSource),
+                ("rootCause", rootCause),
+                ("elapsedMs", pipelineStopwatch.ElapsedMilliseconds),
+                ("title", liveTrack.Name), ("artist", liveTrack.Artist),
+                ("songId", resolved?.SongId ?? preferredSongId), ("resolve", resolved?.ResolveSource),
+                ("localHint", localHint?.Source), ("coverUrl", resolved?.CoverUrl),
+                ("bytes", coverBytes?.Length ?? 0),
+                ("suggestion", rootCause != "none"
+                    ? DiagnosticContext.GetSuggestion(rootCause)
+                    : "none"));
+        if (NeteaseCoverDiagnosticPolicy.GetFailureReason(coverSource) != null)
+        {
+            _diagnostic.Warn(pipelineSummary);
+        }
+        else
+        {
+            _diagnostic.Info(pipelineSummary);
         }
 
         return new TrackInfo
         {
             Name = resolved?.Title ?? liveTrack.Name,
             Artist = resolved?.Artist ?? liveTrack.Artist,
-            SourceAppId = resolved == null
-                ? "CloudMusic(ProcessTitle)"
-                : (!string.IsNullOrWhiteSpace(preferredSongId)
-                    ? $"CloudMusic(OfficialById:{preferredSongId},{localHint?.Source})"
-                    : "CloudMusic(OfficialSearch)"),
-            SongId = resolved?.SongId ?? preferredSongId,
+            SourceAppId = sourceAppId,
+            SongId = resolved?.SongId ?? (usedPreferredSongId ? preferredSongId : null),
             CoverBytes = coverBytes,
             DurationSeconds = resolved?.DurationSeconds ?? 0,
-            CoverSource = resolved?.ResolveSource ?? "none"
+            CoverSource = coverSource
         };
     }
 
-    private static TrackInfo? GetTrackFromRunningProcess(DiagnosticService? diagnostic)
+    internal static bool ShouldTrustPreferredSongId(TrackInfo liveTrack, ResolvedSong resolved)
+    {
+        double score = NeteaseOfficialResolver.ScoreCandidate(
+            liveTrack.Name,
+            liveTrack.Artist,
+            resolved.Title,
+            resolved.Artist);
+
+        return score >= 55;
+    }
+
+    private static TrackInfo? GetTrackFromRunningProcess(DiagnosticService? diagnostic, string traceId)
     {
         var processes = Process.GetProcessesByName("cloudmusic");
+        diagnostic?.Info(DiagnosticContext.Format(traceId, "netease-cover", "process-detect",
+            ("processCount", processes.Length), ("pids", string.Join(",", processes.Select(x => x.Id)))));
         if (processes.Length == 0)
         {
             return null;
@@ -158,6 +246,9 @@ public sealed class NeteaseLocalDataService
 
         string? bestTitle = NeteaseWindowTitlePolicy.SelectBestTitle(
             windows.Select(x => new NeteaseWindowCandidate(x.Title, x.IsVisible)));
+        diagnostic?.Info(DiagnosticContext.Format(traceId, "netease-cover", "window-title",
+            ("windowCount", windows.Count), ("selected", bestTitle),
+            ("candidates", string.Join(" | ", windows.Select(x => $"[{(x.IsVisible ? "visible" : "hidden")}]{x.Title}")))));
 
         if (string.IsNullOrWhiteSpace(bestTitle))
         {
@@ -170,6 +261,9 @@ public sealed class NeteaseLocalDataService
         }
 
         ParseTitleArtist(bestTitle, out string songName, out string artistName);
+        diagnostic?.Info(DiagnosticContext.Format(traceId, "netease-cover", "title-parse",
+            ("raw", bestTitle), ("title", songName), ("artist", artistName),
+            ("status", artistName == "Unknown Artist" ? "artist-missing" : "ok")));
 
         return new TrackInfo
         {
@@ -257,16 +351,19 @@ public sealed class NeteaseLocalDataService
         return null;
     }
 
-    private async Task<LocalSongIdHint?> TryGetSongIdHintAsync(string name, string artist)
+    private async Task<LocalSongIdHint?> TryGetSongIdHintAsync(string name, string artist, string traceId)
     {
-        foreach (string dataDir in FindAllNeteaseDataDirs())
+        List<string> dataDirs = FindAllNeteaseDataDirs();
+        _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-cover", "local-data-dirs",
+            ("count", dataDirs.Count), ("paths", string.Join(" | ", dataDirs))));
+        foreach (string dataDir in dataDirs)
         {
             string playingList = Path.Combine(dataDir, "webdata", "file", "playingList");
-            LocalSongIdHint? result = await TryGetSongIdFromFileAsync(playingList, name, artist, hasTrackWrapper: true);
+            LocalSongIdHint? result = await TryGetSongIdFromFileAsync(playingList, name, artist, hasTrackWrapper: true, traceId);
             if (result.HasValue) return result;
 
             string fmPlay = Path.Combine(dataDir, "webdata", "file", "fmPlay");
-            result = await TryGetSongIdFromFileAsync(fmPlay, name, artist, hasTrackWrapper: false);
+            result = await TryGetSongIdFromFileAsync(fmPlay, name, artist, hasTrackWrapper: false, traceId);
             if (result.HasValue) return result;
         }
 
@@ -302,10 +399,12 @@ public sealed class NeteaseLocalDataService
         return dirs;
     }
 
-    private static async Task<LocalSongIdHint?> TryGetSongIdFromFileAsync(string filePath, string name, string artist, bool hasTrackWrapper)
+    private async Task<LocalSongIdHint?> TryGetSongIdFromFileAsync(string filePath, string name, string artist, bool hasTrackWrapper, string traceId)
     {
         if (!File.Exists(filePath))
         {
+            _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-cover", "local-file",
+                ("status", "missing"), ("path", filePath)));
             return null;
         }
 
@@ -314,17 +413,41 @@ public sealed class NeteaseLocalDataService
         {
             json = await File.ReadAllTextAsync(filePath);
         }
-        catch
+        catch (Exception ex)
         {
+            string rootCause = DiagnosticContext.ClassifyException(ex);
+            _diagnostic.Warn(DiagnosticContext.Format(traceId, "netease-cover", "local-file",
+                ("status", "read-failed"), ("rootCause", rootCause), ("path", filePath),
+                ("error", $"{ex.GetType().Name}: {ex.Message}"), ("suggestion", DiagnosticContext.GetSuggestion(rootCause))));
             return null;
         }
 
         if (string.IsNullOrWhiteSpace(json))
         {
+            _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-cover", "local-file",
+                ("status", "empty"), ("path", filePath)));
             return null;
         }
 
-        return ParseSongIdHintFromJson(json, name, artist, hasTrackWrapper, Path.GetFileName(filePath));
+        try
+        {
+            using JsonDocument _ = JsonDocument.Parse(json);
+        }
+        catch (JsonException ex)
+        {
+            string rootCause = DiagnosticContext.ClassifyException(ex);
+            _diagnostic.Warn(DiagnosticContext.Format(traceId, "netease-cover", "local-file",
+                ("status", "parse-failed"), ("rootCause", rootCause), ("path", filePath),
+                ("bytes", json.Length), ("error", $"{ex.GetType().Name}: {ex.Message}"),
+                ("suggestion", DiagnosticContext.GetSuggestion(rootCause))));
+            return null;
+        }
+
+        LocalSongIdHint? hint = ParseSongIdHintFromJson(json, name, artist, hasTrackWrapper, Path.GetFileName(filePath));
+        _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-cover", "local-file",
+            ("status", hint.HasValue ? "matched" : "no-match"), ("path", filePath),
+            ("bytes", json.Length), ("songId", hint?.SongId), ("source", hint?.Source)));
+        return hint;
     }
 
     internal static LocalSongIdHint? ParseSongIdHintFromJson(string json, string name, string artist, bool hasTrackWrapper, string fileLabel = "unknown")
@@ -522,34 +645,77 @@ public sealed class NeteaseLocalDataService
         };
     }
 
-    private static async Task<byte[]?> DownloadCoverBytesAsync(string? url)
+    private async Task<CoverDownloadResult> DownloadCoverBytesAsync(string? url, string traceId)
     {
-        if (string.IsNullOrWhiteSpace(url)) return null;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return new CoverDownloadResult(null, NeteaseCoverDiagnosticPolicy.CoverUrlMissing, null, null);
+        }
 
         url = EnsureHttps(url);
 
         const int maxRetries = 3;
         for (int attempt = 0; attempt <= maxRetries; attempt++)
         {
+            Stopwatch stopwatch = Stopwatch.StartNew();
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Referrer = new Uri("https://music.163.com/");
                 request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
                 using var response = await HttpClient.SendAsync(request);
-                response.EnsureSuccessStatusCode();
-                return await response.Content.ReadAsByteArrayAsync();
+                string? contentType = response.Content.Headers.ContentType?.MediaType;
+                _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-cover", "cover-http",
+                    ("attempt", $"{attempt + 1}/{maxRetries + 1}"), ("statusCode", (int)response.StatusCode),
+                    ("contentType", contentType), ("elapsedMs", stopwatch.ElapsedMilliseconds), ("url", url)));
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    string rootCause = DiagnosticContext.ClassifyHttpStatus(response.StatusCode);
+                    _diagnostic.Warn(DiagnosticContext.Format(traceId, "netease-cover", "cover-http",
+                        ("status", "failed"), ("rootCause", rootCause), ("attempt", $"{attempt + 1}/{maxRetries + 1}"),
+                        ("statusCode", (int)response.StatusCode), ("url", url),
+                        ("suggestion", DiagnosticContext.GetSuggestion(rootCause))));
+                    if (attempt >= maxRetries)
+                    {
+                        return new CoverDownloadResult(null, rootCause, (int)response.StatusCode, contentType);
+                    }
+
+                    await Task.Delay(300 * (1 << attempt));
+                    continue;
+                }
+
+                byte[] bytes = await response.Content.ReadAsByteArrayAsync();
+                bool image = DiagnosticContext.IsLikelyImage(bytes);
+                _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-cover", "image-validate",
+                    ("status", image ? "ok" : "invalid"), ("bytes", bytes.Length),
+                    ("contentType", contentType), ("url", url)));
+
+                if (!image)
+                {
+                    return new CoverDownloadResult(null, "invalid-image", (int)response.StatusCode, contentType);
+                }
+
+                return new CoverDownloadResult(bytes, "none", (int)response.StatusCode, contentType);
             }
-            catch
+            catch (Exception ex)
             {
+                string rootCause = DiagnosticContext.ClassifyException(ex);
+                _diagnostic.Warn(DiagnosticContext.Format(traceId, "netease-cover", "cover-http",
+                    ("status", "failed"), ("rootCause", rootCause), ("attempt", $"{attempt + 1}/{maxRetries + 1}"),
+                    ("elapsedMs", stopwatch.ElapsedMilliseconds), ("url", url),
+                    ("error", $"{ex.GetType().Name}: {ex.Message}"), ("suggestion", DiagnosticContext.GetSuggestion(rootCause))));
                 if (attempt < maxRetries)
                 {
                     await Task.Delay(300 * (1 << attempt));
+                    continue;
                 }
+
+                return new CoverDownloadResult(null, rootCause, null, null);
             }
         }
 
-        return null;
+        return new CoverDownloadResult(null, "unknown-error", null, null);
     }
 
     private static string EnsureHttps(string url)

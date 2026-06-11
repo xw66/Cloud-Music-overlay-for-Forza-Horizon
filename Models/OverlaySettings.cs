@@ -14,6 +14,7 @@ public sealed class OverlaySettings
     public string AppPrevHotkey { get; set; } = "Ctrl+Shift+Left";
     public string AppNextHotkey { get; set; } = "Ctrl+Shift+Right";
     public string AppToggleHotkey { get; set; } = "Ctrl+Shift+Down";
+    public string AppToggleOverlayHotkey { get; set; } = "Ctrl+Shift+H";
 
     public string NeteasePrevHotkey { get; set; } = "Ctrl+Alt+Left";
     public string NeteaseNextHotkey { get; set; } = "Ctrl+Alt+Right";
@@ -23,10 +24,12 @@ public sealed class OverlaySettings
     public string GamepadPrevHotkey { get; set; } = "LB+Left";
     public string GamepadNextHotkey { get; set; } = "RB+Right";
     public string GamepadToggleHotkey { get; set; } = "LT+RT+Y";
+    public string GamepadToggleOverlayHotkey { get; set; } = "Back+Start";
 
     public bool MinimizeToTray { get; set; } = true;
     public bool AutoStartOnBoot { get; set; } = false;
     public bool AlwaysShowOverlay { get; set; } = false;
+    public bool HideOverlayWhenPaused { get; set; } = false;
 
     public string TitleColor { get; set; } = "#FFFFFF";
     public string ArtistColor { get; set; } = "#C0D0E0";
@@ -37,4 +40,5 @@ public sealed class OverlaySettings
     public bool EnableCoverWingEffect { get; set; } = false;
     public string LyricsColor { get; set; } = "#A0B8D0";
     public double LyricsOpacity { get; set; } = 0.7;
+    public double? SmtcLyricDelayOverrideMs { get; set; }
 }

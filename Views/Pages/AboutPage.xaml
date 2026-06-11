@@ -1,0 +1,36 @@
+<UserControl x:Class="HorizonRadioOverlay.Views.Pages.AboutPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:HorizonRadioOverlay"
+             Background="Transparent">
+    <Grid Margin="24">
+        <Border Style="{StaticResource CardBorderStyle}" Padding="36">
+            <StackPanel HorizontalAlignment="Center">
+                <Border Width="96" Height="96" CornerRadius="24" Background="{StaticResource PrimaryBrush}">
+                    <TextBlock VerticalAlignment="Center"
+                               HorizontalAlignment="Center"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="40"
+                               Foreground="White"
+                               Text="&#xE189;" />
+                </Border>
+                <TextBlock Margin="0,18,0,0" FontSize="32" FontWeight="SemiBold" Text="{x:Static local:UiText.AppTitle}" />
+                <TextBlock x:Name="VersionText" x:FieldModifier="public"
+                           Margin="0,8,0,0"
+                           Style="{StaticResource BodyTextStyle}"
+                           Text="{x:Static local:UiText.VersionPrefix}" />
+                <TextBlock Margin="0,24,0,0"
+                           Width="460"
+                           TextAlignment="Center"
+                           Style="{StaticResource BodyTextStyle}"
+                           Text="{x:Static local:UiText.AboutDescription}" />
+
+                <UniformGrid Margin="0,28,0,0" Columns="3">
+                    <Button x:Name="ProjectHomeButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.ProjectHome}" />
+                    <Button x:Name="CheckUpdateButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.CheckUpdate}" />
+                    <Button x:Name="LicenseButton" x:FieldModifier="public" Content="{x:Static local:UiText.OpenSourceLicense}" />
+                </UniformGrid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

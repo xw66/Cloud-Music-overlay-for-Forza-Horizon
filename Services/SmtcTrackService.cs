@@ -1,6 +1,7 @@
 ﻿using HorizonRadioOverlay.Models;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
+using System.Runtime.Versioning;
 
 namespace HorizonRadioOverlay.Services;
 
@@ -63,14 +64,22 @@ public sealed class SmtcTrackService
                     return null;
                 }
 
-                string artist = string.IsNullOrWhiteSpace(media.Artist) ? "Unknown Artist" : media.Artist.Trim();
+                string subtitle = media.Subtitle?.Trim() ?? string.Empty;
+                string albumTitle = SmtcReadPolicy.NormalizeAlbumTitle(media.AlbumTitle, media.Artist);
+                string normalizedArtist = SmtcReadPolicy.NormalizeArtist(media.Artist, albumTitle);
+                string artist = string.IsNullOrWhiteSpace(normalizedArtist) ? "Unknown Artist" : normalizedArtist;
                 byte[]? cover = await ReadThumbnailBytesAsync(media.Thumbnail);
                 double duration = TryGetDurationSeconds(session);
+
+                _diagnostic?.Info(
+                    $"SMTC media props: title={title}, subtitle={subtitle}, artist={artist}, album={albumTitle}");
 
                 return new TrackInfo
                 {
                     Name = title,
                     Artist = artist,
+                    Subtitle = subtitle,
+                    AlbumTitle = albumTitle,
                     SourceAppId = SmtcReadPolicy.FormatSourceAppId(session.SourceAppUserModelId),
                     SongId = null,
                     CoverBytes = cover,
@@ -204,6 +213,7 @@ public sealed class SmtcTrackService
         }
     }
 
+    [SupportedOSPlatform("windows10.0.17763")]
     private double TryGetDurationSeconds(GlobalSystemMediaTransportControlsSession session)
     {
         try
@@ -222,6 +232,7 @@ public sealed class SmtcTrackService
         return 0;
     }
 
+    [SupportedOSPlatform("windows10.0.17763")]
     private static async Task<byte[]?> ReadThumbnailBytesAsync(IRandomAccessStreamReference? thumbnail)
     {
         if (thumbnail == null)

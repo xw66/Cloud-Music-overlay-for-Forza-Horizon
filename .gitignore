@@ -1,6 +1,7 @@
 bin/
 obj/
 publish/
+artifacts/
 
 .vs/
 .vscode/
@@ -15,3 +16,9 @@ Desktop.ini
 
 *.tmp
 *.bak
+
+# Local diagnostic / generated artifacts
+codex-plugin-backup-*/
+coverflow-test.png
+ui-mainwindow-check.png
+PROJECT_HANDOFF.md

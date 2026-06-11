@@ -1,0 +1,77 @@
+<UserControl x:Class="HorizonRadioOverlay.Views.Pages.FloatingSettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:HorizonRadioOverlay"
+             Background="Transparent">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Style="{StaticResource PageTitleTextStyle}" Text="{x:Static local:UiText.NavFloatingSettings}" />
+
+            <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.LyricsSource}" />
+                    <ComboBox x:Name="TrackSourceComboBox" x:FieldModifier="public" Margin="0,14,0,0">
+                        <ComboBoxItem Tag="NeteaseProcess" Content="{x:Static local:UiText.SourceNeteaseWindow}" />
+                        <ComboBoxItem Tag="SMTC" Content="{x:Static local:UiText.SourceSmtc}" />
+                    </ComboBox>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="3" Style="{StaticResource CardBorderStyle}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.PositionAndScale}" />
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="64" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{x:Static local:UiText.HorizontalPosition}" VerticalAlignment="Center" />
+                        <TextBlock x:Name="HorizontalValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource SubtleTextBrush}" Text="0%" />
+                    </Grid>
+                    <Slider x:Name="HorizontalSlider" x:FieldModifier="public" Margin="0,8,0,0" Minimum="0" Maximum="100" />
+
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="64" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{x:Static local:UiText.VerticalPosition}" VerticalAlignment="Center" />
+                        <TextBlock x:Name="BottomOffsetValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource SubtleTextBrush}" Text="0%" />
+                    </Grid>
+                    <Slider x:Name="BottomOffsetSlider" x:FieldModifier="public" Margin="0,8,0,0" Minimum="0" Maximum="100" />
+
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="64" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{x:Static local:UiText.Scale}" VerticalAlignment="Center" />
+                        <TextBlock x:Name="ScaleValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource SubtleTextBrush}" Text="100%" />
+                    </Grid>
+                    <Slider x:Name="ScaleSlider" x:FieldModifier="public" Margin="0,8,0,0" Minimum="50" Maximum="220" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="4" Style="{StaticResource CardBorderStyle}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.DisplayAndBehavior}" />
+                    <CheckBox x:Name="EnableLyricsCheckBox" x:FieldModifier="public" Margin="0,16,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.EnableLyrics}" />
+                    <CheckBox x:Name="AlwaysShowCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.AlwaysShowOverlay}" />
+                    <CheckBox x:Name="HideOverlayWhenPausedCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.HideOverlayWhenPaused}" />
+                    <CheckBox x:Name="EnableCoverWingEffectCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.CoverWingEffect}" />
+                    <CheckBox x:Name="MinimizeToTrayCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.MinimizeToTray}" />
+                    <CheckBox x:Name="AutoStartCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.AutoStart}" />
+                    <CheckBox x:Name="DiagnosticCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.DiagnosticMode}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

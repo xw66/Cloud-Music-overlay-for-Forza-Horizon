@@ -12,6 +12,7 @@ public sealed class GlobalHotkeyService : IDisposable
     private const int IdPrev = 0x7011;
     private const int IdNext = 0x7012;
     private const int IdPlayPause = 0x7013;
+    private const int IdToggleOverlay = 0x7014;
 
     private readonly IntPtr _hwnd;
     private readonly HwndSource _source;
@@ -25,6 +26,8 @@ public sealed class GlobalHotkeyService : IDisposable
     public event EventHandler? PrevRequested;
 
     public event EventHandler? TogglePlayPauseRequested;
+
+    public event EventHandler? ToggleOverlayRequested;
 
     public GlobalHotkeyService(Window owner)
     {
@@ -41,10 +44,10 @@ public sealed class GlobalHotkeyService : IDisposable
 
     public bool Register()
     {
-        return Register("Ctrl+Shift+Left", "Ctrl+Shift+Right", "Ctrl+Shift+Down");
+        return Register("Ctrl+Shift+Left", "Ctrl+Shift+Right", "Ctrl+Shift+Down", "Ctrl+Shift+H");
     }
 
-    public bool Register(string prevHotkey, string nextHotkey, string toggleHotkey)
+    public bool Register(string prevHotkey, string nextHotkey, string toggleHotkey, string toggleOverlayHotkey)
     {
         if (_registered)
         {
@@ -53,7 +56,8 @@ public sealed class GlobalHotkeyService : IDisposable
 
         if (!HotkeyParser.TryParse(prevHotkey, out HotkeyDefinition prev) ||
             !HotkeyParser.TryParse(nextHotkey, out HotkeyDefinition next) ||
-            !HotkeyParser.TryParse(toggleHotkey, out HotkeyDefinition toggle))
+            !HotkeyParser.TryParse(toggleHotkey, out HotkeyDefinition toggle) ||
+            !HotkeyParser.TryParse(toggleOverlayHotkey, out HotkeyDefinition toggleOverlay))
         {
             return false;
         }
@@ -61,8 +65,9 @@ public sealed class GlobalHotkeyService : IDisposable
         bool okPrev = RegisterHotKey(_hwnd, IdPrev, prev.Modifiers, prev.VirtualKey);
         bool okNext = RegisterHotKey(_hwnd, IdNext, next.Modifiers, next.VirtualKey);
         bool okPause = RegisterHotKey(_hwnd, IdPlayPause, toggle.Modifiers, toggle.VirtualKey);
+        bool okToggleOverlay = RegisterHotKey(_hwnd, IdToggleOverlay, toggleOverlay.Modifiers, toggleOverlay.VirtualKey);
 
-        _registered = okPrev && okNext && okPause;
+        _registered = okPrev && okNext && okPause && okToggleOverlay;
 
         if (!_registered)
         {
@@ -80,6 +85,11 @@ public sealed class GlobalHotkeyService : IDisposable
             {
                 UnregisterHotKey(_hwnd, IdPlayPause);
             }
+
+            if (okToggleOverlay)
+            {
+                UnregisterHotKey(_hwnd, IdToggleOverlay);
+            }
         }
 
         return _registered;
@@ -92,6 +102,7 @@ public sealed class GlobalHotkeyService : IDisposable
             UnregisterHotKey(_hwnd, IdPrev);
             UnregisterHotKey(_hwnd, IdNext);
             UnregisterHotKey(_hwnd, IdPlayPause);
+            UnregisterHotKey(_hwnd, IdToggleOverlay);
             _registered = false;
         }
 
@@ -116,6 +127,10 @@ public sealed class GlobalHotkeyService : IDisposable
                     break;
                 case IdPlayPause:
                     TogglePlayPauseRequested?.Invoke(this, EventArgs.Empty);
+                    handled = true;
+                    break;
+                case IdToggleOverlay:
+                    ToggleOverlayRequested?.Invoke(this, EventArgs.Empty);
                     handled = true;
                     break;
             }

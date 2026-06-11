@@ -33,4 +33,78 @@ public static class SmtcReadPolicy
     {
         return hasThumbnail ? "smtc-thumbnail" : "smtc-no-thumbnail";
     }
+
+    public static string NormalizeArtist(string? artist, string? albumTitle)
+    {
+        string normalizedArtist = artist?.Trim() ?? string.Empty;
+        string normalizedAlbum = albumTitle?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalizedArtist))
+        {
+            return string.Empty;
+        }
+
+        if (TrySplitAppleMusicArtistAlbum(normalizedArtist, out string splitArtist, out string splitAlbum) &&
+            (string.IsNullOrWhiteSpace(normalizedAlbum) ||
+             string.Equals(splitAlbum, normalizedAlbum, StringComparison.OrdinalIgnoreCase)))
+        {
+            return splitArtist;
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedAlbum))
+        {
+            return normalizedArtist;
+        }
+
+        foreach (string separator in ArtistAlbumSeparators)
+        {
+            string suffix = $"{separator}{normalizedAlbum}";
+            if (normalizedArtist.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return normalizedArtist[..^suffix.Length].Trim();
+            }
+        }
+
+        return normalizedArtist;
+    }
+
+    public static string NormalizeAlbumTitle(string? albumTitle, string? artist)
+    {
+        string normalizedAlbum = albumTitle?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(normalizedAlbum))
+        {
+            return normalizedAlbum;
+        }
+
+        string normalizedArtist = artist?.Trim() ?? string.Empty;
+        return TrySplitAppleMusicArtistAlbum(normalizedArtist, out _, out string splitAlbum)
+            ? splitAlbum
+            : string.Empty;
+    }
+
+    private static readonly string[] ArtistAlbumSeparators = [" \u2014 ", " \u2013 ", " - "];
+
+    private static bool TrySplitAppleMusicArtistAlbum(string value, out string artist, out string album)
+    {
+        artist = string.Empty;
+        album = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        foreach (string separator in ArtistAlbumSeparators)
+        {
+            int index = value.LastIndexOf(separator, StringComparison.Ordinal);
+            if (index <= 0 || index + separator.Length >= value.Length)
+            {
+                continue;
+            }
+
+            artist = value[..index].Trim();
+            album = value[(index + separator.Length)..].Trim();
+            return !string.IsNullOrWhiteSpace(artist) && !string.IsNullOrWhiteSpace(album);
+        }
+
+        return false;
+    }
 }

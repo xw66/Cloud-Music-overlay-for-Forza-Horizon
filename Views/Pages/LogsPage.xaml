@@ -1,0 +1,42 @@
+<UserControl x:Class="HorizonRadioOverlay.Views.Pages.LogsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:HorizonRadioOverlay"
+             Background="Transparent">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Style="{StaticResource PageTitleTextStyle}" Text="{x:Static local:UiText.NavLogs}" />
+
+        <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}">
+            <DockPanel LastChildFill="False">
+                <TextBlock VerticalAlignment="Center" Style="{StaticResource BodyTextStyle}" Text="{x:Static local:UiText.LogsDesc}" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button x:Name="OpenLogFileButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.OpenLogFile}" />
+                    <Button x:Name="CopyLogButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.Copy}" />
+                    <Button x:Name="ClearLogButton" x:FieldModifier="public" Style="{StaticResource DangerButtonStyle}" Content="{x:Static local:UiText.Clear}" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="4" Style="{StaticResource CardBorderStyle}">
+            <ScrollViewer x:Name="LogScrollViewer" x:FieldModifier="public"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Background="#0F172A"
+                          Padding="16">
+                <TextBlock x:Name="LogTextBlock" x:FieldModifier="public"
+                           TextWrapping="Wrap"
+                           Foreground="#E2E8F0"
+                           FontSize="13"
+                           FontFamily="Consolas" />
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>

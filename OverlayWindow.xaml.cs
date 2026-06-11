@@ -17,13 +17,12 @@ namespace HorizonRadioOverlay;
 public partial class OverlayWindow : Window
 {
     private const int GwlExstyle = -20;
-    private const int WsExTransparent = 0x20;
-    private const int WsExLayered = 0x00080000;
-    private const int WsExToolwindow = 0x00000080;
+    private static readonly IntPtr HwndTopmost = new(-1);
 
     private CancellationTokenSource? _hideCts;
     private readonly OverlayAnimationQueue _animQueue;
     private readonly List<CoverFlowAlbum> _coverFlowHistory = new();
+    private readonly System.Windows.Threading.DispatcherTimer _topmostRefreshTimer;
     public const double BaseWidth = 210;
     private const double CoverFlowWidth = 760;
     public const double BaseHeight = 198;
@@ -42,7 +41,25 @@ public partial class OverlayWindow : Window
         Visibility = Visibility.Hidden;
 
         _animQueue = new OverlayAnimationQueue(Dispatcher, OnAnimationRequest);
+        _topmostRefreshTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = OverlayTopmostPolicy.ReassertInterval
+        };
+        _topmostRefreshTimer.Tick += (_, _) => EnsureTopmost();
+        IsVisibleChanged += (_, _) =>
+        {
+            if (Visibility == Visibility.Visible)
+            {
+                EnsureTopmost();
+                StartTopmostRefresh();
+            }
+            else
+            {
+                StopTopmostRefresh();
+            }
+        };
         SourceInitialized += OverlayWindow_SourceInitialized;
+        Closed += (_, _) => StopTopmostRefresh();
     }
 
     public void ApplySettings(OverlaySettings settings)
@@ -72,10 +89,8 @@ public partial class OverlayWindow : Window
         CoverFrame.Visibility = CurrentSettings.EnableCoverWingEffect ? Visibility.Collapsed : Visibility.Visible;
         InfoBackdrop.Visibility = CurrentSettings.EnableCoverWingEffect ? Visibility.Collapsed : Visibility.Visible;
         InfoPanel.Width = 188;
-        InfoPanel.HorizontalAlignment = CurrentSettings.EnableCoverWingEffect ? HorizontalAlignment.Center : HorizontalAlignment.Left;
-        InfoPanel.Margin = CurrentSettings.EnableCoverWingEffect
-            ? new Thickness(0, 4, 0, 0)
-            : new Thickness((BaseWidth - 188) / 2.0, 4, 0, 0);
+        InfoPanel.HorizontalAlignment = HorizontalAlignment.Center;
+        InfoPanel.Margin = new Thickness(0, 4, 0, 0);
 
         Width = layoutWidth * CurrentSettings.Scale;
         Height = layoutHeight * CurrentSettings.Scale;
@@ -120,6 +135,17 @@ public partial class OverlayWindow : Window
 
     [DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint uFlags);
 
     public Task ShowTrackAsync(TrackInfo track)
     {
@@ -166,6 +192,8 @@ public partial class OverlayWindow : Window
 
             Show();
             Visibility = Visibility.Visible;
+            EnsureTopmost();
+            StartTopmostRefresh();
 
             var fadeIn = new DoubleAnimation
             {
@@ -540,7 +568,8 @@ public partial class OverlayWindow : Window
     {
         var hwnd = new WindowInteropHelper(this).Handle;
         int exStyle = GetWindowLong(hwnd, GwlExstyle);
-        SetWindowLong(hwnd, GwlExstyle, exStyle | WsExLayered | WsExTransparent | WsExToolwindow);
+        SetWindowLong(hwnd, GwlExstyle, OverlayTopmostPolicy.ApplyExtendedStyle(exStyle));
+        EnsureTopmost();
     }
 
     public void UpdateCover(byte[]? coverBytes)
@@ -550,6 +579,7 @@ public partial class OverlayWindow : Window
 
     private async Task HideWithAnimationAsync()
     {
+        StopTopmostRefresh();
         DoubleAnimation fadeOut = new()
         {
             From = 1,
@@ -561,6 +591,40 @@ public partial class OverlayWindow : Window
         OverlayRoot.BeginAnimation(UIElement.OpacityProperty, fadeOut);
         await Task.Delay(610);
         Hide();
+    }
+
+    private void EnsureTopmost()
+    {
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _ = SetWindowPos(
+            hwnd,
+            HwndTopmost,
+            0,
+            0,
+            0,
+            0,
+            OverlayTopmostPolicy.GetTopmostFlags());
+    }
+
+    private void StartTopmostRefresh()
+    {
+        if (!_topmostRefreshTimer.IsEnabled)
+        {
+            _topmostRefreshTimer.Start();
+        }
+    }
+
+    private void StopTopmostRefresh()
+    {
+        if (_topmostRefreshTimer.IsEnabled)
+        {
+            _topmostRefreshTimer.Stop();
+        }
     }
 
     private static double Clamp(double value, double min, double max)

@@ -1,4 +1,5 @@
 using HorizonRadioOverlay.Services;
+using HorizonRadioOverlay.Models;
 
 namespace HorizonRadioOverlay.Tests;
 
@@ -63,5 +64,47 @@ public class NeteaseLocalDataServiceTests
 
         Assert.Equal("333", hint?.SongId);
         Assert.Equal("playingList:root-id", hint?.Source);
+    }
+
+    [Fact]
+    public void ShouldTrustPreferredSongId_ReturnsFalse_WhenResolvedSongClearlyMismatchesProcessTitle()
+    {
+        TrackInfo liveTrack = new()
+        {
+            Name = "多远都要在一起",
+            Artist = "G.E.M. 邓紫棋"
+        };
+
+        ResolvedSong resolved = new()
+        {
+            SongId = "401722144",
+            Title = "1954",
+            Artist = "Michaela May",
+            Confidence = 100,
+            ResolveSource = "netease-id"
+        };
+
+        Assert.False(NeteaseLocalDataService.ShouldTrustPreferredSongId(liveTrack, resolved));
+    }
+
+    [Fact]
+    public void ShouldTrustPreferredSongId_ReturnsTrue_WhenResolvedSongMatchesProcessTitle()
+    {
+        TrackInfo liveTrack = new()
+        {
+            Name = "多远都要在一起",
+            Artist = "G.E.M. 邓紫棋"
+        };
+
+        ResolvedSong resolved = new()
+        {
+            SongId = "30612793",
+            Title = "多远都要在一起",
+            Artist = "G.E.M. 邓紫棋",
+            Confidence = 100,
+            ResolveSource = "netease-id"
+        };
+
+        Assert.True(NeteaseLocalDataService.ShouldTrustPreferredSongId(liveTrack, resolved));
     }
 }

@@ -9,6 +9,6 @@ public sealed class AssemblyVersionTests
     {
         Version? version = Assembly.Load("HorizonRadioOverlay").GetName().Version;
 
-        Assert.Equal(new Version(1, 7, 1, 0), version);
+        Assert.Equal(new Version(1, 9, 1, 0), version);
     }
 }

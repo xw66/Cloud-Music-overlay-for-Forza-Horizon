@@ -1,0 +1,113 @@
+<UserControl x:Class="HorizonRadioOverlay.Views.Pages.NowPlayingPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:HorizonRadioOverlay"
+             Background="Transparent">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Style="{StaticResource PageTitleTextStyle}" Text="{x:Static local:UiText.NavNowPlaying}" />
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.2*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="0.9*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource CardBorderStyle}">
+                <StackPanel>
+                    <Border Width="220" Height="220" CornerRadius="18" ClipToBounds="True"
+                            HorizontalAlignment="Center" Background="#E2E8F0">
+                        <Image x:Name="CoverPreview" x:FieldModifier="public" Stretch="UniformToFill" />
+                    </Border>
+                    <TextBlock x:Name="CurrentTitle" x:FieldModifier="public"
+                               Margin="0,18,0,0"
+                               FontSize="28"
+                               FontWeight="SemiBold"
+                               TextWrapping="NoWrap"
+                               TextTrimming="None"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               Text="{x:Static local:UiText.NoTrackDetected}" />
+                    <TextBlock x:Name="CurrentArtist" x:FieldModifier="public"
+                               Margin="0,8,0,0"
+                               FontSize="16"
+                               Foreground="{StaticResource SubtleTextBrush}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="None"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               Text="{x:Static local:UiText.PleasePlayMedia}" />
+                    <TextBlock x:Name="CurrentMeta" x:FieldModifier="public"
+                               Margin="0,6,0,0"
+                               FontSize="13"
+                               Foreground="{StaticResource SubtleTextBrush}"
+                               TextAlignment="Center"
+                               Text="{x:Static local:UiText.SourceUnknown}" />
+
+                    <UniformGrid Margin="0,24,0,0" Columns="4">
+                        <Button x:Name="PrevButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.Previous}" />
+                        <Button x:Name="PlayPauseButton" x:FieldModifier="public" Margin="0,0,12,0" Style="{StaticResource PrimaryButtonStyle}" Content="{x:Static local:UiText.PlayPause}" />
+                        <Button x:Name="NextButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.Next}" />
+                        <Button x:Name="RefreshButton" x:FieldModifier="public" Style="{StaticResource GhostButtonStyle}" Content="{x:Static local:UiText.Refresh}" />
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Grid.Column="2">
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.LyricsPreview}" />
+                        <TextBlock Margin="0,10,0,0" Style="{StaticResource BodyTextStyle}"
+                                   Text="{x:Static local:UiText.LyricsPreviewDesc}" />
+                        <Border Margin="0,16,0,0" Padding="18" Background="#F8FAFC" CornerRadius="14" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                            <TextBlock x:Name="LyricsPreviewText" x:FieldModifier="public"
+                                       FontSize="16"
+                                       Foreground="{StaticResource TextBrush}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="None"
+                                       HorizontalAlignment="Center"
+                                       TextAlignment="Center"
+                                       LineHeight="28"
+                                       Text="{x:Static local:UiText.LyricsPreviewPlaceholder}" />
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.RuntimeStatus}" />
+                        <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
+                            <Ellipse Width="10" Height="10" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" />
+                            <TextBlock x:Name="ConnectionStatusText" x:FieldModifier="public" Margin="10,0,0,0"
+                                       FontSize="14"
+                                       Foreground="{StaticResource TextBrush}"
+                                       Text="{x:Static local:UiText.Connected}" />
+                        </StackPanel>
+                        <TextBlock x:Name="ConnectionStatusSubText" x:FieldModifier="public"
+                                   Margin="20,4,0,0"
+                                   Style="{StaticResource BodyTextStyle}"
+                                   Text="{x:Static local:UiText.RuntimeWaiting}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.QuickActions}" />
+                        <UniformGrid Margin="0,16,0,0" Columns="2">
+                            <Button x:Name="OpenFloatingSettingsButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.OpenFloatingSettings}" />
+                            <Button x:Name="OpenHotkeySettingsButton" x:FieldModifier="public" Content="{x:Static local:UiText.OpenHotkeySettings}" />
+                        </UniformGrid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

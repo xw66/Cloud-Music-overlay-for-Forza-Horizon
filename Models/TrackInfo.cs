@@ -6,6 +6,10 @@ public sealed class TrackInfo
 
     public required string Artist { get; init; }
 
+    public string Subtitle { get; init; } = string.Empty;
+
+    public string AlbumTitle { get; init; } = string.Empty;
+
     public string SourceAppId { get; init; } = string.Empty;
 
     public string? SongId { get; init; }

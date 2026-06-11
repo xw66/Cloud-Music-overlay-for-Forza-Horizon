@@ -8,6 +8,11 @@ namespace HorizonRadioOverlay.Services;
 public sealed class LyricsService : IDisposable
 {
     private const long RetryAfterMissMs = 1500;
+    private const double MinimumAcceptedCandidateScore = 45;
+    private const double MinimumHighConfidenceCandidateScore = 68;
+    private const double MinimumCandidateScoreGap = 8;
+    private const double LineBoundaryStabilitySeconds = 0.08;
+    private const double BackwardLineSwitchToleranceSeconds = 0.65;
 
     private static readonly HttpClient HttpClient = new()
     {
@@ -18,41 +23,74 @@ public sealed class LyricsService : IDisposable
         @"(\(.*?(live|\u4f34\u594f|dj|cover|vip|explicit|remaster|version|ver\.?|feat\.?|ft\.?|\u6bcd\u5e26|\u8d85\u54c1\u8d28|\u81fb\u54c1|\u675c\u6bd4|\u5168\u666f\u58f0).*?\))|(\[.*?(live|\u4f34\u594f|dj|cover|vip|explicit|remaster|version|ver\.?|feat\.?|ft\.?|\u6bcd\u5e26|\u8d85\u54c1\u8d28|\u81fb\u54c1|\u675c\u6bd4|\u5168\u666f\u58f0).*?\])|(\b(?:live|dj|cover|vip|explicit|remaster|version|ver|feat|ft)\.?)|(\u6bcd\u5e26)|(\u8d85\u54c1\u8d28)|(\u81fb\u54c1)|(\u675c\u6bd4\u5168\u666f\u58f0?)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private readonly Func<string, string, Task<IReadOnlyList<string>>> _searchSongIdsAsync;
+    private readonly Func<string, string, string?, double, Task<IReadOnlyList<SongSearchCandidate>>> _searchSongCandidatesAsync;
     private readonly Func<string, Task<string>> _fetchLyricPayloadAsync;
     private readonly Func<long> _nowProvider;
     private readonly DiagnosticService? _diagnostic;
     private string _lastLyricsKey = string.Empty;
     private string? _inFlightKey;
     private long _lastFetchAttemptAtMs;
+    private readonly Dictionary<string, List<(double Time, string Text)>> _lyricsCache = new(StringComparer.Ordinal);
     private List<(double Time, string Text)>? _cachedLyrics;
-    private double _songStartTime;
-    private double _songDuration;
+    private double _currentPlaybackPositionSeconds;
     private string _currentLine = string.Empty;
+    private int _lastLineIndex = -1;
 
     public bool HasLyrics => _cachedLyrics is { Count: > 0 };
 
     public LyricsService(DiagnosticService diagnostic)
     {
-        _searchSongIdsAsync = SearchSongIdsAsync;
+        _searchSongCandidatesAsync = SearchSongCandidatesAsync;
         _fetchLyricPayloadAsync = FetchLyricPayloadAsync;
         _nowProvider = () => Environment.TickCount64;
         _diagnostic = diagnostic;
     }
 
     internal LyricsService(
-        Func<string, string, Task<IReadOnlyList<string>>> searchSongIdsAsync,
+        Func<string, string, string?, double, Task<IReadOnlyList<SongSearchCandidate>>> searchSongCandidatesAsync,
         Func<string, Task<string>> fetchLyricPayloadAsync,
         Func<long>? nowProvider = null)
     {
-        _searchSongIdsAsync = searchSongIdsAsync;
+        _searchSongCandidatesAsync = searchSongCandidatesAsync;
         _fetchLyricPayloadAsync = fetchLyricPayloadAsync;
         _nowProvider = nowProvider ?? (() => Environment.TickCount64);
     }
 
-    public async Task FetchLyricsAsync(string songName, string artist, double startTimeSeconds, double durationSeconds = 0)
+    internal LyricsService(
+        Func<string, string, string?, double, Task<IReadOnlyList<string>>> searchSongIdsAsync,
+        Func<string, Task<string>> fetchLyricPayloadAsync,
+        Func<long>? nowProvider = null)
+        : this(
+            async (songName, artist, albumTitle, durationSeconds) =>
+            {
+                IReadOnlyList<string> ids = await searchSongIdsAsync(songName, artist, albumTitle, durationSeconds);
+                return ids.Select(id => new SongSearchCandidate(id, 100, string.Empty, string.Empty, string.Empty, 0)).ToArray();
+            },
+            fetchLyricPayloadAsync,
+            nowProvider)
     {
-        string key = $"{songName}|{artist}";
+    }
+
+    public async Task FetchLyricsAsync(
+        string songName,
+        string artist,
+        string? albumTitle,
+        double startTimeSeconds,
+        double durationSeconds = 0,
+        string? preferredSongId = null)
+    {
+        if (ShouldSkipLookup(songName, artist))
+        {
+            _diagnostic?.Info($"Lyrics fetch skipped for placeholder metadata: {songName} / {artist}");
+            _cachedLyrics = null;
+            _currentLine = string.Empty;
+            _lastLyricsKey = string.Empty;
+            _inFlightKey = null;
+            _lastLineIndex = -1;
+            return;
+        }
+
+        string key = BuildLyricsKey(songName, artist, albumTitle, durationSeconds);
         if (string.Equals(_lastLyricsKey, key, StringComparison.Ordinal))
         {
             if (_cachedLyrics is { Count: > 0 })
@@ -73,17 +111,41 @@ public sealed class LyricsService : IDisposable
             }
         }
 
+        if (_lyricsCache.TryGetValue(key, out List<(double Time, string Text)>? cachedLyrics))
+        {
+            _lastLyricsKey = key;
+            _cachedLyrics = cachedLyrics;
+            _currentPlaybackPositionSeconds = startTimeSeconds;
+            _currentLine = string.Empty;
+            _lastLineIndex = -1;
+            return;
+        }
+
         _lastLyricsKey = key;
-        _songStartTime = startTimeSeconds;
-        _songDuration = durationSeconds;
+        _currentPlaybackPositionSeconds = startTimeSeconds;
         _currentLine = string.Empty;
+        _lastLineIndex = -1;
         _lastFetchAttemptAtMs = _nowProvider();
         _inFlightKey = key;
         try
         {
-            _cachedLyrics = await FetchLyricsFromApiAsync(songName, artist);
+            List<(double Time, string Text)>? fetchedLyrics = await FetchLyricsFromApiAsync(
+                songName,
+                artist,
+                albumTitle,
+                durationSeconds,
+                preferredSongId);
+            if (!string.Equals(_lastLyricsKey, key, StringComparison.Ordinal))
+            {
+                _diagnostic?.Info($"Lyrics fetch ignored stale result: {songName} / {artist}");
+                return;
+            }
+
+            _cachedLyrics = fetchedLyrics;
+            _lastLineIndex = -1;
             if (_cachedLyrics is { Count: > 0 })
             {
+                _lyricsCache[key] = _cachedLyrics;
                 _diagnostic?.Info($"Lyrics fetch succeeded: {songName} / {artist}, lines={_cachedLyrics.Count}");
             }
             else
@@ -102,7 +164,7 @@ public sealed class LyricsService : IDisposable
 
     public void SetPlaybackPosition(double positionSeconds)
     {
-        _songStartTime = Environment.TickCount / 1000.0 - positionSeconds;
+        _currentPlaybackPositionSeconds = positionSeconds;
     }
 
     public string? UpdateCurrentLine()
@@ -112,15 +174,7 @@ public sealed class LyricsService : IDisposable
             return null;
         }
 
-        double elapsed = Environment.TickCount / 1000.0 - _songStartTime;
-
-        if (_songDuration > 0 && elapsed > _songDuration + 2)
-        {
-            elapsed = 0;
-            _songStartTime = Environment.TickCount / 1000.0;
-        }
-
-        string? line = GetLineAtTime(_cachedLyrics, elapsed);
+        string? line = GetLineAtTime(_cachedLyrics, _currentPlaybackPositionSeconds, ref _lastLineIndex);
         if (line != null && !string.Equals(line, _currentLine, StringComparison.Ordinal))
         {
             _currentLine = line;
@@ -137,8 +191,7 @@ public sealed class LyricsService : IDisposable
             return null;
         }
 
-        double elapsed = Environment.TickCount / 1000.0 - _songStartTime;
-        return GetLineAtTime(_cachedLyrics, elapsed);
+        return GetLineAtTime(_cachedLyrics, _currentPlaybackPositionSeconds, ref _lastLineIndex);
     }
 
     public void Reset()
@@ -148,23 +201,68 @@ public sealed class LyricsService : IDisposable
         _inFlightKey = null;
         _lastFetchAttemptAtMs = 0;
         _currentLine = string.Empty;
-        _songStartTime = 0;
-        _songDuration = 0;
+        _currentPlaybackPositionSeconds = 0;
+        _lastLineIndex = -1;
     }
 
-    internal static IReadOnlyList<string> BuildSearchQueries(string songName, string artist)
+    private static string BuildLyricsKey(string songName, string artist, string? albumTitle, double durationSeconds)
+    {
+        string normalizedSong = (songName ?? string.Empty).Trim();
+        string normalizedArtist = (artist ?? string.Empty).Trim();
+        string normalizedAlbum = (albumTitle ?? string.Empty).Trim();
+        int roundedDuration = durationSeconds > 0 ? (int)Math.Round(durationSeconds, MidpointRounding.AwayFromZero) : 0;
+        return $"{normalizedSong}|{normalizedArtist}|{normalizedAlbum}|{roundedDuration}";
+    }
+
+    internal static IReadOnlyList<string> BuildSearchQueries(string songName, string artist, string? albumTitle = null)
     {
         HashSet<string> queries = new(StringComparer.OrdinalIgnoreCase);
         string cleanedTitle = CleanupSearchText(songName);
         string cleanedArtist = CleanupSearchText(artist);
+        string cleanedAlbum = CleanupSearchText(albumTitle);
 
         AddQuery(queries, songName, artist);
         AddQuery(queries, cleanedTitle, artist);
         AddQuery(queries, cleanedTitle, cleanedArtist);
         AddQuery(queries, songName, null);
         AddQuery(queries, cleanedTitle, null);
+        if (!string.IsNullOrWhiteSpace(cleanedAlbum))
+        {
+            AddQuery(queries, $"{cleanedTitle} {cleanedAlbum}", artist);
+            AddQuery(queries, cleanedTitle, cleanedAlbum);
+        }
 
         return queries.ToArray();
+    }
+
+    internal static bool ShouldSkipLookup(string? songName, string? artist)
+    {
+        string title = (songName ?? string.Empty).Trim();
+        string singer = (artist ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return true;
+        }
+
+        if (title.Contains("姝ｅ湪杩炴帴", StringComparison.OrdinalIgnoreCase) ||
+            title.Contains("正在连接", StringComparison.OrdinalIgnoreCase) ||
+            title.Contains("鏈娴嬪埌", StringComparison.OrdinalIgnoreCase) ||
+            title.Contains("未检测到", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(singer, "Unknown Artist", StringComparison.OrdinalIgnoreCase) &&
+            (title.Contains("姝ｅ湪杩炴帴", StringComparison.OrdinalIgnoreCase) ||
+             title.Contains("正在连接", StringComparison.OrdinalIgnoreCase) ||
+             title.Contains("鏈娴嬪埌", StringComparison.OrdinalIgnoreCase) ||
+             title.Contains("未检测到", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     internal static string ExtractBestLyricFromPayload(string json)
@@ -193,25 +291,109 @@ public sealed class LyricsService : IDisposable
         return string.Empty;
     }
 
-    private async Task<List<(double Time, string Text)>?> FetchLyricsFromApiAsync(string songName, string artist)
+    internal static IReadOnlyList<string> RankSongIdsFromSearchPayload(
+        string json,
+        string songName,
+        string artist,
+        string? albumTitle,
+        double durationSeconds)
+    {
+        return RankSongCandidatesFromSearchPayload(json, songName, artist, albumTitle, durationSeconds)
+            .Select(x => x.SongId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    internal static IReadOnlyList<SongSearchCandidate> RankSongCandidatesFromSearchPayload(
+        string json,
+        string songName,
+        string artist,
+        string? albumTitle,
+        double durationSeconds)
+    {
+        using JsonDocument doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("result", out JsonElement result) ||
+            !result.TryGetProperty("songs", out JsonElement songs) ||
+            songs.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<SongSearchCandidate>();
+        }
+
+        List<SongSearchCandidate> ranked = new();
+        foreach (JsonElement song in songs.EnumerateArray())
+        {
+            if (!song.TryGetProperty("id", out JsonElement id))
+            {
+                continue;
+            }
+
+            string candidateTitle = song.TryGetProperty("name", out JsonElement nameElement)
+                ? nameElement.GetString() ?? string.Empty
+                : string.Empty;
+            string candidateArtist = ReadCandidateArtist(song);
+            string candidateAlbum = ReadCandidateAlbum(song);
+            double candidateDuration = ReadCandidateDurationSeconds(song);
+            double score = ScoreSearchCandidate(songName, artist, albumTitle, durationSeconds, candidateTitle, candidateArtist, candidateAlbum, candidateDuration);
+            if (score >= MinimumAcceptedCandidateScore)
+            {
+                ranked.Add(new SongSearchCandidate(
+                    id.GetInt64().ToString(),
+                    score,
+                    candidateTitle,
+                    candidateArtist,
+                    candidateAlbum,
+                    candidateDuration));
+            }
+        }
+
+        SongSearchCandidate[] ordered = ranked
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.SongId, StringComparer.Ordinal)
+            .ToArray();
+
+        if (ordered.Length == 0)
+        {
+            return ordered;
+        }
+
+        if (!ShouldAcceptTopCandidate(ordered))
+        {
+            return Array.Empty<SongSearchCandidate>();
+        }
+
+        return ordered;
+    }
+
+    private async Task<List<(double Time, string Text)>?> FetchLyricsFromApiAsync(
+        string songName,
+        string artist,
+        string? albumTitle,
+        double durationSeconds,
+        string? preferredSongId)
     {
         try
         {
             List<string> candidateSongIds = new();
+            if (!string.IsNullOrWhiteSpace(preferredSongId))
+            {
+                candidateSongIds.Add(preferredSongId);
+                _diagnostic?.Info($"Lyrics fetch preferred song id: {preferredSongId}");
+            }
             _diagnostic?.Info($"Lyrics fetch start: {songName} / {artist}");
 
-            IReadOnlyList<string> fallbackSongIds = Array.Empty<string>();
+            IReadOnlyList<SongSearchCandidate> rankedCandidates = Array.Empty<SongSearchCandidate>();
             try
             {
-                fallbackSongIds = await _searchSongIdsAsync(songName, artist);
+                rankedCandidates = await _searchSongCandidatesAsync(songName, artist, albumTitle, durationSeconds);
             }
             catch (Exception ex)
             {
                 _diagnostic?.Warn($"Lyrics fetch search failed: {songName} / {artist}, {ex.Message}");
             }
 
-            foreach (string songId in fallbackSongIds)
+            foreach (SongSearchCandidate candidate in rankedCandidates)
             {
+                string songId = candidate.SongId;
                 if (!string.IsNullOrWhiteSpace(songId) &&
                     !candidateSongIds.Contains(songId, StringComparer.Ordinal))
                 {
@@ -219,7 +401,18 @@ public sealed class LyricsService : IDisposable
                 }
             }
 
-            _diagnostic?.Info($"Lyrics fetch candidates: {string.Join(", ", candidateSongIds)}");
+            if (rankedCandidates.Count > 0)
+            {
+                _diagnostic?.Info(
+                    "Lyrics fetch candidates: " +
+                    string.Join(
+                        " | ",
+                        rankedCandidates.Select(x => $"{x.SongId}:{x.Title}/{x.Artist}/{x.Album}/{x.DurationSeconds:F1}s score={x.Score:F1}")));
+            }
+            else
+            {
+                _diagnostic?.Info("Lyrics fetch candidates: <none>");
+            }
 
             foreach (string songId in candidateSongIds)
             {
@@ -250,11 +443,11 @@ public sealed class LyricsService : IDisposable
         }
     }
 
-    private static async Task<IReadOnlyList<string>> SearchSongIdsAsync(string songName, string artist)
+    private static async Task<IReadOnlyList<SongSearchCandidate>> SearchSongCandidatesAsync(string songName, string artist, string? albumTitle, double durationSeconds)
     {
-        List<string> songIds = new();
+        Dictionary<string, SongSearchCandidate> candidates = new(StringComparer.Ordinal);
 
-        foreach (string query in BuildSearchQueries(songName, artist))
+        foreach (string query in BuildSearchQueries(songName, artist, albumTitle))
         {
             try
             {
@@ -267,26 +460,12 @@ public sealed class LyricsService : IDisposable
                 using HttpResponseMessage response = await HttpClient.SendAsync(request);
                 response.EnsureSuccessStatusCode();
                 string json = await response.Content.ReadAsStringAsync();
-
-                using JsonDocument doc = JsonDocument.Parse(json);
-                if (!doc.RootElement.TryGetProperty("result", out JsonElement result) ||
-                    !result.TryGetProperty("songs", out JsonElement songs) ||
-                    songs.ValueKind != JsonValueKind.Array)
+                foreach (SongSearchCandidate candidate in RankSongCandidatesFromSearchPayload(json, songName, artist, albumTitle, durationSeconds))
                 {
-                    continue;
-                }
-
-                foreach (JsonElement song in songs.EnumerateArray())
-                {
-                    if (!song.TryGetProperty("id", out JsonElement id))
+                    if (!candidates.TryGetValue(candidate.SongId, out SongSearchCandidate? existing) ||
+                        candidate.Score > existing.Score)
                     {
-                        continue;
-                    }
-
-                    string candidate = id.GetInt64().ToString();
-                    if (!songIds.Contains(candidate, StringComparer.Ordinal))
-                    {
-                        songIds.Add(candidate);
+                        candidates[candidate.SongId] = candidate;
                     }
                 }
             }
@@ -295,7 +474,10 @@ public sealed class LyricsService : IDisposable
             }
         }
 
-        return songIds;
+        return candidates.Values
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.SongId, StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static string CleanupSearchText(string? value)
@@ -331,6 +513,220 @@ public sealed class LyricsService : IDisposable
         }
     }
 
+    private static string ReadCandidateArtist(JsonElement song)
+    {
+        if (!song.TryGetProperty("artists", out JsonElement artists) || artists.ValueKind != JsonValueKind.Array)
+        {
+            return string.Empty;
+        }
+
+        List<string> names = new();
+        foreach (JsonElement artist in artists.EnumerateArray())
+        {
+            if (artist.TryGetProperty("name", out JsonElement name))
+            {
+                string value = name.GetString() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    names.Add(value.Trim());
+                }
+            }
+        }
+
+        return string.Join(" / ", names);
+    }
+
+    private static string ReadCandidateAlbum(JsonElement song)
+    {
+        if (song.TryGetProperty("album", out JsonElement album) &&
+            album.TryGetProperty("name", out JsonElement albumName))
+        {
+            return albumName.GetString() ?? string.Empty;
+        }
+
+        if (song.TryGetProperty("al", out JsonElement al) &&
+            al.TryGetProperty("name", out JsonElement alName))
+        {
+            return alName.GetString() ?? string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    private static double ReadCandidateDurationSeconds(JsonElement song)
+    {
+        if (song.TryGetProperty("duration", out JsonElement duration) && duration.TryGetInt64(out long durationMs))
+        {
+            return durationMs / 1000.0;
+        }
+
+        if (song.TryGetProperty("dt", out JsonElement dt) && dt.TryGetInt64(out long dtMs))
+        {
+            return dtMs / 1000.0;
+        }
+
+        return 0;
+    }
+
+    private static double ScoreSearchCandidate(
+        string inputTitle,
+        string inputArtist,
+        string? inputAlbumTitle,
+        double inputDurationSeconds,
+        string candidateTitle,
+        string candidateArtist,
+        string candidateAlbum,
+        double candidateDurationSeconds)
+    {
+        string normalizedInputTitle = CleanupSearchText(inputTitle).Replace(" ", string.Empty);
+        string normalizedCandidateTitle = CleanupSearchText(candidateTitle).Replace(" ", string.Empty);
+        bool inputHasVersionNoise = ContainsVersionNoise(inputTitle) || ContainsVersionNoise(inputAlbumTitle);
+        bool candidateHasVersionNoise = ContainsVersionNoise(candidateTitle) || ContainsVersionNoise(candidateAlbum);
+
+        double score = 0;
+        if (string.Equals(inputTitle.Trim(), candidateTitle.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            score += 70;
+        }
+        else if (string.Equals(normalizedInputTitle, normalizedCandidateTitle, StringComparison.OrdinalIgnoreCase))
+        {
+            score += 55;
+        }
+        else if (normalizedCandidateTitle.Contains(normalizedInputTitle, StringComparison.OrdinalIgnoreCase) ||
+                 normalizedInputTitle.Contains(normalizedCandidateTitle, StringComparison.OrdinalIgnoreCase))
+        {
+            score += 35;
+        }
+
+        string[] inputArtists = SplitArtists(inputArtist);
+        string[] candidateArtists = SplitArtists(candidateArtist);
+        int overlap = inputArtists.Intersect(candidateArtists, StringComparer.OrdinalIgnoreCase).Count();
+        if (overlap > 0)
+        {
+            score += 20 + Math.Min(10, overlap * 5);
+        }
+
+        int extraArtists = candidateArtists.Except(inputArtists, StringComparer.OrdinalIgnoreCase).Count();
+        int missingArtists = inputArtists.Except(candidateArtists, StringComparer.OrdinalIgnoreCase).Count();
+        score -= extraArtists * 6;
+        score -= missingArtists * 3;
+
+        if (string.Equals(NormalizeArtistToken(inputArtist), NormalizeArtistToken(candidateArtist), StringComparison.OrdinalIgnoreCase))
+        {
+            score += 12;
+        }
+
+        if (!string.IsNullOrWhiteSpace(inputAlbumTitle))
+        {
+            string normalizedInputAlbum = CleanupSearchText(inputAlbumTitle).Replace(" ", string.Empty);
+            string normalizedCandidateAlbum = CleanupSearchText(candidateAlbum).Replace(" ", string.Empty);
+            if (!string.IsNullOrWhiteSpace(normalizedCandidateAlbum))
+            {
+                if (string.Equals(normalizedInputAlbum, normalizedCandidateAlbum, StringComparison.OrdinalIgnoreCase))
+                {
+                    score += 24;
+                }
+                else if (normalizedCandidateAlbum.Contains(normalizedInputAlbum, StringComparison.OrdinalIgnoreCase) ||
+                         normalizedInputAlbum.Contains(normalizedCandidateAlbum, StringComparison.OrdinalIgnoreCase))
+                {
+                    score += 8;
+                }
+                else
+                {
+                    score -= 10;
+                }
+            }
+        }
+
+        if (inputDurationSeconds > 0 && candidateDurationSeconds > 0)
+        {
+            double delta = Math.Abs(candidateDurationSeconds - inputDurationSeconds);
+            if (delta <= 2)
+            {
+                score += 20;
+            }
+            else if (delta <= 5)
+            {
+                score += 12;
+            }
+            else if (delta <= 10)
+            {
+                score += 4;
+            }
+            else if (delta >= 12)
+            {
+                score -= 16;
+            }
+        }
+
+        if (!inputHasVersionNoise && candidateHasVersionNoise)
+        {
+            score -= 12;
+        }
+
+        return score;
+    }
+
+    private static bool ShouldAcceptTopCandidate(IReadOnlyList<SongSearchCandidate> ordered)
+    {
+        SongSearchCandidate top = ordered[0];
+        if (top.Score < MinimumHighConfidenceCandidateScore)
+        {
+            return false;
+        }
+
+        if (ordered.Count == 1)
+        {
+            return true;
+        }
+
+        SongSearchCandidate second = ordered[1];
+        if ((top.Score - second.Score) >= MinimumCandidateScoreGap)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsVersionNoise(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string normalized = CleanupSearchText(value);
+        return normalized.Contains("live", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("remaster", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("deluxe", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("explicit", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("demo", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("version", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeArtistToken(string artist)
+    {
+        return string.Join("|", SplitArtists(artist).OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static string[] SplitArtists(string artist)
+    {
+        return Regex
+            .Split(CleanupSearchText(artist ?? string.Empty), @"\s*(?:/|&|,|銆亅锛寍;|锛泑\bx\b|脳|feat\.?|ft\.?)\s*", RegexOptions.IgnoreCase)
+            .Select(NormalizeArtistPart)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.ToLowerInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string NormalizeArtistPart(string value)
+    {
+        string trimmed = value.Trim().Trim('.');
+        return new string(trimmed.Where(c => !char.IsWhiteSpace(c)).ToArray());
+    }
+
     private static async Task<string> FetchLyricPayloadAsync(string songId)
     {
         string url = $"https://music.163.com/api/song/lyric?id={songId}&lv=1&kv=1&tv=-1";
@@ -347,12 +743,31 @@ public sealed class LyricsService : IDisposable
     private static List<(double Time, string Text)> ParseLrc(string lrc)
     {
         List<(double Time, string Text)> lines = new();
+        double offsetSeconds = 0;
 
         foreach (string line in lrc.Split('\n'))
         {
             string trimmed = line.Trim();
             if (string.IsNullOrEmpty(trimmed))
             {
+                continue;
+            }
+
+            if (trimmed.StartsWith("[offset:", StringComparison.OrdinalIgnoreCase))
+            {
+                int close = trimmed.IndexOf(']');
+                if (close > 8)
+                {
+                    string offsetPart = trimmed.Substring(8, close - 8);
+                    if (double.TryParse(
+                            offsetPart,
+                            System.Globalization.NumberStyles.Integer,
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            out double offsetMs))
+                    {
+                        offsetSeconds = offsetMs / 1000.0;
+                    }
+                }
                 continue;
             }
 
@@ -371,7 +786,7 @@ public sealed class LyricsService : IDisposable
 
             if (TryParseTime(timePart, out double time))
             {
-                lines.Add((time, textPart));
+                lines.Add((Math.Max(0, time + offsetSeconds), textPart));
             }
         }
 
@@ -379,22 +794,64 @@ public sealed class LyricsService : IDisposable
         return lines;
     }
 
-    private static string? GetLineAtTime(List<(double Time, string Text)> lyrics, double time)
+    private static string? GetLineAtTime(List<(double Time, string Text)> lyrics, double time, ref int lastIndex)
     {
-        string? result = null;
-        for (int i = 0; i < lyrics.Count; i++)
+        double effectiveTime = Math.Max(0, time - LineBoundaryStabilitySeconds);
+        if (lyrics.Count == 0)
         {
-            if (lyrics[i].Time <= time)
+            lastIndex = -1;
+            return null;
+        }
+
+        if (lastIndex >= 0 && lastIndex < lyrics.Count)
+        {
+            double currentTime = lyrics[lastIndex].Time;
+            double nextTime = lastIndex == lyrics.Count - 1 ? double.MaxValue : lyrics[lastIndex + 1].Time;
+            if (effectiveTime >= currentTime && effectiveTime < nextTime)
             {
-                result = lyrics[i].Text;
+                return lyrics[lastIndex].Text;
             }
-            else
+
+            if (effectiveTime < currentTime &&
+                (currentTime - effectiveTime) <= BackwardLineSwitchToleranceSeconds)
             {
-                break;
+                return lyrics[lastIndex].Text;
+            }
+
+            if (effectiveTime >= nextTime)
+            {
+                for (int i = lastIndex + 1; i < lyrics.Count; i++)
+                {
+                    double candidateTime = lyrics[i].Time;
+                    double candidateNextTime = i == lyrics.Count - 1 ? double.MaxValue : lyrics[i + 1].Time;
+                    if (effectiveTime >= candidateTime && effectiveTime < candidateNextTime)
+                    {
+                        lastIndex = i;
+                        return lyrics[i].Text;
+                    }
+                }
             }
         }
 
-        return result;
+        int low = 0;
+        int high = lyrics.Count - 1;
+        int match = -1;
+        while (low <= high)
+        {
+            int mid = low + ((high - low) / 2);
+            if (lyrics[mid].Time <= effectiveTime)
+            {
+                match = mid;
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        lastIndex = match;
+        return match >= 0 ? lyrics[match].Text : null;
     }
 
     private static bool TryParseTime(string timeStr, out double seconds)
@@ -484,6 +941,14 @@ public sealed class LyricsService : IDisposable
         int centiseconds = (totalMs % 1000) / 10;
         return $"{minutes:00}:{seconds:00}.{centiseconds:00}";
     }
+
+    internal sealed record SongSearchCandidate(
+        string SongId,
+        double Score,
+        string Title,
+        string Artist,
+        string Album,
+        double DurationSeconds);
 
     public void Dispose()
     {

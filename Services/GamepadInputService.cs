@@ -10,15 +10,18 @@ public sealed class GamepadInputService : IDisposable
     private bool _prevPressed;
     private bool _nextPressed;
     private bool _togglePressed;
+    private bool _toggleOverlayPressed;
 
     public bool Enabled { get; set; }
     public GamepadHotkeyDefinition PrevHotkey { get; set; }
     public GamepadHotkeyDefinition NextHotkey { get; set; }
     public GamepadHotkeyDefinition ToggleHotkey { get; set; }
+    public GamepadHotkeyDefinition ToggleOverlayHotkey { get; set; }
 
     public event EventHandler? PrevTriggered;
     public event EventHandler? NextTriggered;
     public event EventHandler? ToggleTriggered;
+    public event EventHandler? ToggleOverlayTriggered;
 
     public GamepadInputService()
     {
@@ -45,6 +48,7 @@ public sealed class GamepadInputService : IDisposable
             _prevPressed = false;
             _nextPressed = false;
             _togglePressed = false;
+            _toggleOverlayPressed = false;
             return;
         }
 
@@ -53,6 +57,7 @@ public sealed class GamepadInputService : IDisposable
         bool prevNow = IsPressed(current, PrevHotkey.Buttons);
         bool nextNow = IsPressed(current, NextHotkey.Buttons);
         bool toggleNow = IsPressed(current, ToggleHotkey.Buttons);
+        bool toggleOverlayNow = IsPressed(current, ToggleOverlayHotkey.Buttons);
 
         if (prevNow && !_prevPressed)
         {
@@ -69,9 +74,15 @@ public sealed class GamepadInputService : IDisposable
             ToggleTriggered?.Invoke(this, EventArgs.Empty);
         }
 
+        if (toggleOverlayNow && !_toggleOverlayPressed)
+        {
+            ToggleOverlayTriggered?.Invoke(this, EventArgs.Empty);
+        }
+
         _prevPressed = prevNow;
         _nextPressed = nextNow;
         _togglePressed = toggleNow;
+        _toggleOverlayPressed = toggleOverlayNow;
     }
 
     private static bool IsPressed(GamepadButton current, GamepadButton required)

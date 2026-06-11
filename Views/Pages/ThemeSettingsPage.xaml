@@ -1,0 +1,117 @@
+<UserControl x:Class="HorizonRadioOverlay.Views.Pages.ThemeSettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:HorizonRadioOverlay"
+             Background="Transparent">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Style="{StaticResource PageTitleTextStyle}" Text="{x:Static local:UiText.NavTheme}" />
+
+            <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.TextColorsAndOpacity}" />
+                    <TextBlock Margin="0,16,0,0" Text="{x:Static local:UiText.ThemeAccent}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button x:Name="ThemeAccentIndigoButton" x:FieldModifier="public" Width="36" Height="36" Margin="0,0,12,0" Background="#5B5CEB" BorderBrush="#5B5CEB" />
+                        <Button x:Name="ThemeAccentBlueButton" x:FieldModifier="public" Width="36" Height="36" Margin="0,0,12,0" Background="#3B82F6" BorderBrush="#3B82F6" />
+                        <Button x:Name="ThemeAccentGreenButton" x:FieldModifier="public" Width="36" Height="36" Margin="0,0,12,0" Background="#22C55E" BorderBrush="#22C55E" />
+                        <Button x:Name="ThemeAccentAmberButton" x:FieldModifier="public" Width="36" Height="36" Margin="0,0,12,0" Background="#F59E0B" BorderBrush="#F59E0B" />
+                        <Button x:Name="ThemeAccentRoseButton" x:FieldModifier="public" Width="36" Height="36" Background="#F43F5E" BorderBrush="#F43F5E" />
+                    </StackPanel>
+
+                    <TextBlock Margin="0,20,0,0" Text="{x:Static local:UiText.TitleColor}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <RadioButton x:Name="TitleColor_White" x:FieldModifier="public" GroupName="TitleColor" Tag="#FFFFFF" Background="#FFFFFF" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="TitleColor_Light" x:FieldModifier="public" GroupName="TitleColor" Tag="#D0E0F0" Background="#D0E0F0" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="TitleColor_Yellow" x:FieldModifier="public" GroupName="TitleColor" Tag="#F0E080" Background="#F0E080" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="TitleColor_Green" x:FieldModifier="public" GroupName="TitleColor" Tag="#90EE90" Background="#90EE90" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="TitleColor_Orange" x:FieldModifier="public" GroupName="TitleColor" Tag="#FFB366" Background="#FFB366" Style="{StaticResource ColorSwatchRadioStyle}" />
+                    </StackPanel>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="64" /></Grid.ColumnDefinitions>
+                        <Slider x:Name="TitleOpacitySlider" x:FieldModifier="public" Minimum="20" Maximum="100" />
+                        <TextBlock x:Name="TitleOpacityValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Text="100%" Foreground="{StaticResource SubtleTextBrush}" />
+                    </Grid>
+
+                    <TextBlock Margin="0,20,0,0" Text="{x:Static local:UiText.ArtistColor}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <RadioButton x:Name="ArtistColor_Light" x:FieldModifier="public" GroupName="ArtistColor" Tag="#C0D0E0" Background="#C0D0E0" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="ArtistColor_White" x:FieldModifier="public" GroupName="ArtistColor" Tag="#FFFFFF" Background="#FFFFFF" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="ArtistColor_Yellow" x:FieldModifier="public" GroupName="ArtistColor" Tag="#F0E080" Background="#F0E080" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="ArtistColor_Green" x:FieldModifier="public" GroupName="ArtistColor" Tag="#90EE90" Background="#90EE90" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="ArtistColor_Orange" x:FieldModifier="public" GroupName="ArtistColor" Tag="#FFB366" Background="#FFB366" Style="{StaticResource ColorSwatchRadioStyle}" />
+                    </StackPanel>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="64" /></Grid.ColumnDefinitions>
+                        <Slider x:Name="ArtistOpacitySlider" x:FieldModifier="public" Minimum="20" Maximum="100" />
+                        <TextBlock x:Name="ArtistOpacityValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Text="100%" Foreground="{StaticResource SubtleTextBrush}" />
+                    </Grid>
+
+                    <TextBlock Margin="0,20,0,0" Text="{x:Static local:UiText.LyricsColor}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <RadioButton x:Name="LyricsColor_Light" x:FieldModifier="public" GroupName="LyricsColor" Tag="#A0B8D0" Background="#A0B8D0" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="LyricsColor_White" x:FieldModifier="public" GroupName="LyricsColor" Tag="#FFFFFF" Background="#FFFFFF" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="LyricsColor_Yellow" x:FieldModifier="public" GroupName="LyricsColor" Tag="#F0E080" Background="#F0E080" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="LyricsColor_Green" x:FieldModifier="public" GroupName="LyricsColor" Tag="#90EE90" Background="#90EE90" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="LyricsColor_Orange" x:FieldModifier="public" GroupName="LyricsColor" Tag="#FFB366" Background="#FFB366" Style="{StaticResource ColorSwatchRadioStyle}" />
+                    </StackPanel>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="64" /></Grid.ColumnDefinitions>
+                        <Slider x:Name="LyricsOpacitySlider" x:FieldModifier="public" Minimum="20" Maximum="100" />
+                        <TextBlock x:Name="LyricsOpacityValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Text="100%" Foreground="{StaticResource SubtleTextBrush}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="3" Style="{StaticResource CardBorderStyle}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.RealtimePreview}" />
+                    <TextBlock Margin="0,8,0,0" Style="{StaticResource BodyTextStyle}" Text="{x:Static local:UiText.RealtimePreviewDesc}" />
+                    <UniformGrid Margin="0,18,0,0" Columns="3">
+                        <Button x:Name="PreviewEffectSoftButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.Weak}" />
+                        <Button x:Name="PreviewEffectMediumButton" x:FieldModifier="public" Margin="0,0,12,0" Style="{StaticResource PrimaryButtonStyle}" Content="{x:Static local:UiText.Medium}" />
+                        <Button x:Name="PreviewEffectStrongButton" x:FieldModifier="public" Content="{x:Static local:UiText.Strong}" />
+                    </UniformGrid>
+                    <Border x:Name="ThemePreviewCard" x:FieldModifier="public"
+                            Margin="0,18,0,0"
+                            Padding="20"
+                            Background="#172033"
+                            CornerRadius="16">
+                        <StackPanel>
+                            <TextBlock x:Name="ThemePreviewTitle" x:FieldModifier="public"
+                                       FontSize="26"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="None"
+                                       HorizontalAlignment="Center"
+                                       TextAlignment="Center"
+                                       Text="{x:Static local:UiText.PreviewTitle}" />
+                            <TextBlock x:Name="ThemePreviewArtist" x:FieldModifier="public"
+                                       Margin="0,8,0,0"
+                                       FontSize="16"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="None"
+                                       HorizontalAlignment="Center"
+                                       TextAlignment="Center"
+                                       Text="{x:Static local:UiText.PreviewArtist}" />
+                            <TextBlock x:Name="ThemePreviewLyrics" x:FieldModifier="public"
+                                       Margin="0,16,0,0"
+                                       FontSize="14"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="None"
+                                       HorizontalAlignment="Center"
+                                       TextAlignment="Center"
+                                       Text="{x:Static local:UiText.PreviewLyrics}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

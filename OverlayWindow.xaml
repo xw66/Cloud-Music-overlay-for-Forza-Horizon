@@ -80,7 +80,7 @@
                   Height="80"
                   Margin="0,4,0,0"
                   VerticalAlignment="Top"
-                  HorizontalAlignment="Left">
+                  HorizontalAlignment="Center">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="42" />
                     <RowDefinition Height="22" />
@@ -92,9 +92,8 @@
                                FontSize="19"
                                FontWeight="Bold"
                                FontStretch="Expanded"
-                               MaxWidth="188"
-                               TextWrapping="Wrap"
-                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="NoWrap"
+                               TextTrimming="None"
                                TextAlignment="Center"
                                VerticalAlignment="Center"
                                HorizontalAlignment="Center"
@@ -105,9 +104,8 @@
                     <TextBlock Name="ArtistText"
                                FontSize="14"
                                FontStretch="Expanded"
-                               MaxWidth="188"
                                TextWrapping="NoWrap"
-                               TextTrimming="CharacterEllipsis"
+                               TextTrimming="None"
                                TextAlignment="Center"
                                VerticalAlignment="Center"
                                HorizontalAlignment="Center"

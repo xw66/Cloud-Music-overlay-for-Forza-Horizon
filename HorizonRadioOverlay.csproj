@@ -16,9 +16,9 @@
     <Company>网易云悬浮窗</Company>
     <Description>游戏中显示当前播放歌曲的透明悬浮窗</Description>
     <Copyright>Copyright © 2024-2026</Copyright>
-    <Version>1.7.1</Version>
-    <AssemblyVersion>1.7.1.0</AssemblyVersion>
-    <FileVersion>1.7.1</FileVersion>
+    <Version>1.9.1</Version>
+    <AssemblyVersion>1.9.1.0</AssemblyVersion>
+    <FileVersion>1.9.1</FileVersion>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
@@ -35,9 +35,13 @@
 
   <ItemGroup>
     <Compile Remove="tests\**\*.cs" />
+    <Compile Remove="artifacts\**\*.cs" />
     <EmbeddedResource Remove="tests\**\*" />
+    <EmbeddedResource Remove="artifacts\**\*" />
     <None Remove="tests\**\*" />
+    <None Remove="artifacts\**\*" />
     <Page Remove="tests\**\*.xaml" />
+    <Page Remove="artifacts\**\*.xaml" />
   </ItemGroup>
 
 </Project>

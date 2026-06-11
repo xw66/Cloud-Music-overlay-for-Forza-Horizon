@@ -1,0 +1,98 @@
+<UserControl x:Class="HorizonRadioOverlay.Views.Pages.HotkeySettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:HorizonRadioOverlay"
+             Background="Transparent">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Style="{StaticResource PageTitleTextStyle}" Text="{x:Static local:UiText.NavHotkeys}" />
+
+            <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.InAppHotkeys}" />
+                    <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyTextStyle}" Text="{x:Static local:UiText.InAppHotkeysDesc}" />
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Previous}" />
+                        <TextBox x:Name="AppPrevHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                    </Grid>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Next}" />
+                        <TextBox x:Name="AppNextHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                    </Grid>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.PlayPause}" />
+                        <TextBox x:Name="AppToggleHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                    </Grid>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.ToggleOverlayVisibility}" />
+                        <TextBox x:Name="AppToggleOverlayHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="3" Style="{StaticResource CardBorderStyle}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.NeteaseForwardHotkeys}" />
+                    <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyTextStyle}" Text="{x:Static local:UiText.NeteaseForwardHotkeysDesc}" />
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Previous}" />
+                        <TextBox x:Name="NeteasePrevHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                    </Grid>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Next}" />
+                        <TextBox x:Name="NeteaseNextHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                    </Grid>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.PlayPause}" />
+                        <TextBox x:Name="NeteaseToggleHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="4" Style="{StaticResource CardBorderStyle}">
+                <StackPanel>
+                    <DockPanel LastChildFill="False">
+                        <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.GamepadHotkeys}" />
+                        <CheckBox x:Name="EnableGamepadCheckBox" x:FieldModifier="public" DockPanel.Dock="Right" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.EnableXboxGamepad}" />
+                    </DockPanel>
+                    <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyTextStyle}" Text="{x:Static local:UiText.GamepadHotkeysDesc}" />
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Previous}" />
+                        <TextBox x:Name="GamepadPrevHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                    </Grid>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Next}" />
+                        <TextBox x:Name="GamepadNextHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                    </Grid>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.PlayPause}" />
+                        <TextBox x:Name="GamepadToggleHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                    </Grid>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.ToggleOverlayVisibility}" />
+                        <TextBox x:Name="GamepadToggleOverlayHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

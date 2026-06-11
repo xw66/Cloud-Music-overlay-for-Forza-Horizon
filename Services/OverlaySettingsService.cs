@@ -87,7 +87,16 @@ public sealed class OverlaySettingsService
         settings.LeftPercent = Clamp(settings.LeftPercent, 0.0, 1.0);
         settings.TopPercent = Clamp(settings.TopPercent, 0.0, 1.0);
         settings.Scale = Clamp(settings.Scale, 0.8, 1.8);
+        if (settings.SmtcLyricDelayOverrideMs.HasValue)
+        {
+            settings.SmtcLyricDelayOverrideMs = Clamp(settings.SmtcLyricDelayOverrideMs.Value, -3000, 3000);
+        }
         return settings;
+    }
+
+    internal static OverlaySettings NormalizeForTests(OverlaySettings settings)
+    {
+        return Normalize(settings);
     }
 
     private static double Clamp(double value, double min, double max)

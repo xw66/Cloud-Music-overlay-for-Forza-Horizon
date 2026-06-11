@@ -5,8 +5,10 @@ namespace HorizonRadioOverlay.Services;
 public sealed class DiagnosticService : IDisposable
 {
     private const long MaxLogSizeBytes = 2 * 1024 * 1024;
+    private const int MaxBufferedLines = 400;
     private readonly string _logPath;
     private readonly object _lock = new();
+    private readonly Queue<string> _recentLines = new();
     private StreamWriter? _writer;
     private bool _enabled;
 
@@ -15,47 +17,96 @@ public sealed class DiagnosticService : IDisposable
         get => _enabled;
         set
         {
-            if (_enabled == value) return;
             _enabled = value;
-            if (_enabled)
-            {
-                OpenWriter();
-            }
-            else
-            {
-                CloseWriter();
-            }
         }
     }
+
+    public string LogFilePath => _logPath;
 
     public DiagnosticService()
     {
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         _logPath = Path.Combine(appData, "HorizonRadioOverlay", "diagnostic.log");
+        EnsureLogFile();
+        OpenWriter();
     }
 
-    public void Info(string message) => Write("INFO", message);
-    public void Warn(string message) => Write("WARN", message);
+    public void Event(string message) => Write("INFO", message, requiresVerbose: false);
+    public void Info(string message) => Write("INFO", message, requiresVerbose: true);
+    public void Warn(string message) => Write("WARN", message, requiresVerbose: false);
     public void Error(string message, Exception? ex = null)
     {
         string msg = ex != null ? $"{message}: {ex.Message}" : message;
-        Write("ERROR", msg);
+        Write("ERROR", msg, requiresVerbose: false);
     }
 
-    private void Write(string level, string message)
+    public string GetBufferedText()
     {
-        if (!_enabled) return;
+        lock (_lock)
+        {
+            return _recentLines.Count == 0
+                ? string.Empty
+                : string.Join(Environment.NewLine, _recentLines);
+        }
+    }
+
+    public string ReadCurrentLogText()
+    {
+        string buffered = GetBufferedText();
+        if (!string.IsNullOrWhiteSpace(buffered))
+        {
+            return buffered;
+        }
+
+        try
+        {
+            return File.Exists(_logPath) ? File.ReadAllText(_logPath) : string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    public void Clear()
+    {
+        lock (_lock)
+        {
+            _recentLines.Clear();
+
+            try
+            {
+                try { _writer?.Dispose(); } catch { }
+                _writer = null;
+                EnsureLogFile();
+                File.WriteAllText(_logPath, string.Empty);
+                OpenWriter();
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private void Write(string level, string message, bool requiresVerbose)
+    {
+        if (requiresVerbose && !_enabled) return;
 
         lock (_lock)
         {
             try
             {
+                string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{level}] {message}";
+                _recentLines.Enqueue(line);
+                while (_recentLines.Count > MaxBufferedLines)
+                {
+                    _recentLines.Dequeue();
+                }
+
                 if (_writer == null) OpenWriter();
                 if (_writer == null) return;
 
                 RotateIfNeeded();
-
-                string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{level}] {message}";
                 _writer.WriteLine(line);
                 _writer.Flush();
             }
@@ -65,12 +116,30 @@ public sealed class DiagnosticService : IDisposable
         }
     }
 
-    private void OpenWriter()
+    private void EnsureLogFile()
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_logPath)!);
-            _writer = new StreamWriter(_logPath, append: true, encoding: System.Text.Encoding.UTF8)
+            if (!File.Exists(_logPath))
+            {
+                using (File.Create(_logPath))
+                {
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void OpenWriter()
+    {
+        try
+        {
+            EnsureLogFile();
+            FileStream stream = new(_logPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+            _writer = new StreamWriter(stream, System.Text.Encoding.UTF8)
             {
                 AutoFlush = false
             };
