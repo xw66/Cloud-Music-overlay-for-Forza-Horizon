@@ -3,6 +3,16 @@ namespace HorizonRadioOverlay.Tests;
 public sealed class OverlayTextLayoutTests
 {
     [Fact]
+    public void Main_window_contains_bilibili_profile_link()
+    {
+        string xaml = File.ReadAllText(FindWorkspaceFile("MainWindow.xaml"));
+
+        Assert.Contains("BiliBili:EosphorosVeil", xaml);
+        Assert.Contains("https://space.bilibili.com/3546867382094629", xaml);
+        Assert.Contains("RequestNavigate=\"BilibiliLink_RequestNavigate\"", xaml);
+    }
+
+    [Fact]
     public void Overlay_track_text_is_single_line_centered_and_not_trimmed()
     {
         string xaml = File.ReadAllText(FindWorkspaceFile("OverlayWindow.xaml"));
@@ -13,6 +23,16 @@ public sealed class OverlayTextLayoutTests
         Assert.DoesNotContain("TextWrapping=\"Wrap\"", xaml);
         Assert.DoesNotContain("TextTrimming=\"CharacterEllipsis\"", xaml);
         Assert.DoesNotContain("MaxWidth=\"188\"", xaml);
+    }
+
+    [Fact]
+    public void Overlay_has_a_stable_live_capture_source_title()
+    {
+        string xaml = File.ReadAllText(FindWorkspaceFile("OverlayWindow.xaml"));
+
+        Assert.Contains("Title=\"[直播源] 网易云悬浮窗 v2.0.0\"", xaml);
+        Assert.Contains("AllowsTransparency=\"True\"", xaml);
+        Assert.Contains("Background=\"Transparent\"", xaml);
     }
 
     [Theory]

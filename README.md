@@ -1,8 +1,8 @@
-﻿# 网易云悬浮窗 v1.9.1
+# 网易云悬浮窗 v2.0.0
 
 一个 Windows 桌面工具：游戏中自定义快捷键转发网易云切歌，并显示透明悬浮窗（封面 + 歌名 + 歌手）。
 
-支持 **键盘** 和 **Xbox 手柄** 快捷键。
+支持 **键盘**、**Xbox 手柄**、**DualSense（DS5）手柄** 和 **方向盘等 HID/DirectInput 外设** 快捷键。
 
 ## 截图
 
@@ -20,7 +20,7 @@
 - **歌名/歌手颜色自定义**：5 种预设色块 + 透明度滑块
 - **悬浮窗始终显示**：切歌时淡入淡出交叉过渡，不中断显示
 - **键盘快捷键映射**：自定义应用快捷键 -> 转发网易云快捷键
-- **Xbox 手柄快捷键**：支持组合键（如 `LB+Left`），独立开关
+- **手柄 / 方向盘外设快捷键**：支持组合键（如 `LB+Left`、`L1+Left` 或 `Button1+Button2`），独立开关
 - **悬浮窗自定义**：水平/垂直位置（0-100%）、缩放，可保存
 - **设置持久化**：保存在 `%LOCALAPPDATA%\HorizonRadioOverlay\overlay-settings.json`
 - **淡入淡出动画**：歌曲切换时自动弹出和隐藏
@@ -35,6 +35,8 @@
 ## 下载
 
 前往 [Releases](https://github.com/xw66/Cloud-Music-overlay-for-Forza-Horizon/releases) 下载最新版本。
+
+更新内容见 [CHANGELOG.md](CHANGELOG.md)。
 
 提供三个架构：
 - `win-x64`：绝大多数 PC 选择此版本
@@ -66,7 +68,7 @@
 
 - Windows 10 1809（10.0.17763）及以上 / Windows 11
 - 网易云音乐桌面版（仅网易云专用渠道需要，进程名：`cloudmusic`）
-- （手柄功能）Xbox 兼容手柄
+- （手柄功能）Xbox 兼容手柄或 Sony DualSense（DS5）
 
 > 说明 1：`SMTC` 模式依赖较新的 Windows 媒体会话能力。低于 Windows 10 1809 的环境会自动回退为网易云窗口标题模式。
 >
@@ -95,14 +97,26 @@
 
 悬浮窗会在歌曲切换时自动弹出，5 秒后淡出。勾选“悬浮窗始终生效”可保持常驻。
 
+### 直播软件捕获悬浮窗
+
+悬浮窗可作为独立窗口源捕获，无需录制整个桌面。以 OBS Studio 为例：
+
+1. 在“来源”中添加“窗口采集”。
+2. 窗口选择 `[HorizonRadioOverlay.exe]: [直播源] 网易云悬浮窗`，不要选择主页面“网易云悬浮窗”。
+3. 捕获方式选择“Windows 10（1903 及以上）”或“自动”，不要使用旧版 BitBlt。
+4. 窗口匹配优先级选择“窗口标题必须匹配”，开启“客户端区域”，关闭“捕获光标”。
+
+这样会保留悬浮窗的透明背景、阴影、Cover Flow 和淡入淡出效果，其他桌面窗口不会进入画面。直播源窗口会一直供 OBS 绑定，悬浮窗淡出时来源只会变透明，不会回退捕获主页面。
+
 ## 快捷键说明
 
 | 类型 | 示例 | 说明 |
 |------|------|------|
 | 键盘单键 | `L` | 单个字母或符号键 |
 | 键盘组合 | `Ctrl+Shift+Left` | 修饰键 + 按键 |
-| 手柄组合 | `LB+Left` | 按键用 `+` 连接 |
-| 手柄特殊 | `LT+RT+Y` | 支持同时按多个键 |
+| 手柄组合 | `LB+Left` / `L1+Left` | 按键用 `+` 连接 |
+| 手柄特殊 | `LT+RT+Y` / `L2+R2+Triangle` | 支持 Xbox 与 DS5 按键名 |
+| 方向盘外设 | `Button1+Button2` | 支持 HID/DirectInput 设备前 16 个物理按钮 |
 
 ## 开发运行
 
@@ -113,10 +127,10 @@ dotnet run
 ## 打包发布
 
 ```powershell
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugSymbols=false -p:DebugType=None -o .\publish\HorizonRadioOverlay_v1.9.1
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugSymbols=false -p:DebugType=None -o .\publish\HorizonRadioOverlay_v2.0.0
 ```
 
-发布结果在 `publish\HorizonRadioOverlay_v1.9.1\HorizonRadioOverlay.exe`。  
+发布结果在 `publish\HorizonRadioOverlay_v2.0.0\HorizonRadioOverlay.exe`。
 默认按单文件分发，直接分发这个 exe 即可。
 
 ## 常见问题
@@ -129,8 +143,8 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - **网易云窗口标题**：确认网易云正在播放歌曲，且进程名为 `cloudmusic`
 - **SMTC**：确认当前播放器已开始播放，并且系统能读到媒体会话
 
-**手柄不能用？**  
-确认手柄已连接，“启用 Xbox 手柄快捷键”已勾选并保存。
+**手柄或方向盘外设不能用？**  
+确认设备已通过 USB 或蓝牙连接，“启用手柄 / 方向盘外设”已勾选并保存。方向盘按钮通常会显示为 `Button1` 到 `Button16`。
 
 **悬浮窗位置/颜色不生效？**  
 点击“保存”按钮持久化设置，或勾选对应选项即时生效。
@@ -140,13 +154,13 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - `SMTC`：歌词依赖播放器提供的 `歌名 / 歌手 / 时间轴`。如果播放器元数据不完整、时间轴异常，或外部歌词源未命中，也可能出现少量歌曲无歌词。
 
 **为什么有些游戏里悬浮窗还是可能被盖住？**  
-当前版本已经加强了顶层保持策略，对大多数窗口化全屏、无边框全屏游戏会更稳定；但如果游戏使用真正的独占全屏，桌面悬浮窗仍可能受系统限制而无法压在最上层。
+当前版本已经加强了顶层保持策略，对大多数窗口化全屏、无边框全屏游戏会更稳定；但 DirectX 独占全屏游戏不支持普通桌面悬浮窗置顶。此类游戏会绕过桌面窗口合成，Windows 不允许普通 WPF/Win32 透明窗口覆盖在其画面上方。建议改用窗口化、无边框全屏、窗口化全屏模式，或使用 OBS 等直播软件捕获悬浮窗窗口源。
 
 ## 技术栈
 
 - .NET 8.0 WPF
 - SMTC（Windows.Media.Control）
-- XInput（Xbox 手柄支持）
+- XInput + Windows.Gaming.Input（Xbox / DS5 手柄支持）
 - Win32 API（全局热键、窗口枚举、快捷键转发）
 
 ## 许可证

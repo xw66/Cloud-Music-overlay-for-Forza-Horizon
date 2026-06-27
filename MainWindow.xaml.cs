@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Reflection;
 using System.Runtime.Versioning;
 using System.Windows;
@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Animation;
+using System.Windows.Navigation;
 using HorizonRadioOverlay.Models;
 using HorizonRadioOverlay.Services;
 using HorizonRadioOverlay.ViewModels;
@@ -18,8 +19,8 @@ namespace HorizonRadioOverlay;
 [SupportedOSPlatform("windows")]
 public partial class MainWindow : Window
 {
-    private const int PollFastMs = 200;
-    private const int PollSlowMs = 800;
+    private const int PollFastMs = BackgroundPollingPolicy.FastPollMs;
+    private const int PollSlowMs = BackgroundPollingPolicy.WarmPollMs;
     private const int PollBoostDurationMs = 3000;
 
     private readonly NeteaseLocalDataService _neteaseLocalDataService;
@@ -32,6 +33,7 @@ public partial class MainWindow : Window
     private readonly DiagnosticService _diagnostic;
     private readonly NeteaseOfficialResolver _neteaseOfficialResolver;
     private readonly LyricsService _lyricsService;
+    private readonly RemoteControlService _remoteControlService;
     private readonly DispatcherTimer _pollTimer;
     private readonly MainShellViewModel _shellViewModel = new();
 
@@ -42,14 +44,23 @@ public partial class MainWindow : Window
     private OverlaySettings _activeSettings;
     private string _lastTrackKey = string.Empty;
     private string _lastDisplayTrackKey = string.Empty;
+    private string _lastLyricsPreviewLine = string.Empty;
+    private bool _pageMetaUpdateDirty;
+    private readonly DispatcherTimer _pageMetaUpdateTimer;
+    private string _lastStatusText = string.Empty;
+    private bool _lastStatusIsError;
     private byte[]? _lastPreviewCoverBytes;
     private CancellationTokenSource? _smtcCoverRefreshCts;
-    private string _lastStatusText = string.Empty;
     private double _songDetectedTime;
     private long _pollBoostUntil;
     private long _lastNeteaseTrackRefreshAt;
+    private long _lastSmtcTimelineSampleAt;
+    private long _lastSmtcTrackRefreshAt;
     private readonly Dictionary<TextBox, HashSet<GamepadButton>> _gamepadPressed = new();
     private readonly Dictionary<TextBox, DispatcherTimer> _gamepadCommitTimers = new();
+    private readonly Dictionary<TextBox, GamepadButton> _gamepadCaptureBaseline = new();
+    private readonly Dictionary<TextBox, GamepadButton> _gamepadCaptureCandidates = new();
+    private readonly Dictionary<TextBox, int> _gamepadCaptureCandidateCounts = new();
     private bool _gamepadEnabledBeforeCapture;
     private int _gamepadCaptureFocusCount;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -63,6 +74,20 @@ public partial class MainWindow : Window
     private bool _overlayHiddenByPause;
     private readonly SmtcLyricTimingController _smtcLyricTimingController = new();
     private readonly NeteaseLyricTimingController _neteaseLyricTimingController = new();
+    private NowPlayingPage? _nowPlayingPageView;
+    private FloatingSettingsPage? _floatingSettingsPageView;
+    private HotkeySettingsPage? _hotkeySettingsPageView;
+    private RemoteControlPage? _remoteControlPageView;
+    private ThemeSettingsPage? _themeSettingsPageView;
+    private LogsPage? _logsPageView;
+    private AboutPage? _aboutPageView;
+    private bool _nowPlayingPageWired;
+    private bool _floatingSettingsPageWired;
+    private bool _hotkeySettingsPageWired;
+    private bool _remoteControlPageWired;
+    private bool _themeSettingsPageWired;
+    private bool _logsPageWired;
+    private bool _aboutPageWired;
 
     private static readonly (GamepadButton Button, string Token)[] GamepadTokenOrder =
     {
@@ -81,72 +106,96 @@ public partial class MainWindow : Window
         (GamepadButton.LeftThumb, "LS"),
         (GamepadButton.RightThumb, "RS"),
         (GamepadButton.Back, "Back"),
-        (GamepadButton.Start, "Start")
+        (GamepadButton.Start, "Start"),
+        (GamepadButton.Button1, "Button1"),
+        (GamepadButton.Button2, "Button2"),
+        (GamepadButton.Button3, "Button3"),
+        (GamepadButton.Button4, "Button4"),
+        (GamepadButton.Button5, "Button5"),
+        (GamepadButton.Button6, "Button6"),
+        (GamepadButton.Button7, "Button7"),
+        (GamepadButton.Button8, "Button8"),
+        (GamepadButton.Button9, "Button9"),
+        (GamepadButton.Button10, "Button10"),
+        (GamepadButton.Button11, "Button11"),
+        (GamepadButton.Button12, "Button12"),
+        (GamepadButton.Button13, "Button13"),
+        (GamepadButton.Button14, "Button14"),
+        (GamepadButton.Button15, "Button15"),
+        (GamepadButton.Button16, "Button16")
     };
 
-    private Image CoverPreview => NowPlayingPageView.CoverPreview;
-    private TextBlock CurrentTitle => NowPlayingPageView.CurrentTitle;
-    private TextBlock CurrentArtist => NowPlayingPageView.CurrentArtist;
-    private TextBlock CurrentMeta => NowPlayingPageView.CurrentMeta;
-    private TextBlock LyricsPreviewText => NowPlayingPageView.LyricsPreviewText;
-    private TextBlock ConnectionStatusText => NowPlayingPageView.ConnectionStatusText;
-    private TextBlock ConnectionStatusSubText => NowPlayingPageView.ConnectionStatusSubText;
-    private TextBlock ThemePreviewTitle => ThemeSettingsPageView.ThemePreviewTitle;
-    private TextBlock ThemePreviewArtist => ThemeSettingsPageView.ThemePreviewArtist;
-    private TextBlock ThemePreviewLyrics => ThemeSettingsPageView.ThemePreviewLyrics;
+    private NowPlayingPage NowPlayingPageView => _nowPlayingPageView ??= new NowPlayingPage();
+    private FloatingSettingsPage FloatingSettingsPageView => _floatingSettingsPageView ??= new FloatingSettingsPage();
+    private HotkeySettingsPage HotkeySettingsPageView => _hotkeySettingsPageView ??= new HotkeySettingsPage();
+    private RemoteControlPage RemoteControlPageView => _remoteControlPageView ??= new RemoteControlPage();
+    private ThemeSettingsPage ThemeSettingsPageView => _themeSettingsPageView ??= new ThemeSettingsPage();
+    private LogsPage LogsPageView => _logsPageView ??= new LogsPage();
+    private AboutPage AboutPageView => _aboutPageView ??= new AboutPage();
 
-    private ComboBox TrackSourceComboBox => FloatingSettingsPageView.TrackSourceComboBox;
-    private Slider HorizontalSlider => FloatingSettingsPageView.HorizontalSlider;
-    private Slider BottomOffsetSlider => FloatingSettingsPageView.BottomOffsetSlider;
-    private Slider ScaleSlider => FloatingSettingsPageView.ScaleSlider;
-    private TextBlock HorizontalValueText => FloatingSettingsPageView.HorizontalValueText;
-    private TextBlock BottomOffsetValueText => FloatingSettingsPageView.BottomOffsetValueText;
-    private TextBlock ScaleValueText => FloatingSettingsPageView.ScaleValueText;
-    private CheckBox MinimizeToTrayCheckBox => FloatingSettingsPageView.MinimizeToTrayCheckBox;
-    private CheckBox AutoStartCheckBox => FloatingSettingsPageView.AutoStartCheckBox;
-    private CheckBox AlwaysShowCheckBox => FloatingSettingsPageView.AlwaysShowCheckBox;
-    private CheckBox HideOverlayWhenPausedCheckBox => FloatingSettingsPageView.HideOverlayWhenPausedCheckBox;
-    private CheckBox DiagnosticCheckBox => FloatingSettingsPageView.DiagnosticCheckBox;
-    private CheckBox EnableLyricsCheckBox => FloatingSettingsPageView.EnableLyricsCheckBox;
-    private CheckBox EnableCoverWingEffectCheckBox => FloatingSettingsPageView.EnableCoverWingEffectCheckBox;
+    private Image CoverPreview => (_nowPlayingPageView ??= new NowPlayingPage()).CoverPreview;
+    private TextBlock CurrentTitle => (_nowPlayingPageView ??= new NowPlayingPage()).CurrentTitle;
+    private TextBlock CurrentArtist => (_nowPlayingPageView ??= new NowPlayingPage()).CurrentArtist;
+    private TextBlock CurrentMeta => (_nowPlayingPageView ??= new NowPlayingPage()).CurrentMeta;
+    private TextBlock LyricsPreviewText => (_nowPlayingPageView ??= new NowPlayingPage()).LyricsPreviewText;
+    private TextBlock ConnectionStatusText => (_nowPlayingPageView ??= new NowPlayingPage()).ConnectionStatusText;
+    private TextBlock ConnectionStatusSubText => (_nowPlayingPageView ??= new NowPlayingPage()).ConnectionStatusSubText;
+    private TextBlock ThemePreviewTitle => (_themeSettingsPageView ??= new ThemeSettingsPage()).ThemePreviewTitle;
+    private TextBlock ThemePreviewArtist => (_themeSettingsPageView ??= new ThemeSettingsPage()).ThemePreviewArtist;
+    private TextBlock ThemePreviewLyrics => (_themeSettingsPageView ??= new ThemeSettingsPage()).ThemePreviewLyrics;
 
-    private TextBox AppPrevHotkeyBox => HotkeySettingsPageView.AppPrevHotkeyBox;
-    private TextBox AppNextHotkeyBox => HotkeySettingsPageView.AppNextHotkeyBox;
-    private TextBox AppToggleHotkeyBox => HotkeySettingsPageView.AppToggleHotkeyBox;
-    private TextBox AppToggleOverlayHotkeyBox => HotkeySettingsPageView.AppToggleOverlayHotkeyBox;
-    private TextBox NeteasePrevHotkeyBox => HotkeySettingsPageView.NeteasePrevHotkeyBox;
-    private TextBox NeteaseNextHotkeyBox => HotkeySettingsPageView.NeteaseNextHotkeyBox;
-    private TextBox NeteaseToggleHotkeyBox => HotkeySettingsPageView.NeteaseToggleHotkeyBox;
-    private CheckBox EnableGamepadCheckBox => HotkeySettingsPageView.EnableGamepadCheckBox;
-    private TextBox GamepadPrevHotkeyBox => HotkeySettingsPageView.GamepadPrevHotkeyBox;
-    private TextBox GamepadNextHotkeyBox => HotkeySettingsPageView.GamepadNextHotkeyBox;
-    private TextBox GamepadToggleHotkeyBox => HotkeySettingsPageView.GamepadToggleHotkeyBox;
-    private TextBox GamepadToggleOverlayHotkeyBox => HotkeySettingsPageView.GamepadToggleOverlayHotkeyBox;
+    private ComboBox TrackSourceComboBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).TrackSourceComboBox;
+    private Slider HorizontalSlider => (_floatingSettingsPageView ??= new FloatingSettingsPage()).HorizontalSlider;
+    private Slider BottomOffsetSlider => (_floatingSettingsPageView ??= new FloatingSettingsPage()).BottomOffsetSlider;
+    private Slider ScaleSlider => (_floatingSettingsPageView ??= new FloatingSettingsPage()).ScaleSlider;
+    private TextBlock HorizontalValueText => (_floatingSettingsPageView ??= new FloatingSettingsPage()).HorizontalValueText;
+    private TextBlock BottomOffsetValueText => (_floatingSettingsPageView ??= new FloatingSettingsPage()).BottomOffsetValueText;
+    private TextBlock ScaleValueText => (_floatingSettingsPageView ??= new FloatingSettingsPage()).ScaleValueText;
+    private CheckBox MinimizeToTrayCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).MinimizeToTrayCheckBox;
+    private CheckBox AutoStartCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).AutoStartCheckBox;
+    private CheckBox AlwaysShowCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).AlwaysShowCheckBox;
+    private CheckBox HideOverlayWhenPausedCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).HideOverlayWhenPausedCheckBox;
+    private CheckBox DiagnosticCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).DiagnosticCheckBox;
+    private CheckBox EnableLyricsCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).EnableLyricsCheckBox;
+    private CheckBox EnableCoverWingEffectCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).EnableCoverWingEffectCheckBox;
 
-    private RadioButton TitleColor_White => ThemeSettingsPageView.TitleColor_White;
-    private RadioButton TitleColor_Light => ThemeSettingsPageView.TitleColor_Light;
-    private RadioButton TitleColor_Yellow => ThemeSettingsPageView.TitleColor_Yellow;
-    private RadioButton TitleColor_Green => ThemeSettingsPageView.TitleColor_Green;
-    private RadioButton TitleColor_Orange => ThemeSettingsPageView.TitleColor_Orange;
-    private RadioButton ArtistColor_Light => ThemeSettingsPageView.ArtistColor_Light;
-    private RadioButton ArtistColor_White => ThemeSettingsPageView.ArtistColor_White;
-    private RadioButton ArtistColor_Yellow => ThemeSettingsPageView.ArtistColor_Yellow;
-    private RadioButton ArtistColor_Green => ThemeSettingsPageView.ArtistColor_Green;
-    private RadioButton ArtistColor_Orange => ThemeSettingsPageView.ArtistColor_Orange;
-    private RadioButton LyricsColor_Light => ThemeSettingsPageView.LyricsColor_Light;
-    private RadioButton LyricsColor_White => ThemeSettingsPageView.LyricsColor_White;
-    private RadioButton LyricsColor_Yellow => ThemeSettingsPageView.LyricsColor_Yellow;
-    private RadioButton LyricsColor_Green => ThemeSettingsPageView.LyricsColor_Green;
-    private RadioButton LyricsColor_Orange => ThemeSettingsPageView.LyricsColor_Orange;
-    private Slider TitleOpacitySlider => ThemeSettingsPageView.TitleOpacitySlider;
-    private Slider ArtistOpacitySlider => ThemeSettingsPageView.ArtistOpacitySlider;
-    private Slider LyricsOpacitySlider => ThemeSettingsPageView.LyricsOpacitySlider;
-    private TextBlock TitleOpacityValueText => ThemeSettingsPageView.TitleOpacityValueText;
-    private TextBlock ArtistOpacityValueText => ThemeSettingsPageView.ArtistOpacityValueText;
-    private TextBlock LyricsOpacityValueText => ThemeSettingsPageView.LyricsOpacityValueText;
+    private TextBox AppPrevHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).AppPrevHotkeyBox;
+    private TextBox AppNextHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).AppNextHotkeyBox;
+    private TextBox AppToggleHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).AppToggleHotkeyBox;
+    private TextBox AppToggleOverlayHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).AppToggleOverlayHotkeyBox;
+    private TextBox NeteasePrevHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).NeteasePrevHotkeyBox;
+    private TextBox NeteaseNextHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).NeteaseNextHotkeyBox;
+    private TextBox NeteaseToggleHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).NeteaseToggleHotkeyBox;
+    private CheckBox EnableGamepadCheckBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).EnableGamepadCheckBox;
+    private TextBox GamepadPrevHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).GamepadPrevHotkeyBox;
+    private TextBox GamepadNextHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).GamepadNextHotkeyBox;
+    private TextBox GamepadToggleHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).GamepadToggleHotkeyBox;
+    private TextBox GamepadToggleOverlayHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).GamepadToggleOverlayHotkeyBox;
 
-    private TextBlock LogTextBlock => LogsPageView.LogTextBlock;
-    private ScrollViewer LogScrollViewer => LogsPageView.LogScrollViewer;
+    private RadioButton TitleColor_White => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleColor_White;
+    private RadioButton TitleColor_Light => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleColor_Light;
+    private RadioButton TitleColor_Yellow => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleColor_Yellow;
+    private RadioButton TitleColor_Green => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleColor_Green;
+    private RadioButton TitleColor_Orange => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleColor_Orange;
+    private RadioButton ArtistColor_Light => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistColor_Light;
+    private RadioButton ArtistColor_White => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistColor_White;
+    private RadioButton ArtistColor_Yellow => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistColor_Yellow;
+    private RadioButton ArtistColor_Green => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistColor_Green;
+    private RadioButton ArtistColor_Orange => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistColor_Orange;
+    private RadioButton LyricsColor_Light => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsColor_Light;
+    private RadioButton LyricsColor_White => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsColor_White;
+    private RadioButton LyricsColor_Yellow => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsColor_Yellow;
+    private RadioButton LyricsColor_Green => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsColor_Green;
+    private RadioButton LyricsColor_Orange => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsColor_Orange;
+    private Slider TitleOpacitySlider => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleOpacitySlider;
+    private Slider ArtistOpacitySlider => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistOpacitySlider;
+    private Slider LyricsOpacitySlider => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsOpacitySlider;
+    private TextBlock TitleOpacityValueText => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleOpacityValueText;
+    private TextBlock ArtistOpacityValueText => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistOpacityValueText;
+    private TextBlock LyricsOpacityValueText => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsOpacityValueText;
+
+    private TextBlock LogTextBlock => (_logsPageView ??= new LogsPage()).LogTextBlock;
+    private ScrollViewer LogScrollViewer => (_logsPageView ??= new LogsPage()).LogScrollViewer;
 
     public MainWindow(bool startHiddenToTray = false)
     {
@@ -164,6 +213,7 @@ public partial class MainWindow : Window
         _gamepadInputService = new GamepadInputService();
         _updateService = new UpdateService();
         _lyricsService = new LyricsService(_diagnostic);
+        _remoteControlService = new RemoteControlService(GetRemoteControlStatusAsync, HandleRemoteControlActionAsync);
         OverlaySettings loadedSettings = _overlaySettingsService.Load();
         _activeSettings = loadedSettings;
         _smtcLyricTimingController.SetDelayOverrideMilliseconds(loadedSettings.SmtcLyricDelayOverrideMs);
@@ -173,7 +223,6 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = _shellViewModel;
         WireShellControls();
-        WirePageControls();
         InitializeTrayIcon();
         ApplyAutoWindowSize();
         ApplyRuntimeFeatureAvailability();
@@ -184,9 +233,23 @@ public partial class MainWindow : Window
         };
         _pollTimer.Tick += PollTimer_Tick;
 
+        _pageMetaUpdateTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(80)
+        };
+            _pageMetaUpdateTimer.Tick += (_, _) =>
+        {
+            _pageMetaUpdateTimer.Stop();
+            if (_pageMetaUpdateDirty)
+            {
+                _pageMetaUpdateDirty = false;
+                UpdatePageMetaTexts();
+            }
+        };
+
         _gamepadInputService.PrevTriggered += async (_, _) => await PrevAsync();
         _gamepadInputService.NextTriggered += async (_, _) => await NextAsync();
-        _gamepadInputService.ToggleTriggered += (_, _) => TogglePlayPause();
+        _gamepadInputService.ToggleTriggered += async (_, _) => await TogglePlayPauseAsync();
         _gamepadInputService.ToggleOverlayTriggered += async (_, _) => await ToggleOverlayVisibilityAsync();
 
         _lifecycle.Register("GamepadInput",
@@ -205,6 +268,12 @@ public partial class MainWindow : Window
 
         _lifecycle.Register("UpdateService",
             onDispose: () => _updateService.Dispose());
+
+        _remoteControlService.StateChanged += (_, _) => Dispatcher.BeginInvoke(UpdateRemoteControlPage);
+        _lifecycle.Register("RemoteControl",
+            onStart: () => _remoteControlService.ApplySettings(_activeSettings),
+            onStop: () => _remoteControlService.Stop(),
+            onDispose: () => _remoteControlService.Dispose());
 
         _lifecycle.Register("OverlayWindow",
             onDispose: () => _overlayWindow.Close());
@@ -231,16 +300,13 @@ public partial class MainWindow : Window
                 _logWatcher = null;
             });
 
-        InitializeOverlayControls(loadedSettings);
-        SetupHotkeyCaptureInputs();
-        ApplyPreviewEffect();
         UpdatePageMetaTexts();
-        InitializeLogWatcher();
+        _isInitializingOverlayControls = false;
         _diagnostic.Event("应用启动，主窗口已初始化。");
         _diagnostic.Event($"当前来源：{_activeSettings.TrackSource}");
         _diagnostic.Event($"歌词显示：{_activeSettings.EnableLyrics}");
         _diagnostic.Event($"手柄热键：{_activeSettings.EnableGamepadHotkeys}");
-        StartupDiagnosticsService.LogSnapshot(_diagnostic, _activeSettings);
+        Dispatcher.BeginInvoke(() => StartupDiagnosticsService.LogSnapshot(_diagnostic, _activeSettings), DispatcherPriority.ContextIdle);
 
         LoadEmbeddedResources();
 
@@ -257,81 +323,124 @@ public partial class MainWindow : Window
 
     private void WirePageControls()
     {
-        NowPlayingPageView.PrevButton.Click += Prev_Click;
-        NowPlayingPageView.PlayPauseButton.Click += PlayPause_Click;
-        NowPlayingPageView.NextButton.Click += Next_Click;
-        NowPlayingPageView.RefreshButton.Click += Refresh_Click;
-        NowPlayingPageView.OpenFloatingSettingsButton.Click += (_, _) => NavigateTo("FloatingSettings");
-        NowPlayingPageView.OpenHotkeySettingsButton.Click += (_, _) => NavigateTo("Hotkeys");
+        if (_nowPlayingPageView != null && !_nowPlayingPageWired)
+        {
+            _nowPlayingPageView.PrevButton.Click += Prev_Click;
+            _nowPlayingPageView.PlayPauseButton.Click += PlayPause_Click;
+            _nowPlayingPageView.NextButton.Click += Next_Click;
+            _nowPlayingPageView.RefreshButton.Click += Refresh_Click;
+            _nowPlayingPageView.OpenFloatingSettingsButton.Click += (_, _) => NavigateTo("FloatingSettings");
+            _nowPlayingPageView.OpenHotkeySettingsButton.Click += (_, _) => NavigateTo("Hotkeys");
+            _nowPlayingPageWired = true;
+        }
 
-        FloatingSettingsPageView.TrackSourceComboBox.SelectionChanged += TrackSourceComboBox_SelectionChanged;
-        FloatingSettingsPageView.HorizontalSlider.ValueChanged += HorizontalSlider_ValueChanged;
-        FloatingSettingsPageView.BottomOffsetSlider.ValueChanged += BottomOffsetSlider_ValueChanged;
-        FloatingSettingsPageView.ScaleSlider.ValueChanged += ScaleSlider_ValueChanged;
-        FloatingSettingsPageView.MinimizeToTrayCheckBox.Checked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.MinimizeToTrayCheckBox.Unchecked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.AutoStartCheckBox.Checked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.AutoStartCheckBox.Unchecked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.AlwaysShowCheckBox.Checked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.AlwaysShowCheckBox.Unchecked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.HideOverlayWhenPausedCheckBox.Checked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.HideOverlayWhenPausedCheckBox.Unchecked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.DiagnosticCheckBox.Checked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.DiagnosticCheckBox.Unchecked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.EnableLyricsCheckBox.Checked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.EnableLyricsCheckBox.Unchecked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.EnableCoverWingEffectCheckBox.Checked += SettingCheckBox_Changed;
-        FloatingSettingsPageView.EnableCoverWingEffectCheckBox.Unchecked += SettingCheckBox_Changed;
+        if (_floatingSettingsPageView != null && !_floatingSettingsPageWired)
+        {
+            _floatingSettingsPageView.TrackSourceComboBox.SelectionChanged += TrackSourceComboBox_SelectionChanged;
+            _floatingSettingsPageView.HorizontalSlider.ValueChanged += HorizontalSlider_ValueChanged;
+            _floatingSettingsPageView.BottomOffsetSlider.ValueChanged += BottomOffsetSlider_ValueChanged;
+            _floatingSettingsPageView.ScaleSlider.ValueChanged += ScaleSlider_ValueChanged;
+            _floatingSettingsPageView.MinimizeToTrayCheckBox.Checked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.MinimizeToTrayCheckBox.Unchecked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.AutoStartCheckBox.Checked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.AutoStartCheckBox.Unchecked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.AlwaysShowCheckBox.Checked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.AlwaysShowCheckBox.Unchecked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.HideOverlayWhenPausedCheckBox.Checked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.HideOverlayWhenPausedCheckBox.Unchecked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.DiagnosticCheckBox.Checked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.DiagnosticCheckBox.Unchecked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.EnableLyricsCheckBox.Checked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.EnableLyricsCheckBox.Unchecked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.EnableCoverWingEffectCheckBox.Checked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.EnableCoverWingEffectCheckBox.Unchecked += SettingCheckBox_Changed;
+            _floatingSettingsPageWired = true;
+            InitializeOverlayControls(_activeSettings);
+        }
 
-        HotkeySettingsPageView.EnableGamepadCheckBox.Checked += SettingCheckBox_Changed;
-        HotkeySettingsPageView.EnableGamepadCheckBox.Unchecked += SettingCheckBox_Changed;
-        HotkeySettingsPageView.AppPrevHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-        HotkeySettingsPageView.AppNextHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-        HotkeySettingsPageView.AppToggleHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-        HotkeySettingsPageView.AppToggleOverlayHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-        HotkeySettingsPageView.NeteasePrevHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-        HotkeySettingsPageView.NeteaseNextHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-        HotkeySettingsPageView.NeteaseToggleHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-        HotkeySettingsPageView.GamepadPrevHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-        HotkeySettingsPageView.GamepadNextHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-        HotkeySettingsPageView.GamepadToggleHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-        HotkeySettingsPageView.GamepadToggleOverlayHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+        if (_hotkeySettingsPageView != null && !_hotkeySettingsPageWired)
+        {
+            _hotkeySettingsPageView.EnableGamepadCheckBox.Checked += SettingCheckBox_Changed;
+            _hotkeySettingsPageView.EnableGamepadCheckBox.Unchecked += SettingCheckBox_Changed;
+            _hotkeySettingsPageView.AppPrevHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageView.AppNextHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageView.AppToggleHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageView.AppToggleOverlayHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageView.NeteasePrevHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageView.NeteaseNextHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageView.NeteaseToggleHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageView.GamepadPrevHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageView.GamepadNextHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageView.GamepadToggleHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageView.GamepadToggleOverlayHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageWired = true;
+            InitializeOverlayControls(_activeSettings);
+            SetupHotkeyCaptureInputs();
+        }
 
-        ThemeSettingsPageView.TitleColor_White.Click += TitleColor_Click;
-        ThemeSettingsPageView.TitleColor_Light.Click += TitleColor_Click;
-        ThemeSettingsPageView.TitleColor_Yellow.Click += TitleColor_Click;
-        ThemeSettingsPageView.TitleColor_Green.Click += TitleColor_Click;
-        ThemeSettingsPageView.TitleColor_Orange.Click += TitleColor_Click;
-        ThemeSettingsPageView.ArtistColor_Light.Click += ArtistColor_Click;
-        ThemeSettingsPageView.ArtistColor_White.Click += ArtistColor_Click;
-        ThemeSettingsPageView.ArtistColor_Yellow.Click += ArtistColor_Click;
-        ThemeSettingsPageView.ArtistColor_Green.Click += ArtistColor_Click;
-        ThemeSettingsPageView.ArtistColor_Orange.Click += ArtistColor_Click;
-        ThemeSettingsPageView.LyricsColor_Light.Click += LyricsColor_Click;
-        ThemeSettingsPageView.LyricsColor_White.Click += LyricsColor_Click;
-        ThemeSettingsPageView.LyricsColor_Yellow.Click += LyricsColor_Click;
-        ThemeSettingsPageView.LyricsColor_Green.Click += LyricsColor_Click;
-        ThemeSettingsPageView.LyricsColor_Orange.Click += LyricsColor_Click;
-        ThemeSettingsPageView.TitleOpacitySlider.ValueChanged += TitleOpacitySlider_ValueChanged;
-        ThemeSettingsPageView.ArtistOpacitySlider.ValueChanged += ArtistOpacitySlider_ValueChanged;
-        ThemeSettingsPageView.LyricsOpacitySlider.ValueChanged += LyricsOpacitySlider_ValueChanged;
-        ThemeSettingsPageView.ThemeAccentIndigoButton.Click += (_, _) => ApplyThemeAccentColor("#5B5CEB");
-        ThemeSettingsPageView.ThemeAccentBlueButton.Click += (_, _) => ApplyThemeAccentColor("#3B82F6");
-        ThemeSettingsPageView.ThemeAccentGreenButton.Click += (_, _) => ApplyThemeAccentColor("#22C55E");
-        ThemeSettingsPageView.ThemeAccentAmberButton.Click += (_, _) => ApplyThemeAccentColor("#F59E0B");
-        ThemeSettingsPageView.ThemeAccentRoseButton.Click += (_, _) => ApplyThemeAccentColor("#F43F5E");
-        ThemeSettingsPageView.PreviewEffectSoftButton.Click += (_, _) => SetPreviewEffect(0);
-        ThemeSettingsPageView.PreviewEffectMediumButton.Click += (_, _) => SetPreviewEffect(1);
-        ThemeSettingsPageView.PreviewEffectStrongButton.Click += (_, _) => SetPreviewEffect(2);
+        if (_remoteControlPageView != null && !_remoteControlPageWired)
+        {
+            _remoteControlPageView.EnableRemoteControlCheckBox.Checked += RemoteControlSetting_Changed;
+            _remoteControlPageView.EnableRemoteControlCheckBox.Unchecked += RemoteControlSetting_Changed;
+            _remoteControlPageView.RemoteControlAllowLanCheckBox.Checked += RemoteControlSetting_Changed;
+            _remoteControlPageView.RemoteControlAllowLanCheckBox.Unchecked += RemoteControlSetting_Changed;
+            _remoteControlPageView.RemoteControlPortBox.LostFocus += RemoteControlSetting_Changed;
+            _remoteControlPageView.CopyRemoteAddressButton.Click += CopyRemoteAddress_Click;
+            _remoteControlPageView.ResetRemoteTokenButton.Click += ResetRemoteToken_Click;
+            _remoteControlPageWired = true;
+            InitializeOverlayControls(_activeSettings);
+        }
 
-        LogsPageView.OpenLogFileButton.Click += OpenLogFileButton_Click;
-        LogsPageView.CopyLogButton.Click += CopyLogButton_Click;
-        LogsPageView.ClearLogButton.Click += ClearLogButton_Click;
+        if (_themeSettingsPageView != null && !_themeSettingsPageWired)
+        {
+            _themeSettingsPageView.TitleColor_White.Click += TitleColor_Click;
+            _themeSettingsPageView.TitleColor_Light.Click += TitleColor_Click;
+            _themeSettingsPageView.TitleColor_Yellow.Click += TitleColor_Click;
+            _themeSettingsPageView.TitleColor_Green.Click += TitleColor_Click;
+            _themeSettingsPageView.TitleColor_Orange.Click += TitleColor_Click;
+            _themeSettingsPageView.ArtistColor_Light.Click += ArtistColor_Click;
+            _themeSettingsPageView.ArtistColor_White.Click += ArtistColor_Click;
+            _themeSettingsPageView.ArtistColor_Yellow.Click += ArtistColor_Click;
+            _themeSettingsPageView.ArtistColor_Green.Click += ArtistColor_Click;
+            _themeSettingsPageView.ArtistColor_Orange.Click += ArtistColor_Click;
+            _themeSettingsPageView.LyricsColor_Light.Click += LyricsColor_Click;
+            _themeSettingsPageView.LyricsColor_White.Click += LyricsColor_Click;
+            _themeSettingsPageView.LyricsColor_Yellow.Click += LyricsColor_Click;
+            _themeSettingsPageView.LyricsColor_Green.Click += LyricsColor_Click;
+            _themeSettingsPageView.LyricsColor_Orange.Click += LyricsColor_Click;
+            _themeSettingsPageView.TitleOpacitySlider.ValueChanged += TitleOpacitySlider_ValueChanged;
+            _themeSettingsPageView.ArtistOpacitySlider.ValueChanged += ArtistOpacitySlider_ValueChanged;
+            _themeSettingsPageView.LyricsOpacitySlider.ValueChanged += LyricsOpacitySlider_ValueChanged;
+            _themeSettingsPageView.ThemeAccentIndigoButton.Click += (_, _) => ApplyThemeAccentColor("#5B5CEB");
+            _themeSettingsPageView.ThemeAccentBlueButton.Click += (_, _) => ApplyThemeAccentColor("#3B82F6");
+            _themeSettingsPageView.ThemeAccentGreenButton.Click += (_, _) => ApplyThemeAccentColor("#22C55E");
+            _themeSettingsPageView.ThemeAccentAmberButton.Click += (_, _) => ApplyThemeAccentColor("#F59E0B");
+            _themeSettingsPageView.ThemeAccentRoseButton.Click += (_, _) => ApplyThemeAccentColor("#F43F5E");
+            _themeSettingsPageView.PreviewEffectSoftButton.Click += (_, _) => SetPreviewEffect(0);
+            _themeSettingsPageView.PreviewEffectMediumButton.Click += (_, _) => SetPreviewEffect(1);
+            _themeSettingsPageView.PreviewEffectStrongButton.Click += (_, _) => SetPreviewEffect(2);
+            _themeSettingsPageWired = true;
+            InitializeOverlayControls(_activeSettings);
+            ApplyPreviewEffect();
+        }
 
-        AboutPageView.ProjectHomeButton.Click += GitHubButton_Click;
-        AboutPageView.CheckUpdateButton.Click += CheckUpdate_Click;
-        AboutPageView.LicenseButton.Click += OpenLicenseButton_Click;
-        AboutPageView.VersionText.Text = $"{UiText.VersionPrefix} {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.7.1"}";
+        if (_logsPageView != null && !_logsPageWired)
+        {
+            _logsPageView.OpenLogFileButton.Click += OpenLogFileButton_Click;
+            _logsPageView.CopyLogButton.Click += CopyLogButton_Click;
+            _logsPageView.ClearLogButton.Click += ClearLogButton_Click;
+            _logsPageWired = true;
+            InitializeLogWatcher();
+        }
+
+        if (_aboutPageView != null && !_aboutPageWired)
+        {
+            _aboutPageView.ProjectHomeButton.Click += GitHubButton_Click;
+            _aboutPageView.CheckUpdateButton.Click += CheckUpdate_Click;
+            _aboutPageView.LicenseButton.Click += OpenLicenseButton_Click;
+            _aboutPageView.VersionText.Text = $"{UiText.VersionPrefix} {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.7.1"}";
+            _aboutPageWired = true;
+        }
     }
 
     private void NavigateTo(string key)
@@ -363,24 +472,19 @@ public partial class MainWindow : Window
 
     private void ShowPage(string key)
     {
-        NowPlayingPageView.Visibility = Visibility.Collapsed;
-        FloatingSettingsPageView.Visibility = Visibility.Collapsed;
-        HotkeySettingsPageView.Visibility = Visibility.Collapsed;
-        ThemeSettingsPageView.Visibility = Visibility.Collapsed;
-        LogsPageView.Visibility = Visibility.Collapsed;
-        AboutPageView.Visibility = Visibility.Collapsed;
-
         FrameworkElement activePage = key switch
         {
             "FloatingSettings" => FloatingSettingsPageView,
             "Hotkeys" => HotkeySettingsPageView,
+            "RemoteControl" => RemoteControlPageView,
             "Theme" => ThemeSettingsPageView,
             "Logs" => LogsPageView,
             "About" => AboutPageView,
             _ => NowPlayingPageView
         };
 
-        activePage.Visibility = Visibility.Visible;
+        WirePageControls();
+        PageHost.Content = activePage;
         if (_suppressPageAnimation)
         {
             activePage.BeginAnimation(OpacityProperty, null);
@@ -657,7 +761,7 @@ public partial class MainWindow : Window
         _trayIcon = new System.Windows.Forms.NotifyIcon
         {
             Icon = icon,
-            Text = "网易云悬浮窗",
+            Text = "网易云悬浮窗 v2.0.0",
             Visible = false
         };
 
@@ -698,7 +802,7 @@ public partial class MainWindow : Window
         if (_trayIcon != null)
         {
             _trayIcon.Visible = true;
-            _trayIcon.ShowBalloonTip(2000, "网易云悬浮窗", "已最小化到托盘，双击图标恢复。", System.Windows.Forms.ToolTipIcon.Info);
+            _trayIcon.ShowBalloonTip(2000, "网易云悬浮窗 v2.0.0", "已最小化到托盘，双击图标恢复。", System.Windows.Forms.ToolTipIcon.Info);
         }
     }
 
@@ -710,6 +814,7 @@ public partial class MainWindow : Window
         }
 
         _startupInitialized = true;
+        _gamepadInputService.AttachRawInput(this, _diagnostic);
         bool ok = RebindGlobalHotkeys();
         SetStatus(ok
             ? "状态：快捷键已就绪，按应用快捷键会转发网易云快捷键。"
@@ -717,7 +822,7 @@ public partial class MainWindow : Window
 
         _lifecycle.StartAll();
         _ = RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
-        _ = SilentCheckUpdateAsync();
+        Dispatcher.BeginInvoke(async () => await SilentCheckUpdateAsync(), DispatcherPriority.Background);
 
         if (_startHiddenToTray)
         {
@@ -747,6 +852,7 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
+        _pageMetaUpdateTimer.Stop();
         _lifecycle.Dispose();
     }
 
@@ -764,10 +870,16 @@ public partial class MainWindow : Window
             bool shouldSyncLyrics = SmtcLyricsSyncPolicy.ShouldPrioritizeTimelineSync(_activeSettings.EnableLyrics, isSmtcSource);
             bool shouldSyncNeteaseLyrics = _activeSettings.EnableLyrics && !isSmtcSource;
             bool shouldCheckPauseVisibility = _activeSettings.HideOverlayWhenPaused && isSmtcSource;
-            (TimeSpan Position, bool IsPlaying)? playbackState = null;
-            if (shouldSyncLyrics || shouldCheckPauseVisibility)
+            long now = Environment.TickCount64;
+            bool shouldSampleSmtcTimeline = (shouldSyncLyrics || shouldCheckPauseVisibility)
+                && SmtcPollingPolicy.ShouldSample(
+                    now,
+                    _lastSmtcTimelineSampleAt,
+                    SmtcPollingPolicy.TimelineSampleIntervalMs);
+            if (shouldSampleSmtcTimeline)
             {
-                playbackState = await _smtcTrackService.GetPlaybackStateAsync();
+                (TimeSpan Position, bool IsPlaying)? playbackState = await _smtcTrackService.GetPlaybackStateAsync();
+                _lastSmtcTimelineSampleAt = now;
                 if (playbackState is { } state)
                 {
                     await ApplyPauseOverlayVisibilityRuleAsync(isSmtcSource, state.IsPlaying);
@@ -775,11 +887,18 @@ public partial class MainWindow : Window
                     {
                         _lastSmtcPlaybackPositionSeconds = state.Position.TotalSeconds;
                         SmtcLyricTimingSample timingSample = _smtcLyricTimingController.Update(state.Position.TotalSeconds, state.IsPlaying);
-                        _lyricsService.SetPlaybackPosition(timingSample.DisplayPositionSeconds);
-                        _diagnostic.Info(
-                            $"SMTC lyric timing: raw={timingSample.RawPositionSeconds:F3}s, display={timingSample.DisplayPositionSeconds:F3}s, compensation={timingSample.CompensationSeconds:F3}s, discontinuity={timingSample.IsDiscontinuity}");
+                        if (timingSample.IsDiscontinuity)
+                        {
+                            _diagnostic.Info(
+                                $"SMTC lyric timing: raw={timingSample.RawPositionSeconds:F3}s, display={timingSample.DisplayPositionSeconds:F3}s, compensation={timingSample.CompensationSeconds:F3}s, discontinuity={timingSample.IsDiscontinuity}");
+                        }
                     }
                 }
+            }
+
+            if (shouldSyncLyrics && _smtcLyricTimingController.GetCurrentDisplayPositionSeconds() is { } displayPosition)
+            {
+                _lyricsService.SetPlaybackPosition(displayPosition);
             }
 
             if (shouldSyncNeteaseLyrics)
@@ -790,20 +909,30 @@ public partial class MainWindow : Window
             if (shouldSyncLyrics || shouldSyncNeteaseLyrics)
             {
                 string? earlyLine = _lyricsService.UpdateCurrentLine();
-                if (earlyLine != null)
+                if (earlyLine != null && !string.Equals(_lastLyricsPreviewLine, earlyLine, StringComparison.Ordinal))
                 {
-                    Dispatcher.Invoke(() =>
+                    _lastLyricsPreviewLine = earlyLine;
+                    Dispatcher.BeginInvoke(() =>
                     {
                         _overlayWindow.SetLyrics(earlyLine);
-                        LyricsPreviewText.Text = earlyLine;
-                    });
+                        SetTextIfChanged(LyricsPreviewText, earlyLine);
+                    }, DispatcherPriority.Background);
                 }
             }
 
-            long now = Environment.TickCount64;
-            if (isSmtcSource || now - _lastNeteaseTrackRefreshAt >= PollSlowMs)
+            bool shouldRefreshTrack = isSmtcSource
+                ? SmtcPollingPolicy.ShouldSample(
+                    now,
+                    _lastSmtcTrackRefreshAt,
+                    SmtcPollingPolicy.TrackRefreshIntervalMs)
+                : now - _lastNeteaseTrackRefreshAt >= PollSlowMs;
+            if (shouldRefreshTrack)
             {
-                if (!isSmtcSource)
+                if (isSmtcSource)
+                {
+                    _lastSmtcTrackRefreshAt = now;
+                }
+                else
                 {
                     _lastNeteaseTrackRefreshAt = now;
                 }
@@ -831,7 +960,14 @@ public partial class MainWindow : Window
     {
         bool keepFast = _activeSettings.EnableLyrics &&
                         TrackSourcePolicy.ShouldEnableLyrics(_activeSettings.TrackSource);
-        int target = keepFast || Environment.TickCount64 < _pollBoostUntil ? PollFastMs : PollSlowMs;
+        bool isMainWindowVisible = IsVisible && WindowState != WindowState.Minimized;
+        bool isOverlayVisible = _overlayWindow.IsVisible;
+        bool boosted = Environment.TickCount64 < _pollBoostUntil;
+        int target = BackgroundPollingPolicy.GetPollIntervalMs(
+            keepFast,
+            isMainWindowVisible,
+            isOverlayVisible,
+            boosted);
         if (Math.Abs(_pollTimer.Interval.TotalMilliseconds - target) > 1)
         {
             _pollTimer.Interval = TimeSpan.FromMilliseconds(target);
@@ -853,9 +989,9 @@ public partial class MainWindow : Window
         await NextAsync();
     }
 
-    private void PlayPause_Click(object sender, RoutedEventArgs e)
+    private async void PlayPause_Click(object sender, RoutedEventArgs e)
     {
-        TogglePlayPause();
+        await TogglePlayPauseAsync();
     }
 
     private async Task PrevAsync()
@@ -918,7 +1054,7 @@ public partial class MainWindow : Window
         await RefreshAfterControlAsync();
     }
 
-    private async void TogglePlayPause()
+    private async Task TogglePlayPauseAsync()
     {
         if (IsSmtcSource())
         {
@@ -951,9 +1087,9 @@ public partial class MainWindow : Window
 
     private async Task ToggleOverlayVisibilityAsync()
     {
-        if (_overlayWindow.Visibility == Visibility.Visible)
+        if (_overlayWindow.IsContentVisible)
         {
-            _overlayWindow.Hide();
+            await _overlayWindow.ConcealAsync();
             _overlayHiddenByPause = false;
             SetStatus("状态：已隐藏悬浮窗。", false);
             return;
@@ -961,7 +1097,7 @@ public partial class MainWindow : Window
 
         _overlayHiddenByPause = false;
         await RefreshCurrentTrackAsync(showOverlay: true, allowOverlayOnTrackChange: false);
-        if (_overlayWindow.Visibility == Visibility.Visible)
+        if (_overlayWindow.IsContentVisible)
         {
             SetStatus("状态：已显示悬浮窗。", false);
         }
@@ -1000,9 +1136,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_overlayWindow.Visibility == Visibility.Visible)
+        if (_overlayWindow.IsContentVisible)
         {
-            _overlayWindow.Hide();
+            await _overlayWindow.ConcealAsync();
             _overlayHiddenByPause = true;
             SetStatus("状态：音乐已暂停，悬浮窗已隐藏。", false);
         }
@@ -1059,21 +1195,29 @@ public partial class MainWindow : Window
                 _lastSmtcPlaybackPositionSeconds = null;
                 _smtcLyricTimingController.Reset();
                 _neteaseLyricTimingController.Reset();
-                Dispatcher.Invoke(() => _overlayWindow.SetLyrics(null));
+                if (!string.IsNullOrEmpty(_lastLyricsPreviewLine))
+                {
+                    _lastLyricsPreviewLine = string.Empty;
+                Dispatcher.BeginInvoke(() => _overlayWindow.SetLyrics(null), DispatcherPriority.Background);
+                }
 
                 if (!string.IsNullOrEmpty(_lastDisplayTrackKey))
                 {
-                    CurrentTitle.Text = useSmtc ? "未检测到系统媒体会话" : "未检测到网易云歌曲";
-                    CurrentArtist.Text = useSmtc ? "请先播放任意媒体内容" : "请打开网易云音乐并播放歌曲";
-                    CurrentMeta.Text = useSmtc
+                    SetTextIfChanged(CurrentTitle, useSmtc ? "未检测到系统媒体会话" : "未检测到网易云歌曲");
+                    SetTextIfChanged(CurrentArtist, useSmtc ? "请先播放任意媒体内容" : "请打开网易云音乐并播放歌曲");
+                    SetTextIfChanged(CurrentMeta, useSmtc
                         ? "来源：SMTC"
-                        : $"来源：{NeteaseCoverDiagnosticPolicy.FormatSourceAppId("CloudMusic(ProcessTitle)", NeteaseCoverDiagnosticPolicy.WindowTitleMissing)}";
-                    FooterSourceText.Text = CurrentMeta.Text;
-                    LyricsPreviewText.Text = UiText.LyricsPreviewPlaceholder;
-                    SetCover(null);
+                        : $"来源：{NeteaseCoverDiagnosticPolicy.FormatSourceAppId("CloudMusic(ProcessTitle)", NeteaseCoverDiagnosticPolicy.WindowTitleMissing)}");
+                    SetTextIfChanged(FooterSourceText, CurrentMeta.Text);
+                    _lastLyricsPreviewLine = string.Empty;
+                    SetTextIfChanged(LyricsPreviewText, UiText.LyricsPreviewPlaceholder);
+                    if (!SameBytes(_lastPreviewCoverBytes, null))
+                    {
+                        SetCover(null);
+                    }
                 }
 
-                SetStatus(useSmtc ? "状态：未读取到 SMTC 媒体会话。" : "状态：未读取到网易云窗口标题。", false);
+                SetStatusIfChanged(useSmtc ? "状态：未读取到 SMTC 媒体会话。" : "状态：未读取到网易云窗口标题。", false);
                 _lastTrackKey = string.Empty;
                 _lastDisplayTrackKey = string.Empty;
                 return;
@@ -1089,24 +1233,35 @@ public partial class MainWindow : Window
                     previousDisplayedCoverBytes: _lastPreviewCoverBytes,
                     currentCoverBytes: track.CoverBytes);
             bool shouldRetrySmtcCover = useSmtc && changed && (track.CoverBytes == null || shouldDelayImmediateSmtcCover);
-            byte[]? immediateCoverBytes = shouldDelayImmediateSmtcCover ? null : track.CoverBytes;
+            byte[]? immediateCoverBytes = useSmtc
+                ? SmtcCoverRefreshPolicy.SelectImmediateCover(
+                    changed,
+                    _lastPreviewCoverBytes,
+                    track.CoverBytes)
+                : track.CoverBytes;
 
             bool displayChanged = !string.Equals(_lastDisplayTrackKey, currentTrackKey, StringComparison.Ordinal);
             if (displayChanged)
             {
-                CurrentTitle.Text = track.Name;
-                CurrentArtist.Text = track.Artist;
-                CurrentMeta.Text = $"来源：{track.SourceAppId}";
-                FooterSourceText.Text = CurrentMeta.Text;
-                SetCover(immediateCoverBytes);
+                SetTextIfChanged(CurrentTitle, track.Name);
+                SetTextIfChanged(CurrentArtist, track.Artist);
+                SetTextIfChanged(CurrentMeta, $"来源：{track.SourceAppId}");
+                SetTextIfChanged(FooterSourceText, CurrentMeta.Text);
+                if (!SameBytes(_lastPreviewCoverBytes, immediateCoverBytes))
+                {
+                    SetCover(immediateCoverBytes);
+                }
                 _lastDisplayTrackKey = currentTrackKey;
             }
             else if (!useSmtc && TrackDisplayPolicy.ShouldRefreshCoverForSameTrack(useSmtc, displayChanged, _lastPreviewCoverBytes, immediateCoverBytes))
             {
-                CurrentMeta.Text = $"来源：{track.SourceAppId}";
-                FooterSourceText.Text = CurrentMeta.Text;
-                SetCover(immediateCoverBytes);
-                _overlayWindow.UpdateCover(immediateCoverBytes);
+                SetTextIfChanged(CurrentMeta, $"来源：{track.SourceAppId}");
+                SetTextIfChanged(FooterSourceText, CurrentMeta.Text);
+                if (!SameBytes(_lastPreviewCoverBytes, immediateCoverBytes))
+                {
+                    SetCover(immediateCoverBytes);
+                        _overlayWindow.UpdateCoverIfChanged(immediateCoverBytes);
+                }
             }
 
             if (shouldRetrySmtcCover)
@@ -1137,8 +1292,9 @@ public partial class MainWindow : Window
                 if (changed)
                 {
                     _lyricsService.Reset();
-                    Dispatcher.Invoke(() => _overlayWindow.SetLyrics(null));
-                    LyricsPreviewText.Text = UiText.LyricsPreviewPlaceholder;
+                    Dispatcher.BeginInvoke(() => _overlayWindow.SetLyrics(null), DispatcherPriority.Background);
+                    _lastLyricsPreviewLine = string.Empty;
+                    SetTextIfChanged(LyricsPreviewText, UiText.LyricsPreviewPlaceholder);
                 }
 
                 if (changed || !_lyricsService.HasLyrics)
@@ -1154,14 +1310,15 @@ public partial class MainWindow : Window
                                 startTime,
                                 duration);
                             string? line = _lyricsService.GetCurrentLine();
-                            Dispatcher.Invoke(() => UpdateLyricsPreviewAfterFetch(line));
+                            Dispatcher.BeginInvoke(() => UpdateLyricsPreviewAfterFetch(line), DispatcherPriority.Background);
                         }
                         catch
                         {
                             Dispatcher.Invoke(() =>
                             {
                                 _overlayWindow.SetLyrics(null);
-                                LyricsPreviewText.Text = "本次未获取到歌词内容。";
+                                _lastLyricsPreviewLine = string.Empty;
+                                SetTextIfChanged(LyricsPreviewText, "本次未获取到歌词内容。");
                             });
                         }
                     });
@@ -1174,8 +1331,9 @@ public partial class MainWindow : Window
                     _lyricsService.Reset();
                     _neteaseLyricTimingController.Reset();
                     _neteaseLyricTimingController.Start();
-                    Dispatcher.Invoke(() => _overlayWindow.SetLyrics(null));
-                    LyricsPreviewText.Text = UiText.LyricsPreviewPlaceholder;
+                    Dispatcher.BeginInvoke(() => _overlayWindow.SetLyrics(null), DispatcherPriority.Background);
+                    _lastLyricsPreviewLine = string.Empty;
+                    SetTextIfChanged(LyricsPreviewText, UiText.LyricsPreviewPlaceholder);
                 }
                 else if (!_neteaseLyricTimingController.HasState)
                 {
@@ -1198,14 +1356,15 @@ public partial class MainWindow : Window
                                 track.DurationSeconds,
                                 track.SongId);
                             string? line = _lyricsService.GetCurrentLine();
-                            Dispatcher.Invoke(() => UpdateLyricsPreviewAfterFetch(line));
+                            Dispatcher.BeginInvoke(() => UpdateLyricsPreviewAfterFetch(line), DispatcherPriority.Background);
                         }
                         catch
                         {
                             Dispatcher.Invoke(() =>
                             {
                                 _overlayWindow.SetLyrics(null);
-                                LyricsPreviewText.Text = "本次未获取到歌词内容。";
+                                _lastLyricsPreviewLine = string.Empty;
+                                SetTextIfChanged(LyricsPreviewText, "本次未获取到歌词内容。");
                             });
                         }
                     });
@@ -1217,17 +1376,24 @@ public partial class MainWindow : Window
                 _lastSmtcPlaybackPositionSeconds = null;
                 _smtcLyricTimingController.Reset();
                 _neteaseLyricTimingController.Reset();
-                Dispatcher.Invoke(() => _overlayWindow.SetLyrics(null));
-                LyricsPreviewText.Text = UiText.LyricsPreviewPlaceholder;
+                if (!string.IsNullOrEmpty(_lastLyricsPreviewLine))
+                {
+                    _lastLyricsPreviewLine = string.Empty;
+                    Dispatcher.BeginInvoke(() => _overlayWindow.SetLyrics(null), DispatcherPriority.Background);
+                }
+                SetTextIfChanged(LyricsPreviewText, UiText.LyricsPreviewPlaceholder);
             }
 
-            SetStatus(useSmtc ? "状态：已从 SMTC 同步。" : "状态：已从网易云窗口标题同步。", false);
-            UpdatePageMetaTexts();
+            SetStatusIfChanged(useSmtc ? "状态：已从 SMTC 同步。" : "状态：已从网易云窗口标题同步。", false);
+            if (UiRefreshPolicy.ShouldRefreshTrackMetadata(changed, displayChanged, showOverlay))
+            {
+            SchedulePageMetaTextsUpdate();
+        }
         }
         catch (Exception ex)
         {
             _diagnostic.Error("RefreshCurrentTrackAsync failed", ex);
-            SetStatus($"状态：读取歌曲数据失败。{ex.Message}", true);
+            SetStatusIfChanged($"状态：读取歌曲数据失败。{ex.Message}", true);
         }
     }
 
@@ -1287,8 +1453,15 @@ public partial class MainWindow : Window
                             return;
                         }
 
-                        SetCover(refreshed.CoverBytes);
+                        if (!SmtcCoverRefreshPolicy.ShouldUpdateDisplayedCover(
+                                _lastPreviewCoverBytes,
+                                refreshed.CoverBytes))
+                        {
+                            return;
+                        }
+
                         _overlayWindow.UpdateCover(refreshed.CoverBytes);
+                        SetCover(refreshed.CoverBytes);
                     });
 
                     _diagnostic.Info($"SMTC cover refresh applied: {expectedTrackKey}");
@@ -1313,19 +1486,64 @@ public partial class MainWindow : Window
         if (!_lyricsService.HasLyrics)
         {
             _overlayWindow.SetLyrics(null);
-            LyricsPreviewText.Text = "未获取到歌词。";
+            _lastLyricsPreviewLine = string.Empty;
+            SetTextIfChanged(LyricsPreviewText, "未获取到歌词。");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(line))
         {
             _overlayWindow.SetLyrics(null);
-            LyricsPreviewText.Text = "歌词已获取，等待同步到当前时间点。";
+            _lastLyricsPreviewLine = string.Empty;
+            SetTextIfChanged(LyricsPreviewText, "歌词已获取，等待同步到当前时间点。");
             return;
         }
 
         _overlayWindow.SetLyrics(line);
-        LyricsPreviewText.Text = line;
+        _lastLyricsPreviewLine = line;
+        SetTextIfChanged(LyricsPreviewText, line);
+    }
+
+    private void SchedulePageMetaTextsUpdate()
+    {
+        _pageMetaUpdateDirty = true;
+        _pageMetaUpdateTimer.Stop();
+        _pageMetaUpdateTimer.Start();
+    }
+
+    private static void SetTextIfChanged(TextBlock textBlock, string value)
+    {
+        if (!string.Equals(textBlock.Text, value, StringComparison.Ordinal))
+        {
+            textBlock.Text = value;
+        }
+    }
+
+    private void SetStatusIfChanged(string message, bool isError)
+    {
+        if (string.Equals(_lastStatusText, message, StringComparison.Ordinal) && _lastStatusIsError == isError)
+        {
+            return;
+        }
+
+        _lastStatusText = message;
+        _lastStatusIsError = isError;
+        SetStatus(message, isError);
+    }
+
+    private static bool SameBytes(byte[]? left, byte[]? right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left is null || right is null || left.Length != right.Length)
+        {
+            return false;
+        }
+
+        return left.AsSpan().SequenceEqual(right);
     }
 
     private static TrackInfo CreateTrackWithCover(TrackInfo track, byte[]? coverBytes)
@@ -1399,43 +1617,155 @@ public partial class MainWindow : Window
         }
     }
 
+    private Task<RemoteControlStatus> GetRemoteControlStatusAsync()
+    {
+        return Dispatcher.InvokeAsync(() =>
+        {
+            string title = _nowPlayingPageView?.CurrentTitle.Text ?? string.Empty;
+            string artist = _nowPlayingPageView?.CurrentArtist.Text ?? string.Empty;
+            return new RemoteControlStatus
+            {
+                Title = title,
+                Artist = artist,
+                Source = IsSmtcSource() ? "SMTC" : "网易云窗口标题",
+                SupportsSmtc = RuntimeFeatureSupport.SupportsSmtc(),
+                OverlayVisible = _overlayWindow.IsContentVisible,
+                RemoteEnabled = _activeSettings.EnableRemoteControl
+            };
+        }).Task;
+    }
+
+    private Task HandleRemoteControlActionAsync(string action)
+    {
+        return Dispatcher.InvokeAsync(async () =>
+        {
+            switch (action)
+            {
+                case "previous":
+                    await PrevAsync();
+                    break;
+                case "next":
+                    await NextAsync();
+                    break;
+                case "togglePlayPause":
+                    await TogglePlayPauseAsync();
+                    break;
+                case "toggleOverlay":
+                    await ToggleOverlayVisibilityAsync();
+                    break;
+            }
+        }).Task.Unwrap();
+    }
+
+    private string GetRemoteDisplayUrl()
+    {
+        return _activeSettings.RemoteControlAllowLan ? _remoteControlService.LanUrl : _remoteControlService.LocalUrl;
+    }
+
+    private void UpdateRemoteControlPage()
+    {
+        if (_remoteControlPageView == null)
+        {
+            return;
+        }
+
+        string address = GetRemoteDisplayUrl();
+        _remoteControlPageView.RemoteControlStatusText.Text = _activeSettings.EnableRemoteControl
+            ? _remoteControlService.StatusMessage
+            : "未启用";
+        _remoteControlPageView.RemoteControlAddressBox.Text = _activeSettings.EnableRemoteControl ? address : string.Empty;
+        _remoteControlPageView.RemoteControlHelpText.Text = BuildRemoteControlHelpText();
+        _remoteControlPageView.SetQrCode(_activeSettings.EnableRemoteControl ? address : string.Empty);
+    }
+
+    private string BuildRemoteControlHelpText()
+    {
+        if (!_activeSettings.EnableRemoteControl)
+        {
+            return "启用后会生成手机访问地址和二维码。";
+        }
+
+        if (!_remoteControlService.IsRunning)
+        {
+            return "服务未运行。请检查端口是否被占用，或换一个端口后重新启用。";
+        }
+
+        if (!_activeSettings.RemoteControlAllowLan)
+        {
+            return "当前只允许本机访问。若要用手机连接，请勾选允许局域网手机访问。";
+        }
+
+        IReadOnlyList<string> urls = _remoteControlService.LanUrls;
+        if (urls.Count == 0)
+        {
+            return "未检测到可用局域网 IPv4。请确认电脑已连接 Wi-Fi/网线，且网络不是仅本机或虚拟网卡。";
+        }
+
+        if (urls.Count == 1)
+        {
+            return "手机打不开时，请确认手机和电脑在同一 Wi-Fi，并允许 Windows 防火墙放行本程序。";
+        }
+
+        return "备用地址：" + string.Join("  ", urls.Skip(1)) + "。手机打不开首选地址时可尝试备用地址。";
+    }
+
     private void InitializeOverlayControls(OverlaySettings settings)
     {
         _isInitializingOverlayControls = true;
         try
         {
-            SelectTrackSource(settings.TrackSource);
-            HorizontalSlider.Value = settings.LeftPercent * 100.0;
-            BottomOffsetSlider.Value = settings.TopPercent * 100.0;
-            ScaleSlider.Value = settings.Scale * 100.0;
-            AppPrevHotkeyBox.Text = settings.AppPrevHotkey;
-            AppNextHotkeyBox.Text = settings.AppNextHotkey;
-            AppToggleHotkeyBox.Text = settings.AppToggleHotkey;
-            AppToggleOverlayHotkeyBox.Text = settings.AppToggleOverlayHotkey;
-            NeteasePrevHotkeyBox.Text = settings.NeteasePrevHotkey;
-            NeteaseNextHotkeyBox.Text = settings.NeteaseNextHotkey;
-            NeteaseToggleHotkeyBox.Text = settings.NeteaseToggleHotkey;
-            EnableGamepadCheckBox.IsChecked = settings.EnableGamepadHotkeys;
-            GamepadPrevHotkeyBox.Text = settings.GamepadPrevHotkey;
-            GamepadNextHotkeyBox.Text = settings.GamepadNextHotkey;
-            GamepadToggleHotkeyBox.Text = settings.GamepadToggleHotkey;
-            GamepadToggleOverlayHotkeyBox.Text = settings.GamepadToggleOverlayHotkey;
-            MinimizeToTrayCheckBox.IsChecked = settings.MinimizeToTray;
-            AutoStartCheckBox.IsChecked = settings.AutoStartOnBoot;
-            AlwaysShowCheckBox.IsChecked = settings.AlwaysShowOverlay;
-            HideOverlayWhenPausedCheckBox.IsChecked = settings.HideOverlayWhenPaused;
-            DiagnosticCheckBox.IsChecked = settings.DiagnosticMode;
-            EnableLyricsCheckBox.IsChecked = settings.EnableLyrics;
-            EnableCoverWingEffectCheckBox.IsChecked = settings.EnableCoverWingEffect;
-            SelectTitleColor(settings.TitleColor);
-            SelectArtistColor(settings.ArtistColor);
-            SelectLyricsColor(settings.LyricsColor);
-            TitleOpacitySlider.Value = settings.TitleOpacity * 100.0;
-            ArtistOpacitySlider.Value = settings.ArtistOpacity * 100.0;
-            LyricsOpacitySlider.Value = settings.LyricsOpacity * 100.0;
+            if (_floatingSettingsPageView != null)
+            {
+                SelectTrackSource(settings.TrackSource);
+                _floatingSettingsPageView.HorizontalSlider.Value = settings.LeftPercent * 100.0;
+                _floatingSettingsPageView.BottomOffsetSlider.Value = settings.TopPercent * 100.0;
+                _floatingSettingsPageView.ScaleSlider.Value = settings.Scale * 100.0;
+                _floatingSettingsPageView.MinimizeToTrayCheckBox.IsChecked = settings.MinimizeToTray;
+                _floatingSettingsPageView.AutoStartCheckBox.IsChecked = settings.AutoStartOnBoot;
+                _floatingSettingsPageView.AlwaysShowCheckBox.IsChecked = settings.AlwaysShowOverlay;
+                _floatingSettingsPageView.HideOverlayWhenPausedCheckBox.IsChecked = settings.HideOverlayWhenPaused;
+                _floatingSettingsPageView.DiagnosticCheckBox.IsChecked = settings.DiagnosticMode;
+                _floatingSettingsPageView.EnableLyricsCheckBox.IsChecked = settings.EnableLyrics;
+                _floatingSettingsPageView.EnableCoverWingEffectCheckBox.IsChecked = settings.EnableCoverWingEffect;
+            }
+
+            if (_hotkeySettingsPageView != null)
+            {
+                _hotkeySettingsPageView.AppPrevHotkeyBox.Text = settings.AppPrevHotkey;
+                _hotkeySettingsPageView.AppNextHotkeyBox.Text = settings.AppNextHotkey;
+                _hotkeySettingsPageView.AppToggleHotkeyBox.Text = settings.AppToggleHotkey;
+                _hotkeySettingsPageView.AppToggleOverlayHotkeyBox.Text = settings.AppToggleOverlayHotkey;
+                _hotkeySettingsPageView.NeteasePrevHotkeyBox.Text = settings.NeteasePrevHotkey;
+                _hotkeySettingsPageView.NeteaseNextHotkeyBox.Text = settings.NeteaseNextHotkey;
+                _hotkeySettingsPageView.NeteaseToggleHotkeyBox.Text = settings.NeteaseToggleHotkey;
+                _hotkeySettingsPageView.EnableGamepadCheckBox.IsChecked = settings.EnableGamepadHotkeys;
+                _hotkeySettingsPageView.GamepadPrevHotkeyBox.Text = settings.GamepadPrevHotkey;
+                _hotkeySettingsPageView.GamepadNextHotkeyBox.Text = settings.GamepadNextHotkey;
+                _hotkeySettingsPageView.GamepadToggleHotkeyBox.Text = settings.GamepadToggleHotkey;
+                _hotkeySettingsPageView.GamepadToggleOverlayHotkeyBox.Text = settings.GamepadToggleOverlayHotkey;
+            }
+
+            if (_remoteControlPageView != null)
+            {
+                _remoteControlPageView.EnableRemoteControlCheckBox.IsChecked = settings.EnableRemoteControl;
+                _remoteControlPageView.RemoteControlPortBox.Text = settings.RemoteControlPort.ToString();
+                _remoteControlPageView.RemoteControlAllowLanCheckBox.IsChecked = settings.RemoteControlAllowLan;
+            }
+
+            if (_themeSettingsPageView != null)
+            {
+                SelectTitleColor(settings.TitleColor);
+                SelectArtistColor(settings.ArtistColor);
+                SelectLyricsColor(settings.LyricsColor);
+                _themeSettingsPageView.TitleOpacitySlider.Value = settings.TitleOpacity * 100.0;
+                _themeSettingsPageView.ArtistOpacitySlider.Value = settings.ArtistOpacity * 100.0;
+                _themeSettingsPageView.LyricsOpacitySlider.Value = settings.LyricsOpacity * 100.0;
+            }
+
             ApplyDisplayColors(settings);
             UpdateOverlayControlLabels();
             UpdateRuntimeDependentControls();
+            UpdateRemoteControlPage();
         }
         finally
         {
@@ -1518,6 +1848,8 @@ public partial class MainWindow : Window
             }
 
             _overlaySettingsService.Save(_activeSettings);
+            _remoteControlService.ApplySettings(_activeSettings);
+            UpdateRemoteControlPage();
             SetStatus($"状态：已保存并应用。{_overlaySettingsService.SettingsFilePath}", false);
         }
         catch (Exception ex)
@@ -1532,7 +1864,48 @@ public partial class MainWindow : Window
         ApplyOverlaySettingsFromControls();
         _diagnostic.Enabled = _activeSettings.DiagnosticMode;
         _overlaySettingsService.Save(_activeSettings);
+        _remoteControlService.ApplySettings(_activeSettings);
+        UpdateRemoteControlPage();
         await ApplyPauseOverlayVisibilityRuleAsync();
+    }
+
+    private void RemoteControlSetting_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializingOverlayControls) return;
+        ApplyOverlaySettingsFromControls();
+        _overlaySettingsService.Save(_activeSettings);
+        _remoteControlService.ApplySettings(_activeSettings);
+        UpdateRemoteControlPage();
+        SetStatus(_remoteControlService.IsRunning ? "状态：手机遥控已应用。" : $"状态：{_remoteControlService.StatusMessage}", !_remoteControlService.IsRunning && _activeSettings.EnableRemoteControl);
+    }
+
+    private void CopyRemoteAddress_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string address = _remoteControlPageView?.RemoteControlAddressBox.Text ?? GetRemoteDisplayUrl();
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                SetStatus("状态：手机遥控地址为空，请先启用遥控服务。", true);
+                return;
+            }
+
+            Clipboard.SetText(address);
+            SetStatus("状态：手机遥控地址已复制。", false);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"状态：复制手机遥控地址失败。{ex.Message}", true);
+        }
+    }
+
+    private void ResetRemoteToken_Click(object sender, RoutedEventArgs e)
+    {
+        _activeSettings.RemoteControlToken = RemoteControlService.GenerateToken();
+        _overlaySettingsService.Save(_activeSettings);
+        _remoteControlService.ApplySettings(_activeSettings);
+        UpdateRemoteControlPage();
+        SetStatus("状态：手机遥控连接令牌已重置。", false);
     }
 
     private void HotkeyBox_LostFocus(object sender, RoutedEventArgs e)
@@ -1560,6 +1933,7 @@ public partial class MainWindow : Window
         _activeSettings = new OverlaySettings();
         _smtcLyricTimingController.SetDelayOverrideMilliseconds(_activeSettings.SmtcLyricDelayOverrideMs);
         _overlayWindow.ApplySettings(_activeSettings);
+        _remoteControlService.ApplySettings(_activeSettings);
         InitializeOverlayControls(_activeSettings);
         SetStatus("状态：已重置为默认值，点击“保存”后生效并持久化。", false);
     }
@@ -1715,6 +2089,23 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BilibiliLink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = e.Uri.AbsoluteUri,
+                UseShellExecute = true
+            });
+            e.Handled = true;
+        }
+        catch
+        {
+            SetStatus("状态：无法打开哔哩哔哩个人空间。", false);
+        }
+    }
+
     private void BaiduPanButton_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -1825,6 +2216,9 @@ public partial class MainWindow : Window
 
         _gamepadCaptureFocusCount++;
         _gamepadInputService.Enabled = false;
+        _gamepadCaptureBaseline[textBox] = GamepadInputService.GetCurrentButtonsSnapshot();
+        _gamepadCaptureCandidates.Remove(textBox);
+        _gamepadCaptureCandidateCounts.Remove(textBox);
         timer.Start();
     }
 
@@ -1841,6 +2235,9 @@ public partial class MainWindow : Window
         }
 
         _gamepadPressed.Remove(textBox);
+        _gamepadCaptureBaseline.Remove(textBox);
+        _gamepadCaptureCandidates.Remove(textBox);
+        _gamepadCaptureCandidateCounts.Remove(textBox);
 
         _gamepadCaptureFocusCount = Math.Max(0, _gamepadCaptureFocusCount - 1);
         if (_gamepadCaptureFocusCount == 0)
@@ -1858,6 +2255,9 @@ public partial class MainWindow : Window
 
         _gamepadCommitTimers.Clear();
         _gamepadPressed.Clear();
+        _gamepadCaptureBaseline.Clear();
+        _gamepadCaptureCandidates.Clear();
+        _gamepadCaptureCandidateCounts.Clear();
         _gamepadCaptureFocusCount = 0;
         _gamepadInputService.Enabled = _gamepadEnabledBeforeCapture;
     }
@@ -1866,6 +2266,31 @@ public partial class MainWindow : Window
     {
         GamepadButton currentButtons = GamepadInputService.GetCurrentButtonsSnapshot();
         if (currentButtons == GamepadButton.None)
+        {
+            _gamepadCaptureCandidates.Remove(textBox);
+            _gamepadCaptureCandidateCounts.Remove(textBox);
+            return;
+        }
+
+        if (_gamepadCaptureBaseline.TryGetValue(textBox, out GamepadButton baseline) &&
+            currentButtons == baseline)
+        {
+            return;
+        }
+
+        if (!_gamepadCaptureCandidates.TryGetValue(textBox, out GamepadButton candidate) ||
+            candidate != currentButtons)
+        {
+            _gamepadCaptureCandidates[textBox] = currentButtons;
+            _gamepadCaptureCandidateCounts[textBox] = 1;
+            return;
+        }
+
+        int count = _gamepadCaptureCandidateCounts.TryGetValue(textBox, out int previousCount)
+            ? previousCount + 1
+            : 1;
+        _gamepadCaptureCandidateCounts[textBox] = count;
+        if (count < 2)
         {
             return;
         }
@@ -1973,23 +2398,23 @@ public partial class MainWindow : Window
 
     private void SelectTrackSource(string trackSource)
     {
-        if (TrackSourceComboBox == null)
+        if (_floatingSettingsPageView == null)
         {
             return;
         }
 
-        foreach (object item in TrackSourceComboBox.Items)
+        foreach (object item in _floatingSettingsPageView.TrackSourceComboBox.Items)
         {
             if (item is ComboBoxItem combo &&
                 combo.Tag is string tag &&
                 string.Equals(tag, trackSource, StringComparison.OrdinalIgnoreCase))
             {
-                TrackSourceComboBox.SelectedItem = combo;
+                _floatingSettingsPageView.TrackSourceComboBox.SelectedItem = combo;
                 return;
             }
         }
 
-        TrackSourceComboBox.SelectedIndex = 0;
+        _floatingSettingsPageView.TrackSourceComboBox.SelectedIndex = 0;
     }
 
     private void ApplyRuntimeFeatureAvailability()
@@ -2005,14 +2430,14 @@ public partial class MainWindow : Window
 
     private void UpdateRuntimeDependentControls()
     {
-        if (TrackSourceComboBox == null || EnableLyricsCheckBox == null)
+        if (_floatingSettingsPageView == null)
         {
             return;
         }
 
         bool smtcSupported = RuntimeFeatureSupport.SupportsSmtc();
         ComboBoxItem? smtcItem = null;
-        foreach (object item in TrackSourceComboBox.Items)
+        foreach (object item in _floatingSettingsPageView.TrackSourceComboBox.Items)
         {
             if (item is ComboBoxItem combo &&
                 string.Equals(combo.Tag as string, "SMTC", StringComparison.OrdinalIgnoreCase))
@@ -2039,13 +2464,13 @@ public partial class MainWindow : Window
         bool useSmtc = smtcSupported &&
             string.Equals(selectedSource, "SMTC", StringComparison.OrdinalIgnoreCase);
 
-        EnableLyricsCheckBox.IsEnabled = TrackSourcePolicy.ShouldEnableLyrics(selectedSource);
-        EnableLyricsCheckBox.ToolTip = TrackSourcePolicy.GetLyricsTooltip(useSmtc);
+        _floatingSettingsPageView.EnableLyricsCheckBox.IsEnabled = TrackSourcePolicy.ShouldEnableLyrics(selectedSource);
+        _floatingSettingsPageView.EnableLyricsCheckBox.ToolTip = TrackSourcePolicy.GetLyricsTooltip(useSmtc);
     }
 
     private string GetSelectedTrackSource()
     {
-        if (TrackSourceComboBox?.SelectedItem is ComboBoxItem combo && combo.Tag is string tag)
+        if (_floatingSettingsPageView?.TrackSourceComboBox.SelectedItem is ComboBoxItem combo && combo.Tag is string tag)
         {
             return tag;
         }
@@ -2055,87 +2480,155 @@ public partial class MainWindow : Window
 
     private void ApplyOverlaySettingsFromControls()
     {
-        if (HorizontalSlider == null || BottomOffsetSlider == null || ScaleSlider == null)
+        OverlaySettings settings = new()
         {
-            return;
+            TrackSource = _activeSettings.TrackSource,
+            LeftPercent = _activeSettings.LeftPercent,
+            TopPercent = _activeSettings.TopPercent,
+            Scale = _activeSettings.Scale,
+            AppPrevHotkey = _activeSettings.AppPrevHotkey,
+            AppNextHotkey = _activeSettings.AppNextHotkey,
+            AppToggleHotkey = _activeSettings.AppToggleHotkey,
+            AppToggleOverlayHotkey = _activeSettings.AppToggleOverlayHotkey,
+            NeteasePrevHotkey = _activeSettings.NeteasePrevHotkey,
+            NeteaseNextHotkey = _activeSettings.NeteaseNextHotkey,
+            NeteaseToggleHotkey = _activeSettings.NeteaseToggleHotkey,
+            EnableGamepadHotkeys = _activeSettings.EnableGamepadHotkeys,
+            GamepadPrevHotkey = _activeSettings.GamepadPrevHotkey,
+            GamepadNextHotkey = _activeSettings.GamepadNextHotkey,
+            GamepadToggleHotkey = _activeSettings.GamepadToggleHotkey,
+            GamepadToggleOverlayHotkey = _activeSettings.GamepadToggleOverlayHotkey,
+            EnableRemoteControl = _activeSettings.EnableRemoteControl,
+            RemoteControlPort = _activeSettings.RemoteControlPort,
+            RemoteControlToken = _activeSettings.RemoteControlToken,
+            RemoteControlAllowLan = _activeSettings.RemoteControlAllowLan,
+            MinimizeToTray = _activeSettings.MinimizeToTray,
+            AutoStartOnBoot = _activeSettings.AutoStartOnBoot,
+            AlwaysShowOverlay = _activeSettings.AlwaysShowOverlay,
+            HideOverlayWhenPaused = _activeSettings.HideOverlayWhenPaused,
+            DiagnosticMode = _activeSettings.DiagnosticMode,
+            EnableLyrics = _activeSettings.EnableLyrics,
+            EnableCoverWingEffect = _activeSettings.EnableCoverWingEffect,
+            TitleColor = _activeSettings.TitleColor,
+            ArtistColor = _activeSettings.ArtistColor,
+            LyricsColor = _activeSettings.LyricsColor,
+            TitleOpacity = _activeSettings.TitleOpacity,
+            ArtistOpacity = _activeSettings.ArtistOpacity,
+            LyricsOpacity = _activeSettings.LyricsOpacity,
+            SmtcLyricDelayOverrideMs = _activeSettings.SmtcLyricDelayOverrideMs
+        };
+
+        if (_floatingSettingsPageView != null)
+        {
+            settings.TrackSource = GetSelectedTrackSource();
+            settings.LeftPercent = _floatingSettingsPageView.HorizontalSlider.Value / 100.0;
+            settings.TopPercent = _floatingSettingsPageView.BottomOffsetSlider.Value / 100.0;
+            settings.Scale = _floatingSettingsPageView.ScaleSlider.Value / 100.0;
+            settings.MinimizeToTray = _floatingSettingsPageView.MinimizeToTrayCheckBox.IsChecked == true;
+            settings.AutoStartOnBoot = _floatingSettingsPageView.AutoStartCheckBox.IsChecked == true;
+            settings.AlwaysShowOverlay = _floatingSettingsPageView.AlwaysShowCheckBox.IsChecked == true;
+            settings.HideOverlayWhenPaused = _floatingSettingsPageView.HideOverlayWhenPausedCheckBox.IsChecked == true;
+            settings.DiagnosticMode = _floatingSettingsPageView.DiagnosticCheckBox.IsChecked == true;
+            settings.EnableLyrics = _floatingSettingsPageView.EnableLyricsCheckBox.IsChecked == true;
+            settings.EnableCoverWingEffect = _floatingSettingsPageView.EnableCoverWingEffectCheckBox.IsChecked == true;
         }
 
-          OverlaySettings settings = new()
-          {
-            TrackSource = GetSelectedTrackSource(),
-            LeftPercent = HorizontalSlider.Value / 100.0,
-            TopPercent = BottomOffsetSlider.Value / 100.0,
-            Scale = ScaleSlider.Value / 100.0,
-            AppPrevHotkey = AppPrevHotkeyBox.Text.Trim(),
-            AppNextHotkey = AppNextHotkeyBox.Text.Trim(),
-            AppToggleHotkey = AppToggleHotkeyBox.Text.Trim(),
-            AppToggleOverlayHotkey = AppToggleOverlayHotkeyBox.Text.Trim(),
-            NeteasePrevHotkey = NeteasePrevHotkeyBox.Text.Trim(),
-            NeteaseNextHotkey = NeteaseNextHotkeyBox.Text.Trim(),
-            NeteaseToggleHotkey = NeteaseToggleHotkeyBox.Text.Trim(),
-            EnableGamepadHotkeys = EnableGamepadCheckBox.IsChecked == true,
-            GamepadPrevHotkey = GamepadPrevHotkeyBox.Text.Trim(),
-            GamepadNextHotkey = GamepadNextHotkeyBox.Text.Trim(),
-            GamepadToggleHotkey = GamepadToggleHotkeyBox.Text.Trim(),
-            GamepadToggleOverlayHotkey = GamepadToggleOverlayHotkeyBox.Text.Trim(),
-            MinimizeToTray = MinimizeToTrayCheckBox.IsChecked == true,
-            AutoStartOnBoot = AutoStartCheckBox.IsChecked == true,
-            AlwaysShowOverlay = AlwaysShowCheckBox.IsChecked == true,
-            HideOverlayWhenPaused = HideOverlayWhenPausedCheckBox.IsChecked == true,
-            DiagnosticMode = DiagnosticCheckBox.IsChecked == true,
-            EnableLyrics = EnableLyricsCheckBox.IsChecked == true,
-            EnableCoverWingEffect = EnableCoverWingEffectCheckBox.IsChecked == true,
-            TitleColor = GetSelectedTitleColor(),
-            ArtistColor = GetSelectedArtistColor(),
-              LyricsColor = GetSelectedLyricsColor(),
-              TitleOpacity = TitleOpacitySlider.Value / 100.0,
-              ArtistOpacity = ArtistOpacitySlider.Value / 100.0,
-              LyricsOpacity = LyricsOpacitySlider.Value / 100.0,
-              SmtcLyricDelayOverrideMs = _activeSettings.SmtcLyricDelayOverrideMs
-          };
-  
-          _activeSettings = settings;
-          _smtcLyricTimingController.SetDelayOverrideMilliseconds(settings.SmtcLyricDelayOverrideMs);
-          _overlayWindow.ApplySettings(settings);
-        ApplyGamepadSettings(settings);
-        ApplyAutoStart(settings.AutoStartOnBoot);
-        ApplyDisplayColors(settings);
+        if (_hotkeySettingsPageView != null)
+        {
+            settings.AppPrevHotkey = _hotkeySettingsPageView.AppPrevHotkeyBox.Text.Trim();
+            settings.AppNextHotkey = _hotkeySettingsPageView.AppNextHotkeyBox.Text.Trim();
+            settings.AppToggleHotkey = _hotkeySettingsPageView.AppToggleHotkeyBox.Text.Trim();
+            settings.AppToggleOverlayHotkey = _hotkeySettingsPageView.AppToggleOverlayHotkeyBox.Text.Trim();
+            settings.NeteasePrevHotkey = _hotkeySettingsPageView.NeteasePrevHotkeyBox.Text.Trim();
+            settings.NeteaseNextHotkey = _hotkeySettingsPageView.NeteaseNextHotkeyBox.Text.Trim();
+            settings.NeteaseToggleHotkey = _hotkeySettingsPageView.NeteaseToggleHotkeyBox.Text.Trim();
+            settings.EnableGamepadHotkeys = _hotkeySettingsPageView.EnableGamepadCheckBox.IsChecked == true;
+            settings.GamepadPrevHotkey = _hotkeySettingsPageView.GamepadPrevHotkeyBox.Text.Trim();
+            settings.GamepadNextHotkey = _hotkeySettingsPageView.GamepadNextHotkeyBox.Text.Trim();
+            settings.GamepadToggleHotkey = _hotkeySettingsPageView.GamepadToggleHotkeyBox.Text.Trim();
+            settings.GamepadToggleOverlayHotkey = _hotkeySettingsPageView.GamepadToggleOverlayHotkeyBox.Text.Trim();
+        }
+
+        if (_remoteControlPageView != null)
+        {
+            settings.EnableRemoteControl = _remoteControlPageView.EnableRemoteControlCheckBox.IsChecked == true;
+            settings.RemoteControlAllowLan = _remoteControlPageView.RemoteControlAllowLanCheckBox.IsChecked == true;
+            if (int.TryParse(_remoteControlPageView.RemoteControlPortBox.Text.Trim(), out int remotePort))
+            {
+                settings.RemoteControlPort = remotePort;
+            }
+        }
+
+        if (_themeSettingsPageView != null)
+        {
+            settings.TitleColor = GetSelectedTitleColor();
+            settings.ArtistColor = GetSelectedArtistColor();
+            settings.LyricsColor = GetSelectedLyricsColor();
+            settings.TitleOpacity = _themeSettingsPageView.TitleOpacitySlider.Value / 100.0;
+            settings.ArtistOpacity = _themeSettingsPageView.ArtistOpacitySlider.Value / 100.0;
+            settings.LyricsOpacity = _themeSettingsPageView.LyricsOpacitySlider.Value / 100.0;
+        }
+
+        _activeSettings = OverlaySettingsService.NormalizeForTests(settings);
+        _smtcLyricTimingController.SetDelayOverrideMilliseconds(settings.SmtcLyricDelayOverrideMs);
+        _overlayWindow.ApplySettings(_activeSettings);
+        ApplyGamepadSettings(_activeSettings);
+        ApplyAutoStart(_activeSettings.AutoStartOnBoot);
+        ApplyDisplayColors(_activeSettings);
         UpdateOverlayControlLabels();
+        UpdateRemoteControlPage();
     }
 
     private void UpdateOverlayControlLabels()
     {
-        if (HorizontalValueText == null || BottomOffsetValueText == null || ScaleValueText == null)
+        if (_floatingSettingsPageView != null)
         {
-            return;
+            _floatingSettingsPageView.HorizontalValueText.Text = $"{_floatingSettingsPageView.HorizontalSlider.Value:0}%";
+            _floatingSettingsPageView.BottomOffsetValueText.Text = $"{_floatingSettingsPageView.BottomOffsetSlider.Value:0}%";
+            _floatingSettingsPageView.ScaleValueText.Text = $"{_floatingSettingsPageView.ScaleSlider.Value:0}%";
         }
 
-        HorizontalValueText.Text = $"{HorizontalSlider.Value:0}%";
-        BottomOffsetValueText.Text = $"{BottomOffsetSlider.Value:0}%";
-        ScaleValueText.Text = $"{ScaleSlider.Value:0}%";
-        TitleOpacityValueText.Text = $"{TitleOpacitySlider.Value:0}%";
-        ArtistOpacityValueText.Text = $"{ArtistOpacitySlider.Value:0}%";
-        LyricsOpacityValueText.Text = $"{LyricsOpacitySlider.Value:0}%";
+        if (_themeSettingsPageView != null)
+        {
+            _themeSettingsPageView.TitleOpacityValueText.Text = $"{_themeSettingsPageView.TitleOpacitySlider.Value:0}%";
+            _themeSettingsPageView.ArtistOpacityValueText.Text = $"{_themeSettingsPageView.ArtistOpacitySlider.Value:0}%";
+            _themeSettingsPageView.LyricsOpacityValueText.Text = $"{_themeSettingsPageView.LyricsOpacitySlider.Value:0}%";
+        }
+
+        if (_remoteControlPageView != null)
+        {
+            _remoteControlPageView.RemoteControlPortBox.Text = _activeSettings.RemoteControlPort.ToString();
+        }
     }
 
     private void SelectTitleColor(string color)
     {
+        if (_themeSettingsPageView == null)
+        {
+            return;
+        }
+
         color = color.ToUpperInvariant();
-        TitleColor_White.IsChecked = color == "#FFFFFF";
-        TitleColor_Light.IsChecked = color == "#D0E0F0";
-        TitleColor_Yellow.IsChecked = color == "#F0E080";
-        TitleColor_Green.IsChecked = color == "#90EE90";
-        TitleColor_Orange.IsChecked = color == "#FFB366";
+        _themeSettingsPageView.TitleColor_White.IsChecked = color == "#FFFFFF";
+        _themeSettingsPageView.TitleColor_Light.IsChecked = color == "#D0E0F0";
+        _themeSettingsPageView.TitleColor_Yellow.IsChecked = color == "#F0E080";
+        _themeSettingsPageView.TitleColor_Green.IsChecked = color == "#90EE90";
+        _themeSettingsPageView.TitleColor_Orange.IsChecked = color == "#FFB366";
     }
 
     private void SelectArtistColor(string color)
     {
+        if (_themeSettingsPageView == null)
+        {
+            return;
+        }
+
         color = color.ToUpperInvariant();
-        ArtistColor_Light.IsChecked = color == "#C0D0E0";
-        ArtistColor_White.IsChecked = color == "#FFFFFF";
-        ArtistColor_Yellow.IsChecked = color == "#F0E080";
-        ArtistColor_Green.IsChecked = color == "#90EE90";
-        ArtistColor_Orange.IsChecked = color == "#FFB366";
+        _themeSettingsPageView.ArtistColor_Light.IsChecked = color == "#C0D0E0";
+        _themeSettingsPageView.ArtistColor_White.IsChecked = color == "#FFFFFF";
+        _themeSettingsPageView.ArtistColor_Yellow.IsChecked = color == "#F0E080";
+        _themeSettingsPageView.ArtistColor_Green.IsChecked = color == "#90EE90";
+        _themeSettingsPageView.ArtistColor_Orange.IsChecked = color == "#FFB366";
     }
 
     private string GetSelectedTitleColor()
@@ -2160,12 +2653,17 @@ public partial class MainWindow : Window
 
     private void SelectLyricsColor(string color)
     {
+        if (_themeSettingsPageView == null)
+        {
+            return;
+        }
+
         color = color.ToUpperInvariant();
-        LyricsColor_Light.IsChecked = color == "#A0B8D0";
-        LyricsColor_White.IsChecked = color == "#FFFFFF";
-        LyricsColor_Yellow.IsChecked = color == "#F0E080";
-        LyricsColor_Green.IsChecked = color == "#90EE90";
-        LyricsColor_Orange.IsChecked = color == "#FFB366";
+        _themeSettingsPageView.LyricsColor_Light.IsChecked = color == "#A0B8D0";
+        _themeSettingsPageView.LyricsColor_White.IsChecked = color == "#FFFFFF";
+        _themeSettingsPageView.LyricsColor_Yellow.IsChecked = color == "#F0E080";
+        _themeSettingsPageView.LyricsColor_Green.IsChecked = color == "#90EE90";
+        _themeSettingsPageView.LyricsColor_Orange.IsChecked = color == "#FFB366";
     }
 
     private string GetSelectedLyricsColor()
@@ -2180,17 +2678,25 @@ public partial class MainWindow : Window
 
     private void ApplyDisplayColors(OverlaySettings settings)
     {
-        CurrentTitle.ClearValue(TextBlock.ForegroundProperty);
-        CurrentTitle.ClearValue(UIElement.OpacityProperty);
-        CurrentArtist.ClearValue(TextBlock.ForegroundProperty);
-        CurrentArtist.ClearValue(UIElement.OpacityProperty);
+        if (_nowPlayingPageView != null)
+        {
+            _nowPlayingPageView.CurrentTitle.ClearValue(TextBlock.ForegroundProperty);
+            _nowPlayingPageView.CurrentTitle.ClearValue(UIElement.OpacityProperty);
+            _nowPlayingPageView.CurrentArtist.ClearValue(TextBlock.ForegroundProperty);
+            _nowPlayingPageView.CurrentArtist.ClearValue(UIElement.OpacityProperty);
+        }
+
+        if (_themeSettingsPageView == null)
+        {
+            return;
+        }
 
         try
         {
             var titleColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(settings.TitleColor);
             var titleBrush = new System.Windows.Media.SolidColorBrush(titleColor);
-            ThemePreviewTitle.Foreground = titleBrush.Clone();
-            ThemePreviewTitle.Opacity = settings.TitleOpacity;
+            _themeSettingsPageView.ThemePreviewTitle.Foreground = titleBrush.Clone();
+            _themeSettingsPageView.ThemePreviewTitle.Opacity = settings.TitleOpacity;
         }
         catch { }
 
@@ -2198,16 +2704,16 @@ public partial class MainWindow : Window
         {
             var artistColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(settings.ArtistColor);
             var artistBrush = new System.Windows.Media.SolidColorBrush(artistColor);
-            ThemePreviewArtist.Foreground = artistBrush.Clone();
-            ThemePreviewArtist.Opacity = settings.ArtistOpacity;
+            _themeSettingsPageView.ThemePreviewArtist.Foreground = artistBrush.Clone();
+            _themeSettingsPageView.ThemePreviewArtist.Opacity = settings.ArtistOpacity;
         }
         catch { }
 
         try
         {
             var lyricsColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(settings.LyricsColor);
-            ThemePreviewLyrics.Foreground = new System.Windows.Media.SolidColorBrush(lyricsColor);
-            ThemePreviewLyrics.Opacity = settings.LyricsOpacity;
+            _themeSettingsPageView.ThemePreviewLyrics.Foreground = new System.Windows.Media.SolidColorBrush(lyricsColor);
+            _themeSettingsPageView.ThemePreviewLyrics.Opacity = settings.LyricsOpacity;
         }
         catch { }
     }
@@ -2255,7 +2761,7 @@ public partial class MainWindow : Window
         _hotkeyService = new GlobalHotkeyService(this);
         _hotkeyService.NextRequested += async (_, _) => await NextAsync();
         _hotkeyService.PrevRequested += async (_, _) => await PrevAsync();
-        _hotkeyService.TogglePlayPauseRequested += (_, _) => TogglePlayPause();
+        _hotkeyService.TogglePlayPauseRequested += async (_, _) => await TogglePlayPauseAsync();
         _hotkeyService.ToggleOverlayRequested += async (_, _) => await ToggleOverlayVisibilityAsync();
 
         return _hotkeyService.Register(

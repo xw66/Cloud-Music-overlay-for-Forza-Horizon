@@ -6,7 +6,7 @@ namespace HorizonRadioOverlay.Services;
 
 public sealed class CoverCacheService
 {
-    private const int MemoryCapacity = 80;
+    private const int MemoryCapacity = 24;
     private readonly Dictionary<string, byte[]> _cache = new(StringComparer.Ordinal);
     private readonly LinkedList<string> _order = new();
     private readonly string _diskCacheDir;

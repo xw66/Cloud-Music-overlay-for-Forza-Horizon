@@ -8,6 +8,8 @@ namespace HorizonRadioOverlay.Services;
 public sealed class SmtcTrackService
 {
     private readonly DiagnosticService? _diagnostic;
+    private readonly object _managerLock = new();
+    private Task<GlobalSystemMediaTransportControlsSessionManager>? _managerTask;
 
     public SmtcTrackService(DiagnosticService? diagnostic = null)
     {
@@ -26,7 +28,7 @@ public sealed class SmtcTrackService
         {
             try
             {
-                GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+                GlobalSystemMediaTransportControlsSessionManager manager = await GetManagerAsync();
                 GlobalSystemMediaTransportControlsSession? session = manager.GetCurrentSession();
                 if (session == null)
                 {
@@ -111,7 +113,7 @@ public sealed class SmtcTrackService
 
         try
         {
-            GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+            GlobalSystemMediaTransportControlsSessionManager manager = await GetManagerAsync();
             GlobalSystemMediaTransportControlsSession? session = manager.GetCurrentSession();
             if (session == null)
             {
@@ -135,7 +137,7 @@ public sealed class SmtcTrackService
 
         try
         {
-            GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+            GlobalSystemMediaTransportControlsSessionManager manager = await GetManagerAsync();
             GlobalSystemMediaTransportControlsSession? session = manager.GetCurrentSession();
             if (session == null)
             {
@@ -159,7 +161,7 @@ public sealed class SmtcTrackService
 
         try
         {
-            GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+            GlobalSystemMediaTransportControlsSessionManager manager = await GetManagerAsync();
             GlobalSystemMediaTransportControlsSession? session = manager.GetCurrentSession();
             if (session == null)
             {
@@ -196,7 +198,7 @@ public sealed class SmtcTrackService
 
         try
         {
-            GlobalSystemMediaTransportControlsSessionManager manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+            GlobalSystemMediaTransportControlsSessionManager manager = await GetManagerAsync();
             GlobalSystemMediaTransportControlsSession? session = manager.GetCurrentSession();
             if (session == null) return null;
 
@@ -230,6 +232,39 @@ public sealed class SmtcTrackService
         }
 
         return 0;
+    }
+
+    [SupportedOSPlatform("windows10.0.17763")]
+    private async Task<GlobalSystemMediaTransportControlsSessionManager> GetManagerAsync()
+    {
+        Task<GlobalSystemMediaTransportControlsSessionManager> managerTask;
+        lock (_managerLock)
+        {
+            managerTask = _managerTask ??= RequestManagerAsync();
+        }
+
+        try
+        {
+            return await managerTask;
+        }
+        catch
+        {
+            lock (_managerLock)
+            {
+                if (ReferenceEquals(_managerTask, managerTask))
+                {
+                    _managerTask = null;
+                }
+            }
+
+            throw;
+        }
+    }
+
+    [SupportedOSPlatform("windows10.0.17763")]
+    private static async Task<GlobalSystemMediaTransportControlsSessionManager> RequestManagerAsync()
+    {
+        return await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
     }
 
     [SupportedOSPlatform("windows10.0.17763")]

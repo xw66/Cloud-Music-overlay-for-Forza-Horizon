@@ -17,41 +17,50 @@ namespace HorizonRadioOverlay;
 public partial class OverlayWindow : Window
 {
     private const int GwlExstyle = -20;
+    private const uint WdaNone = 0x00000000;
     private static readonly IntPtr HwndTopmost = new(-1);
+    private static readonly IntPtr HwndNotTopmost = new(-2);
 
     private CancellationTokenSource? _hideCts;
+    private bool _isContentVisible;
     private readonly OverlayAnimationQueue _animQueue;
     private readonly List<CoverFlowAlbum> _coverFlowHistory = new();
     private readonly System.Windows.Threading.DispatcherTimer _topmostRefreshTimer;
+    private DateTime _boostTopmostUntilUtc;
+    private ImageBrush? _coverFlowCenterBrush;
     public const double BaseWidth = 210;
     private const double CoverFlowWidth = 760;
     public const double BaseHeight = 198;
     private const double CoverFlowHeight = 378;
     private const int CoverFlowCapacity = 9;
-    private const int CoverFlowCenterIndex = 3;
-    private const double CoverFlowCenterX = 312;
     private const double CenterCoverSize = 128;
+    private const double CoverFlowCoverRowHeight = 236;
+    private const int TrackSwitchFadeOutMilliseconds = 750;
+    private const int TrackFadeInMilliseconds = 1200;
+    private const int AutoHideFadeOutMilliseconds = 1400;
+    private const int CoverFlowCenterFadeOutMilliseconds = 450;
+    private const int CoverFlowCenterFadeInMilliseconds = 650;
+    private const int AnimationSettleDelayMilliseconds = 20;
 
     public OverlaySettings CurrentSettings { get; private set; } = new();
+    public bool IsContentVisible => _isContentVisible;
 
     public OverlayWindow()
     {
         InitializeComponent();
         ApplySettings(CurrentSettings);
-        Visibility = Visibility.Hidden;
 
         _animQueue = new OverlayAnimationQueue(Dispatcher, OnAnimationRequest);
         _topmostRefreshTimer = new System.Windows.Threading.DispatcherTimer
         {
             Interval = OverlayTopmostPolicy.ReassertInterval
         };
-        _topmostRefreshTimer.Tick += (_, _) => EnsureTopmost();
+        _topmostRefreshTimer.Tick += (_, _) => EnsureTopmostFromTimer();
         IsVisibleChanged += (_, _) =>
         {
             if (Visibility == Visibility.Visible)
             {
-                EnsureTopmost();
-                StartTopmostRefresh();
+                BoostTopmostRefresh();
             }
             else
             {
@@ -60,6 +69,7 @@ public partial class OverlayWindow : Window
         };
         SourceInitialized += OverlayWindow_SourceInitialized;
         Closed += (_, _) => StopTopmostRefresh();
+        Visibility = Visibility.Hidden;
     }
 
     public void ApplySettings(OverlaySettings settings)
@@ -84,7 +94,7 @@ public partial class OverlayWindow : Window
         double layoutHeight = CurrentSettings.EnableCoverWingEffect ? CoverFlowHeight : BaseHeight;
         OverlayRoot.Width = layoutWidth;
         OverlayRoot.Height = layoutHeight;
-        CoverRow.Height = new GridLength(CurrentSettings.EnableCoverWingEffect ? 286 : 106);
+        CoverRow.Height = new GridLength(CurrentSettings.EnableCoverWingEffect ? CoverFlowCoverRowHeight : 106);
         CoverFlowViewport.Visibility = CurrentSettings.EnableCoverWingEffect ? Visibility.Visible : Visibility.Collapsed;
         CoverFrame.Visibility = CurrentSettings.EnableCoverWingEffect ? Visibility.Collapsed : Visibility.Visible;
         InfoBackdrop.Visibility = CurrentSettings.EnableCoverWingEffect ? Visibility.Collapsed : Visibility.Visible;
@@ -147,6 +157,10 @@ public partial class OverlayWindow : Window
         int cy,
         uint uFlags);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
+
     public Task ShowTrackAsync(TrackInfo track)
     {
         _animQueue.Enqueue(track);
@@ -158,12 +172,14 @@ public partial class OverlayWindow : Window
         _hideCts?.Cancel();
         _hideCts = new CancellationTokenSource();
 
-        bool isCurrentlyVisible = Visibility == Visibility.Visible && OverlayRoot.Opacity > 0.5;
+        bool isCurrentlyVisible = _isContentVisible && OverlayRoot.Opacity > 0.5;
+        bool transitionOnlyCenterCover = isCurrentlyVisible && CurrentSettings.EnableCoverWingEffect;
 
-        if (isCurrentlyVisible)
+        if (isCurrentlyVisible && !transitionOnlyCenterCover)
         {
-            OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null);
             double currentOpacity = OverlayRoot.Opacity;
+            OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null);
+            OverlayRoot.Opacity = currentOpacity;
 
             if (currentOpacity > 0.01)
             {
@@ -171,38 +187,56 @@ public partial class OverlayWindow : Window
                 {
                     From = currentOpacity,
                     To = 0,
-                    Duration = TimeSpan.FromMilliseconds(200),
+                    Duration = TimeSpan.FromMilliseconds(TrackSwitchFadeOutMilliseconds),
                     EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
                 };
                 OverlayRoot.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-                await Task.Delay(210, token);
+                await Task.Delay(TrackSwitchFadeOutMilliseconds + AnimationSettleDelayMilliseconds, token);
                 if (token.IsCancellationRequested) return;
             }
         }
 
         if (!token.IsCancellationRequested)
         {
-            OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null);
-            OverlayRoot.Opacity = 0;
+            if (!transitionOnlyCenterCover)
+            {
+                OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null);
+                OverlayRoot.Opacity = 0;
+            }
 
             TitleText.Text = track.Name;
             ArtistText.Text = track.Artist;
-            SetCover(track.CoverBytes);
+
+            ImageSource? coverImage = CreateCoverImage(track.CoverBytes);
+            if (transitionOnlyCenterCover)
+            {
+                await SetCoverFlowCoverWithAnimationAsync(coverImage, token);
+            }
+            else
+            {
+                SetCover(coverImage);
+            }
+
             ApplyTextColors();
 
             Show();
             Visibility = Visibility.Visible;
-            EnsureTopmost();
-            StartTopmostRefresh();
+            _isContentVisible = true;
+            BoostTopmostRefresh();
 
-            var fadeIn = new DoubleAnimation
+            if (!transitionOnlyCenterCover)
             {
-                From = 0,
-                To = 1,
-                Duration = TimeSpan.FromMilliseconds(250),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            OverlayRoot.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+                var fadeIn = new DoubleAnimation
+                {
+                    From = 0,
+                    To = 1,
+                    Duration = TimeSpan.FromMilliseconds(TrackFadeInMilliseconds),
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                OverlayRoot.Opacity = 1;
+                OverlayRoot.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+            }
+
             RootTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
             RootTransform.Y = 0;
 
@@ -220,7 +254,7 @@ public partial class OverlayWindow : Window
             await Task.Delay(TimeSpan.FromMilliseconds(5000), token);
             if (!token.IsCancellationRequested)
             {
-                await HideWithAnimationAsync();
+                await HideWithAnimationAsync(token);
             }
         }
         catch (OperationCanceledException)
@@ -228,33 +262,80 @@ public partial class OverlayWindow : Window
         }
     }
 
-    private void SetCover(byte[]? coverBytes)
+    private ImageSource? CreateCoverImage(byte[]? coverBytes)
     {
         if (coverBytes == null || coverBytes.Length == 0)
         {
-            CoverImage.Source = null;
-            UpdateCoverFlowAlbums(null);
-            return;
+            return null;
         }
 
         try
         {
-            BitmapSource image = CreateSquareCoverSource(coverBytes);
-
-            CoverImage.Source = image;
-            UpdateCoverFlowAlbums(image);
+            return CreateSquareCoverSource(coverBytes);
         }
         catch
         {
-            CoverImage.Source = null;
-            UpdateCoverFlowAlbums(null);
+            return null;
         }
+    }
+
+    private void SetCover(ImageSource? coverImage)
+    {
+        CoverImage.Source = coverImage;
+        UpdateCoverFlowAlbums(coverImage);
+    }
+
+    private async Task SetCoverFlowCoverWithAnimationAsync(ImageSource? coverImage, CancellationToken token)
+    {
+        ImageBrush? currentCenterBrush = _coverFlowCenterBrush;
+        bool hasCurrentCover = currentCenterBrush != null && currentCenterBrush.Opacity > 0.01;
+
+        if (hasCurrentCover)
+        {
+            double currentOpacity = currentCenterBrush!.Opacity;
+            currentCenterBrush.BeginAnimation(Brush.OpacityProperty, null);
+            currentCenterBrush.Opacity = currentOpacity;
+
+            DoubleAnimation fadeOut = new()
+            {
+                From = currentOpacity,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(CoverFlowCenterFadeOutMilliseconds),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+            };
+            currentCenterBrush.BeginAnimation(Brush.OpacityProperty, fadeOut);
+            await Task.Delay(CoverFlowCenterFadeOutMilliseconds + AnimationSettleDelayMilliseconds, token);
+        }
+
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
+
+        CoverImage.Source = coverImage;
+        UpdateCoverFlowAlbums(coverImage);
+
+        if (_coverFlowCenterBrush == null)
+        {
+            return;
+        }
+
+        _coverFlowCenterBrush.BeginAnimation(Brush.OpacityProperty, null);
+        _coverFlowCenterBrush.Opacity = hasCurrentCover ? 0 : 1;
+        DoubleAnimation fadeIn = new()
+        {
+            From = hasCurrentCover ? 0 : 1,
+            To = 1,
+            Duration = TimeSpan.FromMilliseconds(hasCurrentCover ? CoverFlowCenterFadeInMilliseconds : 1),
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+        };
+        _coverFlowCenterBrush.BeginAnimation(Brush.OpacityProperty, fadeIn);
     }
 
     private void UpdateCoverFlowAlbums(ImageSource? coverImage)
     {
-        string title = string.IsNullOrWhiteSpace(TitleText.Text) ? "正在播放" : TitleText.Text;
-        string artist = string.IsNullOrWhiteSpace(ArtistText.Text) ? "网易云音乐" : ArtistText.Text;
+        string title = GetCurrentTitle();
+        string artist = GetCurrentArtist();
         string key = GetCurrentTrackKey();
 
         CoverFlowAlbum currentAlbum = new()
@@ -280,16 +361,25 @@ public partial class OverlayWindow : Window
         RenderCoverFlow(currentAlbum);
     }
 
+    private string GetCurrentTitle()
+    {
+        return string.IsNullOrWhiteSpace(TitleText.Text) ? "正在播放" : TitleText.Text.Trim();
+    }
+
+    private string GetCurrentArtist()
+    {
+        return string.IsNullOrWhiteSpace(ArtistText.Text) ? "网易云音乐" : ArtistText.Text.Trim();
+    }
+
     private string GetCurrentTrackKey()
     {
-        string title = string.IsNullOrWhiteSpace(TitleText.Text) ? "正在播放" : TitleText.Text.Trim();
-        string artist = string.IsNullOrWhiteSpace(ArtistText.Text) ? "网易云音乐" : ArtistText.Text.Trim();
-        return $"{title}|{artist}";
+        return $"{GetCurrentTitle()}|{GetCurrentArtist()}";
     }
 
     private void RenderCoverFlow(CoverFlowAlbum currentAlbum)
     {
         CoverFlowViewport.Children.Clear();
+        _coverFlowCenterBrush = null;
         AddCoverFlowLights();
 
         List<CoverFlowAlbum> previous = _coverFlowHistory
@@ -318,7 +408,7 @@ public partial class OverlayWindow : Window
             AddAlbumPlane(album.CoverImage, CreateCoverFlowSlot(offset));
         }
 
-        AddAlbumPlane(currentAlbum.CoverImage, CreateCenterCoverFlowSlot());
+        _coverFlowCenterBrush = AddAlbumPlane(currentAlbum.CoverImage, CreateCenterCoverFlowSlot());
     }
 
     private void AddCoverFlowLights()
@@ -334,13 +424,13 @@ public partial class OverlayWindow : Window
         });
     }
 
-    private void AddAlbumPlane(
+    private ImageBrush? AddAlbumPlane(
         ImageSource? image,
         (double X, double Y, double Z, double Size, double Scale, double Rotation, double Opacity, int ZIndex, double Brightness) slot)
     {
         if (image == null)
         {
-            return;
+            return null;
         }
 
         double width = slot.Size;
@@ -443,6 +533,7 @@ public partial class OverlayWindow : Window
         group.Children.Add(edgeModel);
 
         CoverFlowViewport.Children.Add(new ModelVisual3D { Content = group });
+        return coverBrush;
     }
 
     private static (double X, double Y, double Z, double Size, double Scale, double Rotation, double Opacity, int ZIndex, double Brightness) CreateCenterCoverFlowSlot()
@@ -554,13 +645,27 @@ public partial class OverlayWindow : Window
     {
         if (!CurrentSettings.EnableLyrics || string.IsNullOrWhiteSpace(lyrics))
         {
-            LyricsContainer.Visibility = Visibility.Collapsed;
-            LyricsText.Text = string.Empty;
+            if (LyricsContainer.Visibility != Visibility.Collapsed)
+            {
+                LyricsContainer.Visibility = Visibility.Collapsed;
+            }
+
+            if (!string.IsNullOrEmpty(LyricsText.Text))
+            {
+                LyricsText.Text = string.Empty;
+            }
         }
         else
         {
-            LyricsText.Text = lyrics;
-            LyricsContainer.Visibility = Visibility.Visible;
+            if (LyricsContainer.Visibility != Visibility.Visible)
+            {
+                LyricsContainer.Visibility = Visibility.Visible;
+            }
+
+            if (!string.Equals(LyricsText.Text, lyrics, StringComparison.Ordinal))
+            {
+                LyricsText.Text = lyrics;
+            }
         }
     }
 
@@ -569,36 +674,78 @@ public partial class OverlayWindow : Window
         var hwnd = new WindowInteropHelper(this).Handle;
         int exStyle = GetWindowLong(hwnd, GwlExstyle);
         SetWindowLong(hwnd, GwlExstyle, OverlayTopmostPolicy.ApplyExtendedStyle(exStyle));
-        EnsureTopmost();
+        _ = SetWindowDisplayAffinity(hwnd, WdaNone);
+        BoostTopmostRefresh();
     }
 
     public void UpdateCover(byte[]? coverBytes)
     {
-        SetCover(coverBytes);
+        SetCover(CreateCoverImage(coverBytes));
     }
 
-    private async Task HideWithAnimationAsync()
+    private async Task HideWithAnimationAsync(CancellationToken token)
     {
         StopTopmostRefresh();
+        double currentOpacity = OverlayRoot.Opacity;
+        OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null);
+        OverlayRoot.Opacity = currentOpacity;
+
+        if (currentOpacity <= 0.01)
+        {
+            OverlayRoot.Opacity = 0;
+            _isContentVisible = false;
+            Hide();
+            return;
+        }
+
         DoubleAnimation fadeOut = new()
         {
-            From = 1,
+            From = currentOpacity,
             To = 0,
-            Duration = TimeSpan.FromMilliseconds(600),
+            Duration = TimeSpan.FromMilliseconds(AutoHideFadeOutMilliseconds),
             EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
         };
 
         OverlayRoot.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-        await Task.Delay(610);
+        await Task.Delay(AutoHideFadeOutMilliseconds + AnimationSettleDelayMilliseconds, token);
+        OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null);
+        OverlayRoot.Opacity = 0;
+        _isContentVisible = false;
         Hide();
     }
 
-    private void EnsureTopmost()
+    public async Task ConcealAsync()
+    {
+        _hideCts?.Cancel();
+        _hideCts = new CancellationTokenSource();
+
+        try
+        {
+            await HideWithAnimationAsync(_hideCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void EnsureTopmost(bool forceReorder = false)
     {
         IntPtr hwnd = new WindowInteropHelper(this).Handle;
         if (hwnd == IntPtr.Zero)
         {
             return;
+        }
+
+        if (forceReorder)
+        {
+            _ = SetWindowPos(
+                hwnd,
+                HwndNotTopmost,
+                0,
+                0,
+                0,
+                0,
+                OverlayTopmostPolicy.GetTopmostFlags());
         }
 
         _ = SetWindowPos(
@@ -611,8 +758,28 @@ public partial class OverlayWindow : Window
             OverlayTopmostPolicy.GetTopmostFlags());
     }
 
-    private void StartTopmostRefresh()
+    private void EnsureTopmostFromTimer()
     {
+        bool boosted = DateTime.UtcNow < _boostTopmostUntilUtc;
+        EnsureTopmost(forceReorder: boosted);
+        if (!boosted && _topmostRefreshTimer.Interval != OverlayTopmostPolicy.ReassertInterval)
+        {
+            _topmostRefreshTimer.Interval = OverlayTopmostPolicy.ReassertInterval;
+        }
+    }
+
+    private void BoostTopmostRefresh()
+    {
+        _boostTopmostUntilUtc = DateTime.UtcNow + OverlayTopmostPolicy.BoostedReassertDuration;
+        EnsureTopmost(forceReorder: true);
+        StartTopmostRefresh(boosted: true);
+    }
+
+    private void StartTopmostRefresh(bool boosted = false)
+    {
+        _topmostRefreshTimer.Interval = boosted
+            ? OverlayTopmostPolicy.BoostedReassertInterval
+            : OverlayTopmostPolicy.ReassertInterval;
         if (!_topmostRefreshTimer.IsEnabled)
         {
             _topmostRefreshTimer.Start();

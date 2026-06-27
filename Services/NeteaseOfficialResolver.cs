@@ -9,6 +9,9 @@ namespace HorizonRadioOverlay.Services;
 
 public sealed class NeteaseOfficialResolver
 {
+    private const int SongCacheCapacity = 64;
+    private const int TrackCacheCapacity = 96;
+
     private static readonly HttpClient SharedHttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(5)
@@ -23,6 +26,8 @@ public sealed class NeteaseOfficialResolver
 
     private readonly ConcurrentDictionary<string, ResolvedSong> _songCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ResolvedSong> _trackCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentQueue<string> _songCacheOrder = new();
+    private readonly ConcurrentQueue<string> _trackCacheOrder = new();
     private readonly DiagnosticService _diagnostic;
     private readonly HttpClient _httpClient;
 
@@ -48,7 +53,7 @@ public sealed class NeteaseOfficialResolver
             {
                 if (ShouldAcceptPreferredIdResult(title, artist, cachedById))
                 {
-                    _trackCache[trackKey] = cachedById;
+                    CacheTrack(trackKey, cachedById);
                     _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-resolver", "song-cache",
                         ("status", "hit"), ("songId", cachedById.SongId)));
                     return cachedById;
@@ -101,8 +106,33 @@ public sealed class NeteaseOfficialResolver
             return;
         }
 
-        _songCache[resolved.SongId] = resolved;
+        CacheSong(resolved.SongId, resolved);
+        CacheTrack(trackKey, resolved);
+    }
+
+    private void CacheSong(string songId, ResolvedSong resolved)
+    {
+        _songCache[songId] = resolved;
+        _songCacheOrder.Enqueue(songId);
+        TrimCache(_songCache, _songCacheOrder, SongCacheCapacity);
+    }
+
+    private void CacheTrack(string trackKey, ResolvedSong resolved)
+    {
         _trackCache[trackKey] = resolved;
+        _trackCacheOrder.Enqueue(trackKey);
+        TrimCache(_trackCache, _trackCacheOrder, TrackCacheCapacity);
+    }
+
+    private static void TrimCache(
+        ConcurrentDictionary<string, ResolvedSong> cache,
+        ConcurrentQueue<string> order,
+        int capacity)
+    {
+        while (cache.Count > capacity && order.TryDequeue(out string? oldest))
+        {
+            cache.TryRemove(oldest, out _);
+        }
     }
 
     internal static bool ShouldAcceptPreferredIdResult(string inputTitle, string inputArtist, ResolvedSong candidate)

@@ -12,7 +12,11 @@ namespace HorizonRadioOverlay;
 [SupportedOSPlatform("windows")]
 public partial class App : Application
 {
+    private const string SingleInstanceMutexName = @"Local\HorizonRadioOverlay.SingleInstance";
+
     private MainWindow? _mainWindow;
+    private Mutex? _singleInstanceMutex;
+    private bool _ownsSingleInstanceMutex;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -44,6 +48,18 @@ public partial class App : Application
                 return;
             }
 
+            _singleInstanceMutex = new Mutex(
+                initiallyOwned: true,
+                SingleInstanceMutexName,
+                out _ownsSingleInstanceMutex);
+            if (!_ownsSingleInstanceMutex)
+            {
+                _singleInstanceMutex.Dispose();
+                _singleInstanceMutex = null;
+                Shutdown();
+                return;
+            }
+
             bool startHiddenToTray = AppLaunchPolicy.ShouldStartHiddenToTray(e.Args);
 
             _mainWindow = new MainWindow(startHiddenToTray);
@@ -70,6 +86,25 @@ public partial class App : Application
             catch { }
             throw;
         }
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        if (_ownsSingleInstanceMutex)
+        {
+            try
+            {
+                _singleInstanceMutex?.ReleaseMutex();
+            }
+            catch (ApplicationException)
+            {
+            }
+        }
+
+        _singleInstanceMutex?.Dispose();
+        _singleInstanceMutex = null;
+        _ownsSingleInstanceMutex = false;
+        base.OnExit(e);
     }
 
     private async Task RunCoverFlowScreenshotAsync(string outputPath)

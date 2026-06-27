@@ -16,6 +16,7 @@ public sealed class MainShellViewModel : INotifyPropertyChanged
             new NavigationItem { Key = "NowPlaying", Title = UiText.NavNowPlaying, IconGlyph = "\uE189", Description = UiText.NavNowPlayingDesc },
             new NavigationItem { Key = "FloatingSettings", Title = UiText.NavFloatingSettings, IconGlyph = "\uE718", Description = UiText.NavFloatingSettingsDesc },
             new NavigationItem { Key = "Hotkeys", Title = UiText.NavHotkeys, IconGlyph = "\uE765", Description = UiText.NavHotkeysDesc },
+            new NavigationItem { Key = "RemoteControl", Title = UiText.NavRemoteControl, IconGlyph = "\uE8EA", Description = UiText.NavRemoteControlDesc },
             new NavigationItem { Key = "Theme", Title = UiText.NavTheme, IconGlyph = "\uE790", Description = UiText.NavThemeDesc },
             new NavigationItem { Key = "Logs", Title = UiText.NavLogs, IconGlyph = "\uE7BA", Description = UiText.NavLogsDesc },
             new NavigationItem { Key = "About", Title = UiText.NavAbout, IconGlyph = "\uE946", Description = UiText.NavAboutDesc }

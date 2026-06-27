@@ -2,6 +2,9 @@ bin/
 obj/
 publish/
 artifacts/
+tmp_orpheus/
+tmp_orpheus.zip
+tests/**/TestResults/
 
 .vs/
 .vscode/

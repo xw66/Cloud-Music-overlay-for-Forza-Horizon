@@ -11,7 +11,7 @@ public sealed class OverlayTopmostPolicyTests
 
         int result = OverlayTopmostPolicy.ApplyExtendedStyle(existingStyle);
 
-        Assert.Equal(existingStyle | 0x00080000 | 0x00000020 | 0x00000080, result);
+        Assert.Equal(existingStyle | 0x00080000 | 0x00000020 | 0x08000000 | 0x00000080, result);
     }
 
     [Fact]
@@ -19,12 +19,19 @@ public sealed class OverlayTopmostPolicyTests
     {
         uint flags = OverlayTopmostPolicy.GetTopmostFlags();
 
-        Assert.Equal(0x0001u | 0x0002u | 0x0010u | 0x0200u | 0x0040u, flags);
+        Assert.Equal(0x0001u | 0x0002u | 0x0010u | 0x0200u | 0x0400u | 0x0040u, flags);
     }
 
     [Fact]
     public void ReassertInterval_uses_low_frequency_refresh()
     {
-        Assert.Equal(TimeSpan.FromSeconds(2), OverlayTopmostPolicy.ReassertInterval);
+        Assert.Equal(TimeSpan.FromSeconds(1), OverlayTopmostPolicy.ReassertInterval);
+    }
+
+    [Fact]
+    public void BoostedReassert_uses_short_high_frequency_recovery()
+    {
+        Assert.Equal(TimeSpan.FromMilliseconds(120), OverlayTopmostPolicy.BoostedReassertInterval);
+        Assert.Equal(TimeSpan.FromSeconds(12), OverlayTopmostPolicy.BoostedReassertDuration);
     }
 }

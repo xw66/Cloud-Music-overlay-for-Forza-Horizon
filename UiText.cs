@@ -22,6 +22,8 @@ public static class UiText
     public const string NavFloatingSettingsDesc = "\u4F4D\u7F6E\u3001\u6765\u6E90\u4E0E\u663E\u793A\u5F00\u5173";
     public const string NavHotkeys = "\u5FEB\u6377\u952E\u8BBE\u7F6E";
     public const string NavHotkeysDesc = "\u952E\u76D8\u4E0E\u624B\u67C4\u5FEB\u6377\u952E";
+    public const string NavRemoteControl = "\u624B\u673A\u9065\u63A7";
+    public const string NavRemoteControlDesc = "\u540C Wi-Fi \u624B\u673A\u63A7\u5236\u5207\u6B4C";
     public const string NavTheme = "\u4E3B\u9898\u8BBE\u7F6E";
     public const string NavThemeDesc = "\u989C\u8272\u4E0E\u9884\u89C8";
     public const string NavLogs = "\u65E5\u5FD7";
@@ -66,9 +68,20 @@ public static class UiText
     public const string InAppHotkeysDesc = "\u5728\u4E3B\u7A0B\u5E8F\u5185\u6355\u83B7\uFF0C\u63A7\u5236\u5F53\u524D\u6765\u6E90\u3002";
     public const string NeteaseForwardHotkeys = "\u7F51\u6613\u4E91\u8F6C\u53D1\u5FEB\u6377\u952E";
     public const string NeteaseForwardHotkeysDesc = "\u5DE6\u4FA7\u6E38\u620F\u5185\u6309\u952E\uFF0C\u53F3\u4FA7\u8F6C\u53D1\u5230\u7F51\u6613\u4E91\u3002";
-    public const string GamepadHotkeys = "\u624B\u67C4\u5FEB\u6377\u952E";
-    public const string EnableXboxGamepad = "\u542F\u7528 Xbox \u624B\u67C4";
-    public const string GamepadHotkeysDesc = "\u7EC4\u5408\u952E\u4F7F\u7528\u624D\u673A\u3001\u6309\u952E\u4E0E\u65B9\u5411\u952E\u3002";
+    public const string GamepadHotkeys = "\u624B\u67C4 / \u65B9\u5411\u76D8\u5FEB\u6377\u952E";
+    public const string EnableXboxGamepad = "\u542F\u7528\u624B\u67C4 / \u65B9\u5411\u76D8\u5916\u8BBE";
+    public const string GamepadHotkeysDesc = "\u70B9\u51FB\u8F93\u5165\u6846\u540E\u76F4\u63A5\u6309\u5916\u8BBE\u7EC4\u5408\u952E\u3002\u652F\u6301 Xbox\u3001DS5 \u4EE5\u53CA\u65B9\u5411\u76D8\u7B49 HID/DirectInput \u8BBE\u5907\u7684 Button1-Button16\u3002";
+
+    public const string RemoteControl = "\u624B\u673A\u9065\u63A7";
+    public const string EnableRemoteControl = "\u542F\u7528\u624B\u673A\u9065\u63A7";
+    public const string RemoteControlDesc = "\u7535\u8111\u548C\u624B\u673A\u8FDE\u63A5\u540C\u4E00 Wi-Fi \u540E\uFF0C\u7528\u624B\u673A\u6D4F\u89C8\u5668\u6253\u5F00\u4E0B\u65B9\u5730\u5740\u63A7\u5236\u5207\u6B4C\u3002";
+    public const string RemoteControlPort = "\u7AEF\u53E3";
+    public const string RemoteControlAllowLan = "\u5141\u8BB8\u5C40\u57DF\u7F51\u624B\u673A\u8BBF\u95EE";
+    public const string RemoteControlAddress = "\u8FDE\u63A5\u5730\u5740";
+    public const string RemoteControlStatus = "\u670D\u52A1\u72B6\u6001";
+    public const string CopyRemoteAddress = "\u590D\u5236\u5730\u5740";
+    public const string ResetRemoteToken = "\u91CD\u7F6E\u8FDE\u63A5\u4EE4\u724C";
+    public const string RemoteControlQr = "\u626B\u7801\u8FDE\u63A5";
 
     public const string TextColorsAndOpacity = "\u6587\u5B57\u989C\u8272\u4E0E\u900F\u660E\u5EA6";
     public const string ThemeAccent = "\u4E3B\u9898\u4E3B\u8272";

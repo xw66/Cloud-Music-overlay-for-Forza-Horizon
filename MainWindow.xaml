@@ -7,7 +7,7 @@
         xmlns:models="clr-namespace:HorizonRadioOverlay.Models"
         xmlns:pages="clr-namespace:HorizonRadioOverlay.Views.Pages"
         mc:Ignorable="d"
-        Title="网易云悬浮窗"
+        Title="网易云悬浮窗 v2.0.0"
         MinHeight="720"
         MinWidth="1180"
         Width="1380"
@@ -136,7 +136,14 @@
                                    Margin="20,6,0,0"
                                    FontSize="12"
                                    Foreground="#A6B0C4"
-                                   Text="EosphorosVeil" />
+                                   Text="SMTC 媒体会话" />
+                        <TextBlock Margin="20,6,0,0"
+                                   FontSize="12"
+                                   Foreground="#A6B0C4">
+                            <Hyperlink Foreground="#A6B0C4"
+                                       RequestNavigate="BilibiliLink_RequestNavigate"
+                                       NavigateUri="https://space.bilibili.com/3546867382094629">BiliBili:EosphorosVeil</Hyperlink>
+                        </TextBlock>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -195,14 +202,7 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="1">
-                <pages:NowPlayingPage x:Name="NowPlayingPageView" Visibility="Visible" />
-                <pages:FloatingSettingsPage x:Name="FloatingSettingsPageView" Visibility="Collapsed" />
-                <pages:HotkeySettingsPage x:Name="HotkeySettingsPageView" Visibility="Collapsed" />
-                <pages:ThemeSettingsPage x:Name="ThemeSettingsPageView" Visibility="Collapsed" />
-                <pages:LogsPage x:Name="LogsPageView" Visibility="Collapsed" />
-                <pages:AboutPage x:Name="AboutPageView" Visibility="Collapsed" />
-            </Grid>
+            <ContentControl x:Name="PageHost" Grid.Row="1" />
 
             <Border Grid.Row="2"
                     Background="{StaticResource SurfaceBrush}"

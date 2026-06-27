@@ -26,6 +26,11 @@ public sealed class OverlaySettings
     public string GamepadToggleHotkey { get; set; } = "LT+RT+Y";
     public string GamepadToggleOverlayHotkey { get; set; } = "Back+Start";
 
+    public bool EnableRemoteControl { get; set; } = false;
+    public int RemoteControlPort { get; set; } = Services.RemoteControlPolicy.DefaultPort;
+    public string RemoteControlToken { get; set; } = Services.RemoteControlService.GenerateToken();
+    public bool RemoteControlAllowLan { get; set; } = true;
+
     public bool MinimizeToTray { get; set; } = true;
     public bool AutoStartOnBoot { get; set; } = false;
     public bool AlwaysShowOverlay { get; set; } = false;

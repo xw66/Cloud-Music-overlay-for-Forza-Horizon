@@ -7,6 +7,7 @@ namespace HorizonRadioOverlay.Services;
 
 public sealed class LyricsService : IDisposable
 {
+    private const int LyricsCacheCapacity = 48;
     private const long RetryAfterMissMs = 1500;
     private const double MinimumAcceptedCandidateScore = 45;
     private const double MinimumHighConfidenceCandidateScore = 68;
@@ -27,10 +28,12 @@ public sealed class LyricsService : IDisposable
     private readonly Func<string, Task<string>> _fetchLyricPayloadAsync;
     private readonly Func<long> _nowProvider;
     private readonly DiagnosticService? _diagnostic;
+    private readonly object _cacheGate = new();
     private string _lastLyricsKey = string.Empty;
     private string? _inFlightKey;
     private long _lastFetchAttemptAtMs;
     private readonly Dictionary<string, List<(double Time, string Text)>> _lyricsCache = new(StringComparer.Ordinal);
+    private readonly LinkedList<string> _lyricsCacheOrder = new();
     private List<(double Time, string Text)>? _cachedLyrics;
     private double _currentPlaybackPositionSeconds;
     private string _currentLine = string.Empty;
@@ -111,7 +114,7 @@ public sealed class LyricsService : IDisposable
             }
         }
 
-        if (_lyricsCache.TryGetValue(key, out List<(double Time, string Text)>? cachedLyrics))
+        if (TryGetCachedLyrics(key, out List<(double Time, string Text)>? cachedLyrics))
         {
             _lastLyricsKey = key;
             _cachedLyrics = cachedLyrics;
@@ -145,7 +148,7 @@ public sealed class LyricsService : IDisposable
             _lastLineIndex = -1;
             if (_cachedLyrics is { Count: > 0 })
             {
-                _lyricsCache[key] = _cachedLyrics;
+                CacheLyrics(key, _cachedLyrics);
                 _diagnostic?.Info($"Lyrics fetch succeeded: {songName} / {artist}, lines={_cachedLyrics.Count}");
             }
             else
@@ -203,6 +206,60 @@ public sealed class LyricsService : IDisposable
         _currentLine = string.Empty;
         _currentPlaybackPositionSeconds = 0;
         _lastLineIndex = -1;
+    }
+
+    private bool TryGetCachedLyrics(string key, out List<(double Time, string Text)>? lyrics)
+    {
+        lock (_cacheGate)
+        {
+            if (_lyricsCache.TryGetValue(key, out lyrics))
+            {
+                TouchLyricsKey(key);
+                return true;
+            }
+        }
+
+        lyrics = null;
+        return false;
+    }
+
+    private void CacheLyrics(string key, List<(double Time, string Text)> lyrics)
+    {
+        lock (_cacheGate)
+        {
+            if (_lyricsCache.ContainsKey(key))
+            {
+                _lyricsCache[key] = lyrics;
+                TouchLyricsKey(key);
+                return;
+            }
+
+            _lyricsCache[key] = lyrics;
+            _lyricsCacheOrder.AddFirst(key);
+            while (_lyricsCacheOrder.Count > LyricsCacheCapacity)
+            {
+                string? oldKey = _lyricsCacheOrder.Last?.Value;
+                if (oldKey is null)
+                {
+                    break;
+                }
+
+                _lyricsCacheOrder.RemoveLast();
+                _lyricsCache.Remove(oldKey);
+            }
+        }
+    }
+
+    private void TouchLyricsKey(string key)
+    {
+        LinkedListNode<string>? node = _lyricsCacheOrder.Find(key);
+        if (node is null)
+        {
+            return;
+        }
+
+        _lyricsCacheOrder.Remove(node);
+        _lyricsCacheOrder.AddFirst(node);
     }
 
     private static string BuildLyricsKey(string songName, string artist, string? albumTitle, double durationSeconds)
@@ -953,5 +1010,10 @@ public sealed class LyricsService : IDisposable
     public void Dispose()
     {
         Reset();
+        lock (_cacheGate)
+        {
+            _lyricsCache.Clear();
+            _lyricsCacheOrder.Clear();
+        }
     }
 }
