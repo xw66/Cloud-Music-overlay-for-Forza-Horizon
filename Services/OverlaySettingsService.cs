@@ -68,8 +68,22 @@ public sealed class OverlaySettingsService
 
         if (version < 2)
         {
-            // v2 migration placeholder: add new fields with defaults here
-            // Example: settings.NewField = "default";
+            if (string.IsNullOrWhiteSpace(settings.ActiveGameProfileId))
+            {
+                settings.ActiveGameProfileId = "generic-game";
+            }
+
+            if (string.IsNullOrWhiteSpace(settings.ThemeId))
+            {
+                settings.ThemeId = "theme-minimal-dark";
+            }
+
+            if (string.IsNullOrWhiteSpace(settings.OverlayMode))
+            {
+                settings.OverlayMode = OverlayMode.SlideRadio;
+            }
+
+            version = 2;
         }
 
         settings.SchemaVersion = version;
@@ -87,6 +101,21 @@ public sealed class OverlaySettingsService
         settings.LeftPercent = Clamp(settings.LeftPercent, 0.0, 1.0);
         settings.TopPercent = Clamp(settings.TopPercent, 0.0, 1.0);
         settings.Scale = Clamp(settings.Scale, 0.8, 1.8);
+        if (string.IsNullOrWhiteSpace(settings.ActiveGameProfileId))
+        {
+            settings.ActiveGameProfileId = "generic-game";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.ThemeId))
+        {
+            settings.ThemeId = "theme-minimal-dark";
+        }
+
+        if (!OverlayMode.IsKnown(settings.OverlayMode))
+        {
+            settings.OverlayMode = OverlayMode.SlideRadio;
+        }
+
         if (settings.SmtcLyricDelayOverrideMs.HasValue)
         {
             settings.SmtcLyricDelayOverrideMs = Clamp(settings.SmtcLyricDelayOverrideMs.Value, -3000, 3000);

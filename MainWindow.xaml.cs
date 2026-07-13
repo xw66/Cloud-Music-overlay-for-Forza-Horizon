@@ -29,6 +29,8 @@ public partial class MainWindow : Window
     private readonly NeteaseShortcutSender _neteaseShortcutSender;
     private readonly GamepadInputService _gamepadInputService;
     private readonly UpdateService _updateService;
+    private readonly GameProfileService _gameProfileService;
+    private readonly ForegroundGameDetector _foregroundGameDetector;
     private readonly DiagnosticService _diagnostic;
     private readonly NeteaseOfficialResolver _neteaseOfficialResolver;
     private readonly LyricsService _lyricsService;
@@ -163,6 +165,8 @@ public partial class MainWindow : Window
         _neteaseShortcutSender = new NeteaseShortcutSender();
         _gamepadInputService = new GamepadInputService();
         _updateService = new UpdateService();
+        _gameProfileService = new GameProfileService();
+        _foregroundGameDetector = new ForegroundGameDetector(_gameProfileService);
         _lyricsService = new LyricsService(_diagnostic);
         OverlaySettings loadedSettings = _overlaySettingsService.Load();
         _activeSettings = loadedSettings;
@@ -188,6 +192,7 @@ public partial class MainWindow : Window
         _gamepadInputService.NextTriggered += async (_, _) => await NextAsync();
         _gamepadInputService.ToggleTriggered += (_, _) => TogglePlayPause();
         _gamepadInputService.ToggleOverlayTriggered += async (_, _) => await ToggleOverlayVisibilityAsync();
+        _foregroundGameDetector.ActiveGameChanged += ForegroundGameDetector_ActiveGameChanged;
 
         _lifecycle.Register("GamepadInput",
             onStart: () => _gamepadInputService.Start(),
@@ -195,6 +200,11 @@ public partial class MainWindow : Window
 
         _lifecycle.Register("GamepadHotkeyCapture",
             onDispose: DisposeGamepadHotkeyCaptureTimers);
+
+        _lifecycle.Register("ForegroundGameDetector",
+            onStart: () => _foregroundGameDetector.Start(),
+            onStop: () => _foregroundGameDetector.Stop(),
+            onDispose: () => _foregroundGameDetector.Dispose());
 
         _lifecycle.Register("PollTimer",
             onStart: () => _pollTimer.Start(),
@@ -247,6 +257,22 @@ public partial class MainWindow : Window
         SourceInitialized += MainWindow_SourceInitialized;
         Closing += MainWindow_Closing;
         Closed += MainWindow_Closed;
+    }
+
+    private void ForegroundGameDetector_ActiveGameChanged(object? sender, GameProfile profile)
+    {
+        if (string.Equals(profile.Id, _activeSettings.ActiveGameProfileId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(profile.ThemeId, _activeSettings.ThemeId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(profile.OverlayMode, _activeSettings.OverlayMode, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _activeSettings.ActiveGameProfileId = profile.Id;
+        _activeSettings.ThemeId = profile.ThemeId;
+        _activeSettings.OverlayMode = profile.OverlayMode;
+        _overlayWindow.ApplySettings(_activeSettings);
+        _diagnostic.Event($"游戏配置已切换：{profile.DisplayName} / {profile.ThemeId}");
     }
 
     private void WireShellControls()
@@ -2063,6 +2089,9 @@ public partial class MainWindow : Window
           OverlaySettings settings = new()
           {
             TrackSource = GetSelectedTrackSource(),
+            ActiveGameProfileId = _activeSettings.ActiveGameProfileId,
+            ThemeId = _activeSettings.ThemeId,
+            OverlayMode = _activeSettings.OverlayMode,
             LeftPercent = HorizontalSlider.Value / 100.0,
             TopPercent = BottomOffsetSlider.Value / 100.0,
             Scale = ScaleSlider.Value / 100.0,
@@ -2093,7 +2122,7 @@ public partial class MainWindow : Window
               LyricsOpacity = LyricsOpacitySlider.Value / 100.0,
               SmtcLyricDelayOverrideMs = _activeSettings.SmtcLyricDelayOverrideMs
           };
-  
+
           _activeSettings = settings;
           _smtcLyricTimingController.SetDelayOverrideMilliseconds(settings.SmtcLyricDelayOverrideMs);
           _overlayWindow.ApplySettings(settings);

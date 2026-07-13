@@ -23,6 +23,7 @@ public partial class OverlayWindow : Window
     private readonly OverlayAnimationQueue _animQueue;
     private readonly List<CoverFlowAlbum> _coverFlowHistory = new();
     private readonly System.Windows.Threading.DispatcherTimer _topmostRefreshTimer;
+    private readonly ThemeService _themeService = new();
     public const double BaseWidth = 210;
     private const double CoverFlowWidth = 760;
     public const double BaseHeight = 198;
@@ -69,6 +70,9 @@ public partial class OverlayWindow : Window
             LeftPercent = Clamp(settings.LeftPercent, 0.0, 1.0),
             TopPercent = Clamp(settings.TopPercent, 0.0, 1.0),
             Scale = Clamp(settings.Scale, 0.8, 1.8),
+            ActiveGameProfileId = settings.ActiveGameProfileId,
+            ThemeId = settings.ThemeId,
+            OverlayMode = OverlayMode.IsKnown(settings.OverlayMode) ? settings.OverlayMode : OverlayMode.SlideRadio,
             TitleColor = settings.TitleColor,
             ArtistColor = settings.ArtistColor,
             TitleOpacity = Clamp(settings.TitleOpacity, 0.2, 1.0),
@@ -101,6 +105,7 @@ public partial class OverlayWindow : Window
         Top = availableHeight * CurrentSettings.TopPercent;
 
         ApplyTextColors();
+        ApplyTheme(_themeService.GetByIdOrDefault(CurrentSettings.ThemeId));
     }
 
     public void ApplyTextColors()
@@ -128,6 +133,74 @@ public partial class OverlayWindow : Window
             LyricsText.Opacity = CurrentSettings.LyricsOpacity;
         }
         catch { }
+    }
+
+    private void ApplyTheme(ThemePack theme)
+    {
+        string titleColor = IsDefaultColor(CurrentSettings.TitleColor, "#FFFFFF")
+            ? theme.Colors.TextPrimary
+            : CurrentSettings.TitleColor;
+        string artistColor = IsDefaultColor(CurrentSettings.ArtistColor, "#C0D0E0")
+            ? theme.Colors.TextSecondary
+            : CurrentSettings.ArtistColor;
+        string lyricsColor = IsDefaultColor(CurrentSettings.LyricsColor, "#A0B8D0")
+            ? theme.Colors.Lyrics
+            : CurrentSettings.LyricsColor;
+
+        SetTextBrush(TitleText, titleColor, CurrentSettings.TitleOpacity);
+        SetTextBrush(ArtistText, artistColor, CurrentSettings.ArtistOpacity);
+        SetTextBrush(LyricsText, lyricsColor, CurrentSettings.LyricsOpacity);
+        SetBorderBrush(CoverFrame, theme.Colors.Border);
+        SetInfoBackdrop(theme);
+    }
+
+    private static bool IsDefaultColor(string value, string defaultColor)
+    {
+        return string.Equals(value, defaultColor, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void SetTextBrush(TextBlock textBlock, string color, double opacity)
+    {
+        try
+        {
+            var parsed = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(color);
+            textBlock.Foreground = new System.Windows.Media.SolidColorBrush(parsed);
+            textBlock.Opacity = opacity;
+        }
+        catch
+        {
+        }
+    }
+
+    private static void SetBorderBrush(Border border, string color)
+    {
+        try
+        {
+            var parsed = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(color);
+            border.BorderBrush = new System.Windows.Media.SolidColorBrush(parsed);
+        }
+        catch
+        {
+        }
+    }
+
+    private void SetInfoBackdrop(ThemePack theme)
+    {
+        try
+        {
+            var surface = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(theme.Colors.Surface);
+            byte alpha = (byte)Math.Round(255 * Clamp(theme.Effects.GlassOpacity, 0.05, 0.65));
+            InfoBackdrop.Background = new LinearGradientBrush(
+                Color.FromArgb(alpha, surface.R, surface.G, surface.B),
+                Color.FromArgb(0, surface.R, surface.G, surface.B),
+                new Point(0, 0),
+                new Point(0, 1));
+            InfoBackdrop.CornerRadius = new CornerRadius(Clamp(theme.Shape.CornerRadius, 0, 16));
+            CoverFrame.CornerRadius = new CornerRadius(Clamp(theme.Shape.CoverRadius, 0, 16));
+        }
+        catch
+        {
+        }
     }
 
     [DllImport("user32.dll")]
@@ -158,59 +231,102 @@ public partial class OverlayWindow : Window
         _hideCts?.Cancel();
         _hideCts = new CancellationTokenSource();
 
-        bool isCurrentlyVisible = Visibility == Visibility.Visible && OverlayRoot.Opacity > 0.5;
-
-        if (isCurrentlyVisible)
-        {
-            OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null);
-            double currentOpacity = OverlayRoot.Opacity;
-
-            if (currentOpacity > 0.01)
-            {
-                var fadeOut = new DoubleAnimation
-                {
-                    From = currentOpacity,
-                    To = 0,
-                    Duration = TimeSpan.FromMilliseconds(200),
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
-                };
-                OverlayRoot.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-                await Task.Delay(210, token);
-                if (token.IsCancellationRequested) return;
-            }
-        }
-
         if (!token.IsCancellationRequested)
         {
-            OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null);
-            OverlayRoot.Opacity = 0;
+            bool isCurrentlyVisible = Visibility == Visibility.Visible && OverlayRoot.Opacity > 0.5;
 
             TitleText.Text = track.Name;
             ArtistText.Text = track.Artist;
             SetCover(track.CoverBytes);
-            ApplyTextColors();
+            ApplyTheme(_themeService.GetByIdOrDefault(CurrentSettings.ThemeId));
 
             Show();
             Visibility = Visibility.Visible;
             EnsureTopmost();
             StartTopmostRefresh();
 
-            var fadeIn = new DoubleAnimation
+            if (string.Equals(CurrentSettings.OverlayMode, OverlayMode.SlideRadio, StringComparison.OrdinalIgnoreCase))
             {
-                From = 0,
-                To = 1,
-                Duration = TimeSpan.FromMilliseconds(250),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            OverlayRoot.BeginAnimation(UIElement.OpacityProperty, fadeIn);
-            RootTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
-            RootTransform.Y = 0;
+                await PlaySlideRadioTransitionAsync(isCurrentlyVisible, token);
+            }
+            else
+            {
+                await PlayFadeTransitionAsync(token);
+            }
 
             if (!CurrentSettings.AlwaysShowOverlay)
             {
                 ScheduleHide(_hideCts.Token);
             }
         }
+    }
+
+    private async Task PlaySlideRadioTransitionAsync(bool replaceVisibleTrack, CancellationToken token)
+    {
+        OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null);
+        RootTransform.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, null);
+        RootTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+        RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
+        RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, null);
+
+        double fromX = replaceVisibleTrack ? 34 : 76;
+        double fromOpacity = replaceVisibleTrack ? 0.35 : 0;
+
+        OverlayRoot.Opacity = fromOpacity;
+        RootTransform.X = fromX;
+        RootTransform.Y = 0;
+        RootScaleTransform.ScaleX = 0.985;
+        RootScaleTransform.ScaleY = 0.985;
+
+        var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
+        OverlayRoot.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation
+        {
+            From = fromOpacity,
+            To = 1,
+            Duration = TimeSpan.FromMilliseconds(260),
+            EasingFunction = easeOut
+        });
+        RootTransform.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, new DoubleAnimation
+        {
+            From = fromX,
+            To = 0,
+            Duration = TimeSpan.FromMilliseconds(360),
+            EasingFunction = easeOut
+        });
+        RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, new DoubleAnimation
+        {
+            From = 0.985,
+            To = 1,
+            Duration = TimeSpan.FromMilliseconds(360),
+            EasingFunction = easeOut
+        });
+        RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, new DoubleAnimation
+        {
+            From = 0.985,
+            To = 1,
+            Duration = TimeSpan.FromMilliseconds(360),
+            EasingFunction = easeOut
+        });
+
+        await Task.Delay(370, token);
+    }
+
+    private async Task PlayFadeTransitionAsync(CancellationToken token)
+    {
+        OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null);
+        OverlayRoot.Opacity = 0;
+
+        var fadeIn = new DoubleAnimation
+        {
+            From = 0,
+            To = 1,
+            Duration = TimeSpan.FromMilliseconds(250),
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+        };
+        OverlayRoot.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+        RootTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+        RootTransform.Y = 0;
+        await Task.Delay(260, token);
     }
 
     private async void ScheduleHide(CancellationToken token)
@@ -642,5 +758,3 @@ public partial class OverlayWindow : Window
         return value;
     }
 }
-
-

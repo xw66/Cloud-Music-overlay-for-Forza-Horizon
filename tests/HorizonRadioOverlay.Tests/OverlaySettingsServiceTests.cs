@@ -26,5 +26,21 @@ public sealed class OverlaySettingsServiceTests
         Assert.Equal("Ctrl+Shift+H", settings.AppToggleOverlayHotkey);
         Assert.Equal("Back+Start", settings.GamepadToggleOverlayHotkey);
         Assert.False(settings.HideOverlayWhenPaused);
+        Assert.Equal("generic-game", settings.ActiveGameProfileId);
+        Assert.Equal("theme-minimal-dark", settings.ThemeId);
+        Assert.Equal(OverlayMode.SlideRadio, settings.OverlayMode);
+    }
+
+    [Fact]
+    public void Normalize_replaces_unknown_overlay_mode_with_slide_radio()
+    {
+        OverlaySettings settings = new()
+        {
+            OverlayMode = "unknown-mode"
+        };
+
+        OverlaySettings normalized = OverlaySettingsService.NormalizeForTests(settings);
+
+        Assert.Equal(OverlayMode.SlideRadio, normalized.OverlayMode);
     }
 }

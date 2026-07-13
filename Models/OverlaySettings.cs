@@ -3,9 +3,12 @@ namespace HorizonRadioOverlay.Models;
 public sealed class OverlaySettings
 {
     public int SchemaVersion { get; set; } = CurrentVersion;
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     public string TrackSource { get; set; } = "NeteaseProcess";
+    public string ActiveGameProfileId { get; set; } = "generic-game";
+    public string ThemeId { get; set; } = "theme-minimal-dark";
+    public string OverlayMode { get; set; } = HorizonRadioOverlay.Models.OverlayMode.SlideRadio;
 
     public double LeftPercent { get; set; } = 0.0;
     public double TopPercent { get; set; } = 0.59;

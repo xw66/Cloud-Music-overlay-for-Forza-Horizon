@@ -25,7 +25,10 @@
     <Viewbox Stretch="Fill">
         <Grid Name="OverlayRoot" Width="210" Height="198" Background="Transparent" Margin="0" Opacity="0">
             <Grid.RenderTransform>
-                <TranslateTransform x:Name="RootTransform" Y="8" />
+                <TransformGroup>
+                    <ScaleTransform x:Name="RootScaleTransform" ScaleX="1" ScaleY="1" CenterX="105" CenterY="99" />
+                    <TranslateTransform x:Name="RootTransform" X="0" Y="8" />
+                </TransformGroup>
             </Grid.RenderTransform>
 
             <Grid.RowDefinitions>
