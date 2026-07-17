@@ -3,7 +3,7 @@ using HorizonRadioOverlay.Models;
 
 namespace HorizonRadioOverlay.Services;
 
-public sealed class NeteaseShortcutSender
+public sealed class NeteaseShortcutSender : IHotkeySender
 {
     private const uint KeyeventfKeyup = 0x0002;
 

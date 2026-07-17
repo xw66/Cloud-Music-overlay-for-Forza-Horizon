@@ -5,7 +5,7 @@ using System.Runtime.Versioning;
 
 namespace HorizonRadioOverlay.Services;
 
-public sealed class SmtcTrackService
+public sealed class SmtcTrackService : IPlaybackTransport
 {
     private readonly DiagnosticService? _diagnostic;
     private readonly object _managerLock = new();

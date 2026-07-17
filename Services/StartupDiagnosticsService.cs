@@ -17,7 +17,8 @@ public static class StartupDiagnosticsService
             ("framework", RuntimeInformation.FrameworkDescription),
             ("source", settings.TrackSource),
             ("diagnosticMode", settings.DiagnosticMode),
-            ("enableLyrics", settings.EnableLyrics)));
+            ("enableLyrics", settings.EnableLyrics),
+            ("neteaseMemoryTimeline", settings.EnableNeteaseMemoryTimeline)));
 
         diagnostic.Event(DiagnosticContext.Format(traceId, "startup", "network",
             ("httpProxy", Environment.GetEnvironmentVariable("HTTP_PROXY")),

@@ -57,6 +57,7 @@ public static class UiText
     public const string Scale = "\u7F29\u653E";
     public const string DisplayAndBehavior = "\u663E\u793A\u4E0E\u884C\u4E3A";
     public const string EnableLyrics = "\u663E\u793A\u6B4C\u8BCD";
+    public const string EnableNeteaseMemoryTimeline = "\u7F51\u6613\u4E91\u5185\u5B58\u65F6\u95F4\u8F74\uFF08\u5B9E\u9A8C\u529F\u80FD\uFF0C\u53EA\u8BFB\uFF09";
     public const string AlwaysShowOverlay = "\u60AC\u6D6E\u7A97\u59CB\u7EC8\u751F\u6548\uFF08\u4E0B\u6B21\u5207\u6B4C\u65F6\u751F\u6548\uFF09";
     public const string HideOverlayWhenPaused = "\u97F3\u4E50\u6682\u505C\u65F6\u9690\u85CF\u60AC\u6D6E\u7A97\uFF08SMTC \u6E90\u652F\u6301\uFF09";
     public const string CoverWingEffect = "\u5C01\u9762\u5C55\u5F00\u6548\u679C";

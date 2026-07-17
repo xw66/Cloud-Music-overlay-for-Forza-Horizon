@@ -97,7 +97,6 @@ public partial class OverlayWindow : Window
         CoverRow.Height = new GridLength(CurrentSettings.EnableCoverWingEffect ? CoverFlowCoverRowHeight : 106);
         CoverFlowViewport.Visibility = CurrentSettings.EnableCoverWingEffect ? Visibility.Visible : Visibility.Collapsed;
         CoverFrame.Visibility = CurrentSettings.EnableCoverWingEffect ? Visibility.Collapsed : Visibility.Visible;
-        InfoBackdrop.Visibility = CurrentSettings.EnableCoverWingEffect ? Visibility.Collapsed : Visibility.Visible;
         InfoPanel.Width = 188;
         InfoPanel.HorizontalAlignment = HorizontalAlignment.Center;
         InfoPanel.Margin = new Thickness(0, 4, 0, 0);

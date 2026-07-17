@@ -18,10 +18,7 @@
             <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}">
                 <StackPanel>
                     <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.LyricsSource}" />
-                    <ComboBox x:Name="TrackSourceComboBox" x:FieldModifier="public" Margin="0,14,0,0">
-                        <ComboBoxItem Tag="NeteaseProcess" Content="{x:Static local:UiText.SourceNeteaseWindow}" />
-                        <ComboBoxItem Tag="SMTC" Content="{x:Static local:UiText.SourceSmtc}" />
-                    </ComboBox>
+                    <ComboBox x:Name="TrackSourceComboBox" x:FieldModifier="public" Margin="0,14,0,0" />
                 </StackPanel>
             </Border>
 
@@ -64,6 +61,7 @@
                 <StackPanel>
                     <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.DisplayAndBehavior}" />
                     <CheckBox x:Name="EnableLyricsCheckBox" x:FieldModifier="public" Margin="0,16,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.EnableLyrics}" />
+                    <CheckBox x:Name="EnableNeteaseMemoryTimelineCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.EnableNeteaseMemoryTimeline}" />
                     <CheckBox x:Name="AlwaysShowCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.AlwaysShowOverlay}" />
                     <CheckBox x:Name="HideOverlayWhenPausedCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.HideOverlayWhenPaused}" />
                     <CheckBox x:Name="EnableCoverWingEffectCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.CoverWingEffect}" />

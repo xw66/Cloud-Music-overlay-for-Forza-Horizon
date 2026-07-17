@@ -16,7 +16,7 @@ public sealed class NeteaseLyricTimingControllerTests
     }
 
     [Fact]
-    public void UpdateFromPlayer_does_not_freeze_wall_clock_when_external_pause_sample_arrives()
+    public void UpdateFromPlayer_anchors_and_freezes_when_player_is_paused()
     {
         DateTime start = new(2026, 6, 7, 10, 0, 0, DateTimeKind.Utc);
         NeteaseLyricTimingController controller = new();
@@ -24,11 +24,11 @@ public sealed class NeteaseLyricTimingControllerTests
 
         controller.UpdateFromPlayer(12, isPlaying: false, start.AddSeconds(1));
 
-        Assert.InRange(controller.GetCurrentPositionSeconds(start.AddSeconds(5)), 4.99, 5.01);
+        Assert.InRange(controller.GetCurrentPositionSeconds(start.AddSeconds(5)), 11.99, 12.01);
     }
 
     [Fact]
-    public void UpdateFromPlayer_does_not_override_wall_clock_timing()
+    public void UpdateFromPlayer_anchors_and_advances_when_player_is_playing()
     {
         DateTime start = new(2026, 6, 7, 10, 0, 0, DateTimeKind.Utc);
         NeteaseLyricTimingController controller = new();
@@ -36,18 +36,66 @@ public sealed class NeteaseLyricTimingControllerTests
 
         controller.UpdateFromPlayer(45, isPlaying: true, start.AddSeconds(2));
 
-        Assert.InRange(controller.GetCurrentPositionSeconds(start.AddSeconds(3)), 2.99, 3.01);
+        Assert.InRange(controller.GetCurrentPositionSeconds(start.AddSeconds(3)), 45.99, 46.01);
     }
 
     [Fact]
-    public void UpdateFromPlayer_ignores_external_pause_sample()
+    public void UpdateFromPlayer_overrides_the_previous_player_position()
     {
         DateTime start = new(2026, 6, 7, 10, 0, 0, DateTimeKind.Utc);
         NeteaseLyricTimingController controller = new();
         controller.Start(start);
 
-        controller.UpdateFromPlayer(10.0, isPlaying: false, start.AddSeconds(5));
+        controller.UpdateFromPlayer(10.0, isPlaying: true, start.AddSeconds(2));
+        controller.UpdateFromPlayer(28.0, isPlaying: false, start.AddSeconds(5));
 
-        Assert.InRange(controller.GetCurrentPositionSeconds(start.AddSeconds(6)), 5.99, 6.01);
+        Assert.InRange(controller.GetCurrentPositionSeconds(start.AddSeconds(6)), 27.99, 28.01);
+    }
+
+    [Fact]
+    public void UpdateFromPlayer_ignores_invalid_position()
+    {
+        DateTime start = new(2026, 6, 7, 10, 0, 0, DateTimeKind.Utc);
+        NeteaseLyricTimingController controller = new();
+        controller.Start(start);
+
+        controller.UpdateFromPlayer(double.NaN, isPlaying: false, start.AddSeconds(1));
+
+        Assert.InRange(controller.GetCurrentPositionSeconds(start.AddSeconds(3)), 2.99, 3.01);
+    }
+
+    [Fact]
+    public void UpdateFromPlayer_rejects_temporary_jump_back_after_forward_seek()
+    {
+        DateTime start = new(2026, 6, 7, 10, 0, 0, DateTimeKind.Utc);
+        NeteaseLyricTimingController controller = new();
+        controller.Start(start);
+
+        controller.UpdateFromPlayer(220.0, isPlaying: true, start.AddSeconds(1));
+        controller.UpdateFromPlayer(0.8, isPlaying: true, start.AddSeconds(1.25));
+        controller.UpdateFromPlayer(220.5, isPlaying: true, start.AddSeconds(1.5));
+
+        Assert.InRange(
+            controller.GetCurrentPositionSeconds(start.AddSeconds(2)),
+            220.99,
+            221.01);
+    }
+
+    [Fact]
+    public void UpdateFromPlayer_accepts_consistent_confirmed_backward_seek()
+    {
+        DateTime start = new(2026, 6, 7, 10, 0, 0, DateTimeKind.Utc);
+        NeteaseLyricTimingController controller = new();
+        controller.Start(start);
+
+        controller.UpdateFromPlayer(120.0, isPlaying: true, start.AddSeconds(1));
+        controller.UpdateFromPlayer(20.0, isPlaying: true, start.AddSeconds(2));
+        controller.UpdateFromPlayer(20.4, isPlaying: true, start.AddSeconds(2.4));
+        controller.UpdateFromPlayer(20.8, isPlaying: true, start.AddSeconds(2.8));
+
+        Assert.InRange(
+            controller.GetCurrentPositionSeconds(start.AddSeconds(3)),
+            20.99,
+            21.01);
     }
 }

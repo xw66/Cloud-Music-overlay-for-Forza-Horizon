@@ -4,8 +4,8 @@ public static class TrackSourcePolicy
 {
     public static bool ShouldEnableLyrics(string? trackSource)
     {
-        return string.Equals(trackSource, "SMTC", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(trackSource, "NeteaseProcess", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(trackSource, PlaybackSourceIds.Smtc, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(trackSource, PlaybackSourceIds.Netease, StringComparison.OrdinalIgnoreCase);
     }
 
     public static string GetLyricsTooltip(bool useSmtc)

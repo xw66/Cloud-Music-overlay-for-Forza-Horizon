@@ -7,7 +7,7 @@ using HorizonRadioOverlay.Models;
 
 namespace HorizonRadioOverlay.Services;
 
-public sealed class NeteaseLocalDataService
+public sealed class NeteaseLocalDataService : ITrackMetadataProvider
 {
     internal readonly record struct LocalSongIdHint(string SongId, string Source);
     private readonly record struct CoverDownloadResult(byte[]? Bytes, string RootCause, int? StatusCode, string? ContentType);

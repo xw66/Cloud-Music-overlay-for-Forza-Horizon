@@ -770,7 +770,7 @@ public sealed class LyricsService : IDisposable
     private static string[] SplitArtists(string artist)
     {
         return Regex
-            .Split(CleanupSearchText(artist ?? string.Empty), @"\s*(?:/|&|,|銆亅锛寍;|锛泑\bx\b|脳|feat\.?|ft\.?)\s*", RegexOptions.IgnoreCase)
+            .Split(CleanupSearchText(artist ?? string.Empty), @"\s*(?:/|&|,|、|，|;|；|\bx\b|×|feat\.?|ft\.?)\s*", RegexOptions.IgnoreCase)
             .Select(NormalizeArtistPart)
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Select(x => x.ToLowerInvariant())

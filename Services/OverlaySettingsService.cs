@@ -68,8 +68,8 @@ public sealed class OverlaySettingsService
 
         if (version < 2)
         {
-            // v2 migration placeholder: add new fields with defaults here
-            // Example: settings.NewField = "default";
+            settings.EnableNeteaseMemoryTimeline = true;
+            version = 2;
         }
 
         settings.SchemaVersion = version;
@@ -78,10 +78,10 @@ public sealed class OverlaySettingsService
 
     private static OverlaySettings Normalize(OverlaySettings settings)
     {
-        if (!string.Equals(settings.TrackSource, "NeteaseProcess", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(settings.TrackSource, "SMTC", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(settings.TrackSource, PlaybackSourceIds.Netease, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(settings.TrackSource, PlaybackSourceIds.Smtc, StringComparison.OrdinalIgnoreCase))
         {
-            settings.TrackSource = "NeteaseProcess";
+            settings.TrackSource = PlaybackSourceIds.Netease;
         }
 
         settings.LeftPercent = Clamp(settings.LeftPercent, 0.0, 1.0);
@@ -102,6 +102,11 @@ public sealed class OverlaySettingsService
     internal static OverlaySettings NormalizeForTests(OverlaySettings settings)
     {
         return Normalize(settings);
+    }
+
+    internal static OverlaySettings MigrateForTests(OverlaySettings settings)
+    {
+        return Migrate(settings);
     }
 
     private static double Clamp(double value, double min, double max)

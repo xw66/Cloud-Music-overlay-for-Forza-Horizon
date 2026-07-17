@@ -20,22 +20,7 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-        {
-            string log = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "HorizonRadioOverlay", "crash.log");
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(log)!);
-                File.WriteAllText(log,
-                    $"Time: {DateTime.Now}\r\n" +
-                    $"Type: {args.ExceptionObject.GetType()}\r\n" +
-                    $"Exception: {args.ExceptionObject}\r\n" +
-                    $"Terminating: {args.IsTerminating}\r\n");
-            }
-            catch { }
-        };
+        CrashReportService.Initialize(this);
 
         try
         {
@@ -72,18 +57,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            string log = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "HorizonRadioOverlay", "crash.log");
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(log)!);
-                File.WriteAllText(log,
-                    $"Time: {DateTime.Now}\r\n" +
-                    $"Type: {ex.GetType()}\r\n" +
-                    $"Exception: {ex}\r\n");
-            }
-            catch { }
+            CrashReportService.WriteStartupFailure(ex);
             throw;
         }
     }

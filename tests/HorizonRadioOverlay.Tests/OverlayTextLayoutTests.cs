@@ -26,11 +26,20 @@ public sealed class OverlayTextLayoutTests
     }
 
     [Fact]
+    public void Overlay_track_text_has_no_translucent_backdrop()
+    {
+        string xaml = File.ReadAllText(FindWorkspaceFile("OverlayWindow.xaml"));
+
+        Assert.DoesNotContain("InfoBackdrop", xaml);
+        Assert.DoesNotContain("InfoGlow", xaml);
+    }
+
+    [Fact]
     public void Overlay_has_a_stable_live_capture_source_title()
     {
         string xaml = File.ReadAllText(FindWorkspaceFile("OverlayWindow.xaml"));
 
-        Assert.Contains("Title=\"[直播源] 网易云悬浮窗 v2.0.0\"", xaml);
+        Assert.Contains("Title=\"[直播源] 网易云悬浮窗 v3.0.1\"", xaml);
         Assert.Contains("AllowsTransparency=\"True\"", xaml);
         Assert.Contains("Background=\"Transparent\"", xaml);
     }

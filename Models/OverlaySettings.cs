@@ -3,9 +3,9 @@ namespace HorizonRadioOverlay.Models;
 public sealed class OverlaySettings
 {
     public int SchemaVersion { get; set; } = CurrentVersion;
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
-    public string TrackSource { get; set; } = "NeteaseProcess";
+    public string TrackSource { get; set; } = Services.PlaybackSourceIds.Netease;
 
     public double LeftPercent { get; set; } = 0.0;
     public double TopPercent { get; set; } = 0.59;
@@ -42,6 +42,7 @@ public sealed class OverlaySettings
     public double ArtistOpacity { get; set; } = 0.86;
     public bool DiagnosticMode { get; set; } = false;
     public bool EnableLyrics { get; set; } = true;
+    public bool EnableNeteaseMemoryTimeline { get; set; } = true;
     public bool EnableCoverWingEffect { get; set; } = false;
     public string LyricsColor { get; set; } = "#A0B8D0";
     public double LyricsOpacity { get; set; } = 0.7;

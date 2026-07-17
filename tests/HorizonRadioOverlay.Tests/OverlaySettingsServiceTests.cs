@@ -26,6 +26,8 @@ public sealed class OverlaySettingsServiceTests
         Assert.Equal("Ctrl+Shift+H", settings.AppToggleOverlayHotkey);
         Assert.Equal("Back+Start", settings.GamepadToggleOverlayHotkey);
         Assert.False(settings.HideOverlayWhenPaused);
+        Assert.True(settings.EnableNeteaseMemoryTimeline);
+        Assert.Equal(OverlaySettings.CurrentVersion, settings.SchemaVersion);
     }
 
     [Fact]
@@ -65,5 +67,20 @@ public sealed class OverlaySettingsServiceTests
         OverlaySettings normalized = OverlaySettingsService.NormalizeForTests(settings);
 
         Assert.False(string.IsNullOrWhiteSpace(normalized.RemoteControlToken));
+    }
+
+    [Fact]
+    public void Migrate_enables_read_only_memory_timeline_for_existing_settings()
+    {
+        OverlaySettings settings = new()
+        {
+            SchemaVersion = 1,
+            EnableNeteaseMemoryTimeline = false
+        };
+
+        OverlaySettings migrated = OverlaySettingsService.MigrateForTests(settings);
+
+        Assert.Equal(2, migrated.SchemaVersion);
+        Assert.True(migrated.EnableNeteaseMemoryTimeline);
     }
 }
