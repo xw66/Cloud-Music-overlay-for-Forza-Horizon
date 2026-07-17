@@ -1,4 +1,4 @@
-# 网易云悬浮窗 v2.0.0
+# 网易云悬浮窗 v3.0.1
 
 一个 Windows 桌面工具：游戏中自定义快捷键转发网易云切歌，并显示透明悬浮窗（封面 + 歌名 + 歌手）。
 
@@ -28,8 +28,9 @@
 - **开机自启**：注册表方式，`--autostart` 最小化启动
 - **检查更新**：自动检测 GitHub Releases 新版本
 - **实时歌词**：
-  - `网易云窗口标题`：支持歌词显示，按软件自身播放计时匹配歌词时间轴
+  - `网易云窗口标题`：可选只读内存时间轴（实验功能）同步 seek；不可用或关闭时自动退回本地计时
   - `SMTC`：按系统媒体会话提供的歌名 / 歌手 / 时间轴进行查词与同步
+- **后台播放快照**：播放器读取与界面刷新解耦，连续失败自动降级和重试
 - **Cover Flow 模式**：3D 封面轮播效果（设置中开启）
 
 ## 下载
@@ -42,6 +43,8 @@
 - `win-x64`：绝大多数 PC 选择此版本
 - `win-x86`：32 位系统
 - `win-arm64`：ARM 设备（如 Surface Pro X）
+
+> 网易云只读内存时间轴仅在 64 位进程中启用；`win-x86` 会自动使用本地歌词计时。
 
 发布包为**自包含单文件版**，免安装 .NET 运行时。
 
@@ -90,7 +93,7 @@
 - **快捷键映射**：左侧填写游戏中按的键，右侧填写网易云快捷键
 - **显示颜色**：点击色块选择歌名/歌手颜色，拖动滑块调整透明度
 - **歌词说明**：
-  - `网易云窗口标题`：歌词按软件自身计时同步，不跟随网易云客户端内的 seek / 拖动进度
+  - `网易云窗口标题`：默认启用只读内存时间轴实验功能，可跟随 seek；读取失败时自动降级为本地计时，可在设置中关闭
   - `SMTC`：歌词滚动同步依赖 `SMTC` 时间轴
 
 ### 第三步：启动游戏
@@ -121,16 +124,22 @@
 ## 开发运行
 
 ```powershell
-dotnet run
+.\dotnet10.cmd run
+```
+
+运行测试：
+
+```powershell
+.\dotnet10.cmd test tests\HorizonRadioOverlay.Tests\HorizonRadioOverlay.Tests.csproj -c Release
 ```
 
 ## 打包发布
 
 ```powershell
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugSymbols=false -p:DebugType=None -o .\publish\HorizonRadioOverlay_v2.0.0
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugSymbols=false -p:DebugType=None -o .\publish\HorizonRadioOverlay_v3.0.1
 ```
 
-发布结果在 `publish\HorizonRadioOverlay_v2.0.0\HorizonRadioOverlay.exe`。
+发布结果在 `publish\HorizonRadioOverlay_v3.0.1\HorizonRadioOverlay.exe`。
 默认按单文件分发，直接分发这个 exe 即可。
 
 ## 常见问题
@@ -153,12 +162,16 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - `网易云窗口标题`：会优先使用网易云本地识别到的 `songId` 取词；如果当前歌曲本身无歌词，或标题 / 本地数据未能稳定对应到正确歌曲，仍可能出现无歌词。
 - `SMTC`：歌词依赖播放器提供的 `歌名 / 歌手 / 时间轴`。如果播放器元数据不完整、时间轴异常，或外部歌词源未命中，也可能出现少量歌曲无歌词。
 
+**网易云歌词为什么显示“已降级”？**
+
+只读内存时间轴尚未适配当前网易云版本，或连续读取失败。程序会自动保留歌词并改用本地计时，不会修改网易云进程；也可以在“悬浮窗设置”中关闭该实验功能。
+
 **为什么有些游戏里悬浮窗还是可能被盖住？**  
 当前版本已经加强了顶层保持策略，对大多数窗口化全屏、无边框全屏游戏会更稳定；但 DirectX 独占全屏游戏不支持普通桌面悬浮窗置顶。此类游戏会绕过桌面窗口合成，Windows 不允许普通 WPF/Win32 透明窗口覆盖在其画面上方。建议改用窗口化、无边框全屏、窗口化全屏模式，或使用 OBS 等直播软件捕获悬浮窗窗口源。
 
 ## 技术栈
 
-- .NET 8.0 WPF
+- .NET 10.0 WPF
 - SMTC（Windows.Media.Control）
 - XInput + Windows.Gaming.Input（Xbox / DS5 手柄支持）
 - Win32 API（全局热键、窗口枚举、快捷键转发）

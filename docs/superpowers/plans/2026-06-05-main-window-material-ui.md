@@ -6,7 +6,7 @@
 
 **Architecture:** 保留现有 MainWindow 作为业务宿主，新增轻量 Shell 导航结构与 6 个页面级 UserControl，页面内部通过绑定到 MainWindow 或 Shell ViewModel 复用现有状态与事件。公共视觉风格统一沉淀到 Styles 资源字典，避免把大量界面样式继续堆在主窗口文件里。
 
-**Tech Stack:** WPF, XAML ResourceDictionary, existing code-behind services, .NET 8 Windows
+**Tech Stack:** WPF, XAML ResourceDictionary, existing code-behind services, .NET 10 Windows
 
 ---
 
