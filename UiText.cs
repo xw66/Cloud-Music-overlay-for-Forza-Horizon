@@ -48,9 +48,10 @@ public static class UiText
     public const string OpenFloatingSettings = "\u6253\u5F00\u60AC\u6D6E\u7A97\u8BBE\u7F6E";
     public const string OpenHotkeySettings = "\u6253\u5F00\u5FEB\u6377\u952E\u8BBE\u7F6E";
 
-    public const string LyricsSource = "\u6B4C\u8BCD\u6570\u636E\u6765\u6E90";
-    public const string SourceNeteaseWindow = "\u7F51\u6613\u4E91\u7A97\u53E3\u6807\u9898\uFF08\u535A\u5BA2 / \u6709\u58F0\u4E66\u4E0D\u652F\u6301\uFF09";
-    public const string SourceSmtc = "QQ\u97F3\u4E50 / Apple Music \u7B49\uFF08SMTC\uFF09";
+    public const string LyricsSource = "播放器数据渠道";
+    public const string PlaybackSourceDescription = "网易云用户默认选择网易云专用渠道；QQ音乐、Apple Music、酷狗等提供系统时间轴的播放器选择 SMTC。两条渠道独立运行，可随时手动切换。";
+    public const string SourceNeteaseWindow = "网易云专用渠道（默认；博客 / 有声书不支持）";
+    public const string SourceSmtc = "QQ音乐 / Apple Music / 酷狗等（SMTC）";
     public const string PositionAndScale = "\u4F4D\u7F6E\u4E0E\u7F29\u653E";
     public const string HorizontalPosition = "\u6C34\u5E73\u4F4D\u7F6E";
     public const string VerticalPosition = "\u5782\u76F4\u4F4D\u7F6E";

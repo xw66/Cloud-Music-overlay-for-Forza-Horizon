@@ -51,6 +51,7 @@ public sealed class PlaybackSessionService : IDisposable
     internal const int FailureThreshold = 3;
 
     private static readonly TimeSpan DefaultTrackInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan NeteaseTrackInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan SmtcTrackInterval = TimeSpan.FromMilliseconds(800);
     private static readonly TimeSpan DefaultTimelineInterval = TimeSpan.FromMilliseconds(800);
     private static readonly TimeSpan DefaultFailureCooldown = TimeSpan.FromSeconds(2);
@@ -71,6 +72,7 @@ public sealed class PlaybackSessionService : IDisposable
     private DateTimeOffset _nextTrackRefreshAt;
     private DateTimeOffset _nextTimelineRefreshAt;
     private DateTimeOffset _circuitOpenUntil;
+    private int _consecutiveTrackFailures;
     private PlaybackSnapshot _latestSnapshot;
     private CancellationTokenSource? _runCts;
     private Task? _runTask;
@@ -131,6 +133,7 @@ public sealed class PlaybackSessionService : IDisposable
             _nextTrackRefreshAt = DateTimeOffset.MinValue;
             _nextTimelineRefreshAt = DateTimeOffset.MinValue;
             _circuitOpenUntil = DateTimeOffset.MinValue;
+            _consecutiveTrackFailures = 0;
             if (sourceChanged)
             {
                 _latestSnapshot = PlaybackSnapshot.StartingFor(
@@ -237,7 +240,12 @@ public sealed class PlaybackSessionService : IDisposable
             DateTimeOffset capturedAt = _timeProvider.GetUtcNow();
             if (!source.IsAvailable)
             {
-                return CommitUnavailable(source, capturedAt, configurationVersion);
+                return CommitUnavailable(
+                    source,
+                    capturedAt,
+                    configurationVersion,
+                    includeTrack,
+                    includeTimeline);
             }
 
             TrackInfo? track = null;
@@ -309,8 +317,14 @@ public sealed class PlaybackSessionService : IDisposable
                     if (_circuitOpenUntil > now)
                     {
                         includeTrack = false;
-                        includeTimeline = false;
-                        delay = _circuitOpenUntil - now;
+                        includeTimeline = _timelineEnabled &&
+                            now >= _nextTimelineRefreshAt;
+                        DateTimeOffset nextRefresh = _timelineEnabled
+                            ? Min(_circuitOpenUntil, _nextTimelineRefreshAt)
+                            : _circuitOpenUntil;
+                        delay = nextRefresh > now
+                            ? nextRefresh - now
+                            : TimeSpan.Zero;
                     }
                     else
                     {
@@ -351,7 +365,9 @@ public sealed class PlaybackSessionService : IDisposable
     private PlaybackSnapshot CommitUnavailable(
         IPlaybackSource source,
         DateTimeOffset capturedAt,
-        long configurationVersion)
+        long configurationVersion,
+        bool includeTrack,
+        bool includeTimeline)
     {
         lock (_stateGate)
         {
@@ -371,7 +387,11 @@ public sealed class PlaybackSessionService : IDisposable
                 ConsecutiveFailures = _latestSnapshot.ConsecutiveFailures + 1,
                 LastError = "播放器数据源当前不可用"
             };
-            ScheduleNextLocked(capturedAt, failed: true);
+            ScheduleNextLocked(
+                capturedAt,
+                includeTrack,
+                trackFailed: includeTrack,
+                includeTimeline);
             LogHealthChange(previousHealth, _latestSnapshot);
             return _latestSnapshot;
         }
@@ -409,49 +429,81 @@ public sealed class PlaybackSessionService : IDisposable
             string? lastError = failed
                 ? failure?.Message ?? BuildMissingDataMessage(includeTrack, track, includeTimeline, timeline)
                 : null;
+            TrackInfo? nextTrack = includeTrack ? track : _latestSnapshot.Track;
+            TimeSpan? nextPosition = includeTimeline
+                ? timeline?.Position
+                : _latestSnapshot.Position;
+            bool? nextIsPlaying = includeTimeline
+                ? timeline?.IsPlaying
+                : _latestSnapshot.IsPlaying;
+            bool trackChanged = includeTrack &&
+                !AreTrackSamplesEqual(_latestSnapshot.Track, nextTrack);
+            bool timelineChanged = includeTimeline &&
+                (_latestSnapshot.Position != nextPosition ||
+                 _latestSnapshot.IsPlaying != nextIsPlaying);
 
             _latestSnapshot = _latestSnapshot with
             {
                 SourceId = source.Id,
                 SourceDisplayName = source.DisplayName,
                 Capabilities = source.Capabilities,
-                Track = includeTrack ? track : _latestSnapshot.Track,
-                Position = includeTimeline ? timeline?.Position : _latestSnapshot.Position,
-                IsPlaying = includeTimeline ? timeline?.IsPlaying : _latestSnapshot.IsPlaying,
+                Track = nextTrack,
+                Position = nextPosition,
+                IsPlaying = nextIsPlaying,
                 CapturedAt = capturedAt,
                 TrackCapturedAt = includeTrack ? capturedAt : _latestSnapshot.TrackCapturedAt,
                 TimelineCapturedAt = includeTimeline ? capturedAt : _latestSnapshot.TimelineCapturedAt,
-                TrackVersion = includeTrack
+                TrackVersion = trackChanged
                     ? _latestSnapshot.TrackVersion + 1
                     : _latestSnapshot.TrackVersion,
-                TimelineVersion = includeTimeline
+                TimelineVersion = timelineChanged
                     ? _latestSnapshot.TimelineVersion + 1
                     : _latestSnapshot.TimelineVersion,
                 Health = health,
                 ConsecutiveFailures = consecutiveFailures,
                 LastError = lastError
             };
-            ScheduleNextLocked(capturedAt, failed);
+            bool trackFailed = includeTrack && track == null;
+            ScheduleNextLocked(
+                capturedAt,
+                includeTrack,
+                trackFailed,
+                includeTimeline);
             LogHealthChange(previousHealth, _latestSnapshot);
             return _latestSnapshot;
         }
     }
 
-    private void ScheduleNextLocked(DateTimeOffset capturedAt, bool failed)
+    private void ScheduleNextLocked(
+        DateTimeOffset capturedAt,
+        bool includeTrack,
+        bool trackFailed,
+        bool includeTimeline)
     {
-        _nextTrackRefreshAt = capturedAt + GetTrackRefreshInterval(
-            _latestSnapshot.SourceId,
-            _trackInterval);
-        _nextTimelineRefreshAt = capturedAt + _timelineInterval;
-        if (failed && _latestSnapshot.ConsecutiveFailures >= FailureThreshold)
+        if (includeTrack)
         {
-            _circuitOpenUntil = capturedAt + GetFailureCooldown(
-                _failureCooldown,
-                _latestSnapshot.ConsecutiveFailures);
+            _nextTrackRefreshAt = capturedAt + GetTrackRefreshInterval(
+                _latestSnapshot.SourceId,
+                _trackInterval);
+            _consecutiveTrackFailures = trackFailed
+                ? _consecutiveTrackFailures + 1
+                : 0;
+            if (trackFailed &&
+                _consecutiveTrackFailures >= FailureThreshold)
+            {
+                _circuitOpenUntil = capturedAt + GetFailureCooldown(
+                    _failureCooldown,
+                    _consecutiveTrackFailures);
+            }
+            else if (!trackFailed)
+            {
+                _circuitOpenUntil = DateTimeOffset.MinValue;
+            }
         }
-        else
+
+        if (includeTimeline)
         {
-            _circuitOpenUntil = DateTimeOffset.MinValue;
+            _nextTimelineRefreshAt = capturedAt + _timelineInterval;
         }
     }
 
@@ -520,6 +572,41 @@ public sealed class PlaybackSessionService : IDisposable
         return left <= right ? left : right;
     }
 
+    private static bool AreTrackSamplesEqual(TrackInfo? left, TrackInfo? right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left == null || right == null)
+        {
+            return false;
+        }
+
+        return string.Equals(left.Name, right.Name, StringComparison.Ordinal) &&
+               string.Equals(left.Artist, right.Artist, StringComparison.Ordinal) &&
+               string.Equals(left.Subtitle, right.Subtitle, StringComparison.Ordinal) &&
+               string.Equals(left.AlbumTitle, right.AlbumTitle, StringComparison.Ordinal) &&
+               string.Equals(left.SourceAppId, right.SourceAppId, StringComparison.Ordinal) &&
+               string.Equals(left.SongId, right.SongId, StringComparison.Ordinal) &&
+               left.DurationSeconds.Equals(right.DurationSeconds) &&
+               string.Equals(left.CoverSource, right.CoverSource, StringComparison.Ordinal) &&
+               AreCoverBytesEqual(left.CoverBytes, right.CoverBytes);
+    }
+
+    private static bool AreCoverBytesEqual(byte[]? left, byte[]? right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        return left != null &&
+               right != null &&
+               left.AsSpan().SequenceEqual(right);
+    }
+
     internal static TimeSpan GetFailureCooldown(
         TimeSpan baseCooldown,
         int consecutiveFailures)
@@ -536,6 +623,15 @@ public sealed class PlaybackSessionService : IDisposable
         string sourceId,
         TimeSpan configuredInterval)
     {
+        if (string.Equals(
+                sourceId,
+                PlaybackSourceIds.Netease,
+                StringComparison.OrdinalIgnoreCase) &&
+            configuredInterval > NeteaseTrackInterval)
+        {
+            return NeteaseTrackInterval;
+        }
+
         return PlaybackCoordinator.IsSmtcSource(sourceId) &&
                configuredInterval > SmtcTrackInterval
             ? SmtcTrackInterval

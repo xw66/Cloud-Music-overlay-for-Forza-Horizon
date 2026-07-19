@@ -23,6 +23,15 @@ public sealed class LyricsService : IDisposable
     private static readonly Regex QueryNoiseRegex = new(
         @"(\(.*?(live|\u4f34\u594f|dj|cover|vip|explicit|remaster|version|ver\.?|feat\.?|ft\.?|\u6bcd\u5e26|\u8d85\u54c1\u8d28|\u81fb\u54c1|\u675c\u6bd4|\u5168\u666f\u58f0).*?\))|(\[.*?(live|\u4f34\u594f|dj|cover|vip|explicit|remaster|version|ver\.?|feat\.?|ft\.?|\u6bcd\u5e26|\u8d85\u54c1\u8d28|\u81fb\u54c1|\u675c\u6bd4|\u5168\u666f\u58f0).*?\])|(\b(?:live|dj|cover|vip|explicit|remaster|version|ver|feat|ft)\.?)|(\u6bcd\u5e26)|(\u8d85\u54c1\u8d28)|(\u81fb\u54c1)|(\u675c\u6bd4\u5168\u666f\u58f0?)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex WhitespaceRegex = new(
+        @"\s+",
+        RegexOptions.Compiled);
+    private static readonly Regex DynamicLineRegex = new(
+        @"^\[(\d+),\d+\](.*)$",
+        RegexOptions.Compiled);
+    private static readonly Regex DynamicWordTimingRegex = new(
+        @"\(\d+,\d+,\d+\)",
+        RegexOptions.Compiled);
 
     private readonly Func<string, string, string?, double, Task<IReadOnlyList<SongSearchCandidate>>> _searchSongCandidatesAsync;
     private readonly Func<string, Task<string>> _fetchLyricPayloadAsync;
@@ -552,7 +561,7 @@ public sealed class LyricsService : IDisposable
             .Replace("\u2019", "'")
             .Replace("\u201C", "\"")
             .Replace("\u201D", "\"");
-        cleaned = Regex.Replace(cleaned, @"\s+", " ").Trim();
+        cleaned = WhitespaceRegex.Replace(cleaned, " ").Trim();
         return cleaned;
     }
 
@@ -797,19 +806,15 @@ public sealed class LyricsService : IDisposable
         return await response.Content.ReadAsStringAsync();
     }
 
-    private static List<(double Time, string Text)> ParseLrc(string lrc)
+    internal static List<(double Time, string Text)> ParseLrc(string lrc)
     {
         List<(double Time, string Text)> lines = new();
         double offsetSeconds = 0;
+        string[] rawLines = lrc.Split('\n');
 
-        foreach (string line in lrc.Split('\n'))
+        foreach (string line in rawLines)
         {
             string trimmed = line.Trim();
-            if (string.IsNullOrEmpty(trimmed))
-            {
-                continue;
-            }
-
             if (trimmed.StartsWith("[offset:", StringComparison.OrdinalIgnoreCase))
             {
                 int close = trimmed.IndexOf(']');
@@ -825,23 +830,49 @@ public sealed class LyricsService : IDisposable
                         offsetSeconds = offsetMs / 1000.0;
                     }
                 }
-                continue;
             }
+        }
 
-            int closeBracket = trimmed.IndexOf(']');
-            if (closeBracket < 0 || !trimmed.StartsWith('['))
+        foreach (string line in rawLines)
+        {
+            string trimmed = line.Trim();
+            if (string.IsNullOrEmpty(trimmed) ||
+                trimmed.StartsWith("[offset:", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            string timePart = trimmed.Substring(1, closeBracket - 1);
-            string textPart = trimmed[(closeBracket + 1)..].Trim();
+            List<double> timestamps = new(2);
+            int cursor = 0;
+            int lastCloseBracket = -1;
+            while (cursor < trimmed.Length && trimmed[cursor] == '[')
+            {
+                int closeBracket = trimmed.IndexOf(']', cursor + 1);
+                if (closeBracket < 0 ||
+                    !TryParseTime(
+                        trimmed.Substring(cursor + 1, closeBracket - cursor - 1),
+                        out double time))
+                {
+                    break;
+                }
+
+                timestamps.Add(time);
+                lastCloseBracket = closeBracket;
+                cursor = closeBracket + 1;
+            }
+
+            if (timestamps.Count == 0 || lastCloseBracket < 0)
+            {
+                continue;
+            }
+
+            string textPart = trimmed[(lastCloseBracket + 1)..].Trim();
             if (string.IsNullOrWhiteSpace(textPart))
             {
                 continue;
             }
 
-            if (TryParseTime(timePart, out double time))
+            foreach (double time in timestamps)
             {
                 lines.Add((Math.Max(0, time + offsetSeconds), textPart));
             }
@@ -967,10 +998,10 @@ public sealed class LyricsService : IDisposable
                 continue;
             }
 
-            Match lineMatch = Regex.Match(line, @"^\[(\d+),\d+\](.*)$");
+            Match lineMatch = DynamicLineRegex.Match(line);
             if (!lineMatch.Success)
             {
-                normalizedLines.Add(Regex.Replace(line, @"\(\d+,\d+,\d+\)", string.Empty).Trim());
+                normalizedLines.Add(DynamicWordTimingRegex.Replace(line, string.Empty).Trim());
                 continue;
             }
 
@@ -979,7 +1010,9 @@ public sealed class LyricsService : IDisposable
                 continue;
             }
 
-            string text = Regex.Replace(lineMatch.Groups[2].Value, @"\(\d+,\d+,\d+\)", string.Empty).Trim();
+            string text = DynamicWordTimingRegex.Replace(
+                lineMatch.Groups[2].Value,
+                string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(text))
             {
                 continue;

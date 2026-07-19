@@ -18,6 +18,7 @@ public sealed class NeteaseLyricTimingController
     private int _pendingBackwardSampleCount;
 
     public bool HasState { get; private set; }
+    public bool HasPlayerState { get; private set; }
 
     public void Start()
     {
@@ -29,6 +30,7 @@ public sealed class NeteaseLyricTimingController
         ClearPendingBackwardSeek();
         SetAnchor(0, isPlaying: true, nowUtc);
         HasState = true;
+        HasPlayerState = false;
     }
 
     public void Reset()
@@ -37,6 +39,7 @@ public sealed class NeteaseLyricTimingController
         _anchorTimeUtc = default;
         _anchorPositionSeconds = 0;
         _isPlaying = false;
+        HasPlayerState = false;
         ClearPendingBackwardSeek();
     }
 
@@ -58,6 +61,15 @@ public sealed class NeteaseLyricTimingController
             if (positionSeconds <
                 currentPositionSeconds - BackwardJumpThresholdSeconds)
             {
+                if (!isPlaying && _isPlaying)
+                {
+                    SetAnchor(currentPositionSeconds, isPlaying: false, nowUtc);
+                    HasState = true;
+                    HasPlayerState = true;
+                    StartPendingBackwardSeek(positionSeconds, isPlaying: false, nowUtc);
+                    return;
+                }
+
                 if (!ConfirmBackwardSeek(positionSeconds, isPlaying, nowUtc))
                 {
                     return;
@@ -71,11 +83,29 @@ public sealed class NeteaseLyricTimingController
 
         SetAnchor(positionSeconds, isPlaying, nowUtc);
         HasState = true;
+        HasPlayerState = true;
     }
 
     public double GetCurrentPositionSeconds()
     {
         return GetCurrentPositionSeconds(DateTime.UtcNow);
+    }
+
+    public void Suspend()
+    {
+        Suspend(DateTime.UtcNow);
+    }
+
+    internal void Suspend(DateTime nowUtc)
+    {
+        if (!HasState || !HasPlayerState || !_isPlaying)
+        {
+            return;
+        }
+
+        double currentPositionSeconds = GetCurrentPositionSeconds(nowUtc);
+        ClearPendingBackwardSeek();
+        SetAnchor(currentPositionSeconds, isPlaying: false, nowUtc);
     }
 
     internal double GetCurrentPositionSeconds(DateTime nowUtc)

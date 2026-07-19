@@ -43,6 +43,16 @@ public static class StartupDiagnosticsService
 
         diagnostic.Event(DiagnosticContext.Format(traceId, "startup", "netease-data-dirs",
             ("dirs", string.Join(" | ", dataDirs.Select(x => $"{(Directory.Exists(x) ? "exists" : "missing")}:{x}")))));
+
+        NeteaseClientCompatibilityResult client =
+            NeteaseClientCompatibility.InspectRunningClient();
+        diagnostic.Event(DiagnosticContext.Format(traceId, "startup", "netease-client",
+            ("supported", client.IsSupported),
+            ("pid", client.ProcessId),
+            ("version", client.ProductVersion),
+            ("sha256", client.Sha256),
+            ("ipcWindow", client.IpcWindowHandle == 0 ? "missing" : $"0x{client.IpcWindowHandle:X}"),
+            ("reason", client.Reason)));
     }
 
     private static bool CanWriteTo(string? directory)

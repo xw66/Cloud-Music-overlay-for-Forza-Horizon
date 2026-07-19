@@ -27,6 +27,7 @@ public sealed class OverlaySettingsServiceTests
         Assert.Equal("Back+Start", settings.GamepadToggleOverlayHotkey);
         Assert.False(settings.HideOverlayWhenPaused);
         Assert.True(settings.EnableNeteaseMemoryTimeline);
+        Assert.Equal(PlaybackSourceIds.Netease, settings.TrackSource);
         Assert.Equal(OverlaySettings.CurrentVersion, settings.SchemaVersion);
     }
 

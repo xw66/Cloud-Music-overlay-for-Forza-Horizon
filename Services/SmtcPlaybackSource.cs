@@ -20,7 +20,7 @@ public sealed class SmtcPlaybackSource : IPlaybackSource
 
     public string Id => PlaybackSourceIds.Smtc;
 
-    public string DisplayName => "SMTC 媒体会话";
+    public string DisplayName => "SMTC 渠道（QQ音乐 / Apple Music / 酷狗等）";
 
     public PlaybackSourceCapabilities Capabilities =>
         PlaybackSourceCapabilities.TrackMetadata |

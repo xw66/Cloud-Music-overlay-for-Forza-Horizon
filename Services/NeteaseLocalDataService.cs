@@ -7,15 +7,44 @@ using HorizonRadioOverlay.Models;
 
 namespace HorizonRadioOverlay.Services;
 
+internal static class NeteaseTrackMetadataCachePolicy
+{
+    public const long RetryIncompleteMetadataAfterMilliseconds = 5_000;
+
+    public static bool ShouldReuse(
+        TrackInfo liveTrack,
+        TrackInfo cachedTrack,
+        long elapsedMilliseconds)
+    {
+        if (!string.Equals(
+                TrackIdentity.BuildNeteaseTrackKey(liveTrack),
+                TrackIdentity.BuildNeteaseTrackKey(cachedTrack),
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return cachedTrack.CoverBytes is { Length: > 0 } ||
+               elapsedMilliseconds < RetryIncompleteMetadataAfterMilliseconds;
+    }
+}
+
 public sealed class NeteaseLocalDataService : ITrackMetadataProvider
 {
-    internal readonly record struct LocalSongIdHint(string SongId, string Source);
+    internal readonly record struct LocalSongIdHint(
+        string SongId,
+        string Source,
+        string? CoverUrl = null,
+        double DurationSeconds = 0);
     private readonly record struct CoverDownloadResult(byte[]? Bytes, string RootCause, int? StatusCode, string? ContentType);
 
     private readonly CoverCacheService _coverCache;
     private readonly DiagnosticService _diagnostic;
     private readonly NeteaseOfficialResolver _officialResolver;
+    private readonly object _trackCacheGate = new();
     private long _lastWindowTitleFailureLogAt;
+    private TrackInfo? _cachedTrack;
+    private long _cachedTrackAtMilliseconds;
     private static readonly HttpClient HttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(5)
@@ -56,15 +85,14 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
     {
         string traceId = DiagnosticContext.NewTraceId();
         Stopwatch pipelineStopwatch = Stopwatch.StartNew();
-        _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-cover", "start", ("status", "started")));
-
-        TrackInfo? liveTrack = GetTrackFromRunningProcess(_diagnostic, traceId);
+        TrackInfo? liveTrack = GetTrackFromRunningProcess(null, traceId);
         if (liveTrack == null)
         {
             long now = Environment.TickCount64;
             if (now - _lastWindowTitleFailureLogAt >= 5000)
             {
                 _lastWindowTitleFailureLogAt = now;
+                _ = GetTrackFromRunningProcess(_diagnostic, traceId);
                 _diagnostic.Warn(
                     DiagnosticContext.Format(traceId, "netease-cover", "result",
                         ("status", NeteaseCoverDiagnosticPolicy.WindowTitleMissing),
@@ -76,6 +104,13 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
             return null;
         }
 
+        if (TryGetCachedTrack(liveTrack, out TrackInfo? cachedTrack))
+        {
+            return cachedTrack;
+        }
+
+        _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-cover", "start", ("status", "started")));
+        liveTrack = GetTrackFromRunningProcess(_diagnostic, traceId) ?? liveTrack;
         LocalSongIdHint? localHint = await TryGetSongIdHintAsync(liveTrack.Name, liveTrack.Artist, traceId);
         string? preferredSongId = localHint?.SongId;
         if (!string.IsNullOrWhiteSpace(preferredSongId))
@@ -87,11 +122,24 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
             _diagnostic.Warn($"CloudMusic local song id hint missing, falling back to official search: {liveTrack.Name} / {liveTrack.Artist}");
         }
 
-        ResolvedSong? resolved = await _officialResolver.ResolveAsync(liveTrack.Name, liveTrack.Artist, preferredSongId, traceId);
-        bool usedPreferredSongId = !string.IsNullOrWhiteSpace(preferredSongId) &&
-            string.Equals(resolved?.ResolveSource, "netease-id", StringComparison.Ordinal);
+        bool usedLocalDetails = localHint is { CoverUrl.Length: > 0 };
+        ResolvedSong? resolved = usedLocalDetails
+            ? new ResolvedSong
+            {
+                SongId = localHint!.Value.SongId,
+                Title = liveTrack.Name,
+                Artist = liveTrack.Artist,
+                CoverUrl = localHint.Value.CoverUrl,
+                DurationSeconds = localHint.Value.DurationSeconds,
+                Confidence = 100,
+                ResolveSource = "netease-local-data"
+            }
+            : await _officialResolver.ResolveAsync(liveTrack.Name, liveTrack.Artist, preferredSongId, traceId);
+        bool usedPreferredSongId = usedLocalDetails ||
+            (!string.IsNullOrWhiteSpace(preferredSongId) &&
+             string.Equals(resolved?.ResolveSource, "netease-id", StringComparison.Ordinal));
 
-        if (usedPreferredSongId && resolved != null && !ShouldTrustPreferredSongId(liveTrack, resolved))
+        if (!usedLocalDetails && usedPreferredSongId && resolved != null && !ShouldTrustPreferredSongId(liveTrack, resolved))
         {
             _diagnostic.Warn(
                 $"CloudMusic local song id hint mismatched process title, falling back to search: " +
@@ -105,7 +153,9 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
         string coverKey = !string.IsNullOrWhiteSpace(resolved?.SongId)
             ? $"netease-song:{resolved.SongId}"
             : $"{liveTrack.Name}|{liveTrack.Artist}";
-        byte[]? coverBytes = _coverCache.TryGet(coverKey, traceId);
+        string identityCoverKey = $"netease-track:{TrackIdentity.BuildNeteaseTrackKey(liveTrack)}";
+        byte[]? coverBytes = _coverCache.TryGet(coverKey, traceId)
+            ?? _coverCache.TryGet(identityCoverKey, traceId);
         string coverSource;
         string rootCause = "none";
 
@@ -142,6 +192,7 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
             {
                 coverSource = NeteaseCoverDiagnosticPolicy.Downloaded;
                 _coverCache.Set(coverKey, coverBytes, traceId);
+                _coverCache.Set(identityCoverKey, coverBytes, traceId);
                 _diagnostic.Info($"CloudMusic cover downloaded and cached: songId={resolved.SongId}");
             }
             else
@@ -157,7 +208,9 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
 
         string baseSourceAppId = resolved == null
             ? "CloudMusic(ProcessTitle)"
-            : (usedPreferredSongId
+            : (usedLocalDetails
+                ? $"CloudMusic(LocalData:{preferredSongId},{localHint?.Source})"
+                : usedPreferredSongId
                 ? $"CloudMusic(OfficialById:{preferredSongId},{localHint?.Source})"
                 : "CloudMusic(OfficialSearch)");
         string sourceAppId = NeteaseCoverDiagnosticPolicy.FormatSourceAppId(baseSourceAppId, coverSource);
@@ -182,16 +235,47 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
             _diagnostic.Info(pipelineSummary);
         }
 
-        return new TrackInfo
+        TrackInfo result = new()
         {
-            Name = resolved?.Title ?? liveTrack.Name,
-            Artist = resolved?.Artist ?? liveTrack.Artist,
+            Name = liveTrack.Name,
+            Artist = liveTrack.Artist,
             SourceAppId = sourceAppId,
             SongId = resolved?.SongId ?? (usedPreferredSongId ? preferredSongId : null),
             CoverBytes = coverBytes,
             DurationSeconds = resolved?.DurationSeconds ?? 0,
             CoverSource = coverSource
         };
+        CacheTrack(result);
+        return result;
+    }
+
+    private bool TryGetCachedTrack(TrackInfo liveTrack, out TrackInfo? cachedTrack)
+    {
+        lock (_trackCacheGate)
+        {
+            cachedTrack = _cachedTrack;
+            if (cachedTrack == null)
+            {
+                return false;
+            }
+
+            long elapsedMilliseconds = Math.Max(
+                0,
+                Environment.TickCount64 - _cachedTrackAtMilliseconds);
+            return NeteaseTrackMetadataCachePolicy.ShouldReuse(
+                liveTrack,
+                cachedTrack,
+                elapsedMilliseconds);
+        }
+    }
+
+    private void CacheTrack(TrackInfo track)
+    {
+        lock (_trackCacheGate)
+        {
+            _cachedTrack = track;
+            _cachedTrackAtMilliseconds = Environment.TickCount64;
+        }
     }
 
     internal static bool ShouldTrustPreferredSongId(TrackInfo liveTrack, ResolvedSong resolved)
@@ -488,6 +572,7 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
             }
 
             List<NeteaseLocalTrackCandidate> candidates = new();
+            Dictionary<string, (string? CoverUrl, double DurationSeconds)> metadataBySongId = new(StringComparer.Ordinal);
             int index = 0;
 
             foreach (JsonElement item in list.EnumerateArray())
@@ -512,20 +597,47 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
                         (rootIndexHint.HasValue && rootIndexHint.Value == index) ||
                         HasCurrentTrackHint(item) ||
                         HasCurrentTrackHint(trackElement)));
+                    metadataBySongId[songId] = (
+                        ReadCoverUrl(trackElement),
+                        ReadDurationSeconds(trackElement));
                 }
 
                 index++;
             }
 
             string? matchedSongId = NeteaseLocalTrackMatchPolicy.SelectSongId(candidates, name, artist);
-            return !string.IsNullOrWhiteSpace(matchedSongId)
-                ? new LocalSongIdHint(matchedSongId, $"{fileLabel}:scored-match")
-                : null;
+            if (string.IsNullOrWhiteSpace(matchedSongId))
+            {
+                return null;
+            }
+
+            metadataBySongId.TryGetValue(matchedSongId, out var metadata);
+            return new LocalSongIdHint(
+                matchedSongId,
+                $"{fileLabel}:scored-match",
+                metadata.CoverUrl,
+                metadata.DurationSeconds);
         }
         catch
         {
             return null;
         }
+    }
+
+    private static double ReadDurationSeconds(JsonElement trackElement)
+    {
+        foreach (string propertyName in new[] { "duration", "dt" })
+        {
+            if (trackElement.TryGetProperty(propertyName, out JsonElement duration) &&
+                duration.ValueKind == JsonValueKind.Number &&
+                duration.TryGetDouble(out double milliseconds) &&
+                milliseconds > 0)
+            {
+                return milliseconds / 1000.0;
+            }
+        }
+
+        return 0;
     }
 
     private static string? TryGetIndexedSongId(JsonElement list, int index, bool hasTrackWrapper)

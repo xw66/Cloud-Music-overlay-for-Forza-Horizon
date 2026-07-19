@@ -171,6 +171,7 @@ internal static class NeteaseMemoryClockPairingPolicy
 internal static class NeteaseMemoryClockOffsetPolicy
 {
     private const long NegativeToleranceMicroseconds = 150_000;
+    private const long NearZeroOffsetMicroseconds = 1_000_000;
 
     public static long? ResolveBaseOffset(
         long segmentPositionMicroseconds,
@@ -184,6 +185,15 @@ internal static class NeteaseMemoryClockOffsetPolicy
 
         return Math.Max(0, offset);
     }
+
+    public static bool IsPlausibleSeekRebase(
+        long? previousAbsolutePositionMicroseconds,
+        long baseOffsetMicroseconds)
+    {
+        return !previousAbsolutePositionMicroseconds.HasValue ||
+               previousAbsolutePositionMicroseconds.Value <= NearZeroOffsetMicroseconds ||
+               baseOffsetMicroseconds >= NearZeroOffsetMicroseconds;
+    }
 }
 
 internal static class NeteaseMemorySegmentClockPolicy
@@ -195,6 +205,32 @@ internal static class NeteaseMemorySegmentClockPolicy
         return previousPositionMicroseconds.HasValue &&
                positionMicroseconds <
                previousPositionMicroseconds.Value - SeekResetThresholdMicroseconds;
+    }
+}
+
+internal static class NeteaseMemoryActivityPolicy
+{
+    public static long ExtrapolatePosition(
+        long lastPositionMicroseconds,
+        DateTime lastSampleUtc,
+        bool wasPlaying,
+        DateTime nowUtc,
+        long maximumPositionMicroseconds)
+    {
+        if (!wasPlaying || lastSampleUtc == default || nowUtc <= lastSampleUtc)
+        {
+            return Math.Clamp(
+                lastPositionMicroseconds,
+                0,
+                maximumPositionMicroseconds);
+        }
+
+        long elapsedMicroseconds = (long)Math.Round(
+            (nowUtc - lastSampleUtc).TotalMilliseconds * 1_000);
+        return Math.Clamp(
+            lastPositionMicroseconds + Math.Max(0, elapsedMicroseconds),
+            0,
+            maximumPositionMicroseconds);
     }
 }
 
@@ -220,7 +256,6 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
     private const long MinimumPositionMicroseconds = 250_000;
     private const long DefaultMaximumPositionMicroseconds = 20L * 60 * 1_000_000;
     private const long ScanCooldownMilliseconds = 4_000;
-    private const long CachedConsensusToleranceMicroseconds = 150_000;
     private const long MovementThresholdMicroseconds = 20_000;
     private const int PauseDetectionMilliseconds = 350;
     private const int FastRebasePassDelayMilliseconds = 120;
@@ -243,6 +278,7 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
     private bool _lastIsPlaying = true;
     private bool _pendingRebase;
     private long _lastScanAttemptAt;
+    private Task<(TimeSpan Position, bool IsPlaying)?>? _discoveryTask;
 
     public NeteaseMemoryPlaybackProbe(DiagnosticService diagnostic)
     {
@@ -253,7 +289,7 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
     {
         string trackKey = track == null
             ? string.Empty
-            : $"meta:{TrackIdentity.BuildTrackKey(track, includeSourceAppId: false)}";
+            : $"meta:{TrackIdentity.BuildNeteaseTrackKey(track)}";
         long maximumPositionMicroseconds = track?.DurationSeconds > 0
             ? checked((long)Math.Ceiling((track.DurationSeconds + 5) * 1_000_000))
             : DefaultMaximumPositionMicroseconds;
@@ -286,22 +322,47 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
         }
     }
 
-    public async Task<(TimeSpan Position, bool IsPlaying)?> GetPlaybackStateAsync()
+    public Task<(TimeSpan Position, bool IsPlaying)?> GetPlaybackStateAsync()
     {
         if (!Environment.Is64BitProcess)
         {
-            return null;
+            return Task.FromResult<(TimeSpan Position, bool IsPlaying)?>(null);
         }
 
         if (TryReadCachedStateSafely(out (TimeSpan Position, bool IsPlaying) cachedState))
         {
-            return cachedState;
+            return Task.FromResult<(TimeSpan Position, bool IsPlaying)?>(cachedState);
         }
 
+        lock (_stateGate)
+        {
+            if (_discoveryTask is { IsCompletedSuccessfully: true })
+            {
+                (TimeSpan Position, bool IsPlaying)? completedState =
+                    _discoveryTask.GetAwaiter().GetResult();
+                _discoveryTask = null;
+                if (completedState.HasValue)
+                {
+                    return Task.FromResult(completedState);
+                }
+            }
+
+            if (_discoveryTask is null || _discoveryTask.IsCompleted)
+            {
+                _discoveryTask = Task.Run(DiscoverPlaybackStateAsync);
+            }
+        }
+
+        return Task.FromResult<(TimeSpan Position, bool IsPlaying)?>(null);
+    }
+
+    private async Task<(TimeSpan Position, bool IsPlaying)?> DiscoverPlaybackStateAsync()
+    {
         await _scanGate.WaitAsync();
         try
         {
-            if (TryReadCachedStateSafely(out cachedState))
+            if (TryReadCachedStateSafely(
+                    out (TimeSpan Position, bool IsPlaying) cachedState))
             {
                 return cachedState;
             }
@@ -329,18 +390,26 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
                 preferredPositionMicroseconds = _lastPositionMicroseconds;
             }
 
-            MemoryClockDiscovery? discovery = await Task.Run(
-                () => DiscoverClock(
+            MemoryClockScanResult scanResult = await Task.Run(() =>
+            {
+                MemoryClockDiscovery? result = DiscoverClock(
                     maximumPositionMicroseconds,
                     knownSegmentLocations,
                     knownAbsoluteClockHints,
-                    preferredPositionMicroseconds));
+                    preferredPositionMicroseconds,
+                    out bool? isPlayingObservation);
+                return new MemoryClockScanResult(result, isPlayingObservation);
+            });
+            MemoryClockDiscovery? discovery = scanResult.Discovery;
             if (discovery == null)
             {
-                return null;
+                return scanResult.IsPlayingObservation is { } isPlayingObservation
+                    ? CreateActivityState(generation, isPlayingObservation)
+                    : null;
             }
 
             long absolutePositionMicroseconds = discovery.PositionMicroseconds;
+            bool isPlaying;
             lock (_stateGate)
             {
                 if (generation != _trackGeneration)
@@ -354,9 +423,9 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
                 _absoluteClockHints = discovery.AbsoluteClockHints;
                 _baseOffsetMicroseconds = discovery.BaseOffsetMicroseconds;
                 _lastSegmentPositionMicroseconds = discovery.SegmentPositionMicroseconds;
-                _lastPositionMicroseconds = absolutePositionMicroseconds;
-                _lastSampleUtc = DateTime.UtcNow;
-                _lastIsPlaying = true;
+                isPlaying = UpdateMovementStateLocked(
+                    absolutePositionMicroseconds,
+                    DateTime.UtcNow);
                 _pendingRebase = false;
             }
 
@@ -365,8 +434,9 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
                 $"kind={(discovery.Locations.Length >= 2 ? "paired-segment" : "absolute-double-anchor")}, " +
                 $"locations={discovery.Locations.Length}, " +
                 $"base={discovery.BaseOffsetMicroseconds / 1_000_000.0:F3}s, " +
-                $"position={absolutePositionMicroseconds / 1_000_000.0:F3}s");
-            return (TimeSpan.FromTicks(absolutePositionMicroseconds * 10), true);
+                $"position={absolutePositionMicroseconds / 1_000_000.0:F3}s, " +
+                $"isPlaying={isPlaying}");
+            return (TimeSpan.FromTicks(absolutePositionMicroseconds * 10), isPlaying);
         }
         catch (Exception ex)
         {
@@ -439,14 +509,14 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
                 segmentLocations,
                 maximumPositionMicroseconds);
         IReadOnlyList<NeteaseMemoryClockCandidate> segmentConsensus =
-            SelectCachedConsensus(segmentSamples);
+            NeteaseMemoryClockSelectionPolicy.SelectConsensus(segmentSamples);
         List<NeteaseMemoryClockCandidate> absoluteSamples =
             CaptureCurrentDoubleCandidates(
                 process,
                 absoluteLocations,
                 maximumPositionMicroseconds);
         IReadOnlyList<NeteaseMemoryClockCandidate> absoluteConsensus =
-            SelectCachedConsensus(
+            NeteaseMemoryClockSelectionPolicy.SelectConsensus(
                 absoluteSamples,
                 preferredPositionMicroseconds);
         DateTime nowUtc = DateTime.UtcNow;
@@ -457,6 +527,14 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
         {
             if (absoluteConsensus.Count == 0)
             {
+                if (_diagnostic.Enabled)
+                {
+                    _diagnostic.Info(
+                        $"Netease cached memory clock miss: " +
+                        $"pendingRebase={pendingRebase}, " +
+                        $"segmentGroups={DescribeCandidateGroups(segmentSamples)}, " +
+                        $"absoluteGroups={DescribeCandidateGroups(absoluteSamples)}");
+                }
                 MarkLocationsForRebase();
                 return false;
             }
@@ -501,6 +579,13 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
                 }
                 else if (pendingRebase)
                 {
+                    if (_diagnostic.Enabled)
+                    {
+                        _diagnostic.Info(
+                            $"Netease cached memory clock awaiting rebase: " +
+                            $"segment={segmentPositionMicroseconds / 1_000_000.0:F3}s, " +
+                            $"absoluteGroups={DescribeCandidateGroups(absoluteSamples)}");
+                    }
                     return false;
                 }
             }
@@ -570,50 +655,37 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
         return isPlaying;
     }
 
-    private static IReadOnlyList<NeteaseMemoryClockCandidate> SelectCachedConsensus(
-        IReadOnlyList<NeteaseMemoryClockCandidate> samples,
-        long? preferredPositionMicroseconds = null)
+    private (TimeSpan Position, bool IsPlaying)? CreateActivityState(
+        int generation,
+        bool isPlaying)
     {
-        if (preferredPositionMicroseconds.HasValue)
+        lock (_stateGate)
         {
-            NeteaseMemoryClockCandidate[] continuous = samples
-                .Where(sample =>
-                    sample.PositionMicroseconds >=
-                    preferredPositionMicroseconds.Value - 1_000_000)
-                .ToArray();
-            IReadOnlyList<NeteaseMemoryClockCandidate> continuousConsensus =
-                SelectBestCachedConsensus(continuous);
-            return continuousConsensus;
-        }
-
-        return SelectBestCachedConsensus(samples);
-    }
-
-    private static IReadOnlyList<NeteaseMemoryClockCandidate> SelectBestCachedConsensus(
-        IReadOnlyList<NeteaseMemoryClockCandidate> samples)
-    {
-        NeteaseMemoryClockCandidate[] best = [];
-        int bestAllocationCount = 0;
-        foreach (NeteaseMemoryClockCandidate center in samples)
-        {
-            NeteaseMemoryClockCandidate[] group = samples
-                .Where(sample =>
-                    Math.Abs(sample.PositionMicroseconds - center.PositionMicroseconds) <=
-                    CachedConsensusToleranceMicroseconds)
-                .ToArray();
-            int allocationCount = group
-                .Select(sample => sample.AllocationBase)
-                .Distinct()
-                .Count();
-            if (allocationCount > bestAllocationCount ||
-                (allocationCount == bestAllocationCount && group.Length > best.Length))
+            if (generation != _trackGeneration ||
+                !_lastPositionMicroseconds.HasValue)
             {
-                best = group;
-                bestAllocationCount = allocationCount;
+                return null;
             }
-        }
 
-        return bestAllocationCount >= 2 ? best : [];
+            DateTime nowUtc = DateTime.UtcNow;
+            long positionMicroseconds =
+                NeteaseMemoryActivityPolicy.ExtrapolatePosition(
+                    _lastPositionMicroseconds.Value,
+                    _lastSampleUtc,
+                    _lastIsPlaying,
+                    nowUtc,
+                    _maximumPositionMicroseconds);
+            _lastPositionMicroseconds = positionMicroseconds;
+            _lastSampleUtc = nowUtc;
+            _lastIsPlaying = isPlaying;
+            _diagnostic.Info(
+                $"Netease read-only memory activity: " +
+                $"isPlaying={isPlaying}, " +
+                $"position={positionMicroseconds / 1_000_000.0:F3}s");
+            return (
+                TimeSpan.FromTicks(positionMicroseconds * 10),
+                isPlaying);
+        }
     }
 
     private void InvalidateLocations()
@@ -648,8 +720,10 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
         long maximumPositionMicroseconds,
         IReadOnlyList<MemoryClockLocation> knownSegmentLocations,
         IReadOnlyList<MemoryScanHint> knownAbsoluteClockHints,
-        long? preferredPositionMicroseconds)
+        long? preferredPositionMicroseconds,
+        out bool? isPlayingObservation)
     {
+        isPlayingObservation = null;
         using Process? process = FindMainNeteaseProcess();
         if (process == null)
         {
@@ -691,7 +765,8 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
                         knownSegmentLocations,
                         maximumPositionMicroseconds);
                 IReadOnlyList<NeteaseMemoryClockCandidate> knownSegmentConsensus =
-                    SelectCachedConsensus(knownSegmentCandidates);
+                    NeteaseMemoryClockSelectionPolicy.SelectConsensus(
+                        knownSegmentCandidates);
                 if (knownSegmentConsensus.Count >= 2)
                 {
                     long fastSegmentPositionMicroseconds = Median(
@@ -701,6 +776,17 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
                         fastAbsoluteClock.PositionMicroseconds);
                     if (baseOffsetMicroseconds.HasValue)
                     {
+                        if (!NeteaseMemoryClockOffsetPolicy.IsPlausibleSeekRebase(
+                                preferredPositionMicroseconds,
+                                baseOffsetMicroseconds.Value))
+                        {
+                            _diagnostic.Info(
+                                $"Netease read-only memory fast rebase rejected near-zero offset: " +
+                                $"previous={preferredPositionMicroseconds / 1_000_000.0:F3}s, " +
+                                $"base={baseOffsetMicroseconds.Value / 1_000_000.0:F3}s");
+                            return null;
+                        }
+
                         _diagnostic.Info(
                             $"Netease read-only memory fast rebase: " +
                             $"hints={knownAbsoluteClockHints.Count}, " +
@@ -740,9 +826,12 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
             out List<MemoryDoublePassCandidate> doublePassCandidates);
         if (passCandidates.Count == 0 && doublePassCandidates.Count == 0)
         {
+            isPlayingObservation = false;
             _diagnostic.Info($"Netease read-only memory clock scan: no advancing candidates (seedChunks={chunks.Count}).");
             return null;
         }
+
+        isPlayingObservation = true;
 
         Thread.Sleep(450);
         List<NeteaseMemoryClockCandidate> finalCandidates = CaptureFinalCandidates(
@@ -781,7 +870,7 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
                 candidate.AllocationBase))
             .ToArray();
         MemoryScanHint[] absoluteClockHints = SelectScanHints(
-            finalDoubleConsensus,
+            finalDoubleCandidates,
             doublePassCandidates);
 
         if (knownSegmentLocations.Count >= 2)
@@ -792,7 +881,8 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
                     knownSegmentLocations,
                     maximumPositionMicroseconds);
             IReadOnlyList<NeteaseMemoryClockCandidate> knownSegmentConsensus =
-                SelectCachedConsensus(knownSegmentCandidates);
+                NeteaseMemoryClockSelectionPolicy.SelectConsensus(
+                    knownSegmentCandidates);
             if (knownSegmentConsensus.Count < 2)
             {
                 _diagnostic.Info(
@@ -812,6 +902,17 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
                     $"Netease read-only memory rebase rejected: " +
                     $"segment={rebasedSegmentPositionMicroseconds / 1_000_000.0:F3}s, " +
                     $"absolute={absolutePositionMicroseconds / 1_000_000.0:F3}s");
+                return null;
+            }
+
+            if (!NeteaseMemoryClockOffsetPolicy.IsPlausibleSeekRebase(
+                    preferredPositionMicroseconds,
+                    baseOffsetMicroseconds.Value))
+            {
+                _diagnostic.Info(
+                    $"Netease read-only memory rebase rejected near-zero offset: " +
+                    $"previous={preferredPositionMicroseconds / 1_000_000.0:F3}s, " +
+                    $"base={baseOffsetMicroseconds.Value / 1_000_000.0:F3}s");
                 return null;
             }
 
@@ -968,7 +1069,7 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
                     candidate.Address,
                     candidate.AllocationBase))
                 .ToArray(),
-            SelectScanHints(consensus, doublePassCandidates));
+            SelectScanHints(finalDoubleCandidates, doublePassCandidates));
     }
 
     private static List<MemorySeedChunk> CaptureHintSeeds(
@@ -1575,12 +1676,6 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
             return false;
         }
 
-        double milliseconds = seconds * 1_000;
-        if (Math.Abs(milliseconds - Math.Round(milliseconds)) > 0.001)
-        {
-            return false;
-        }
-
         double microseconds = seconds * 1_000_000;
         if (microseconds > maximumPositionMicroseconds)
         {
@@ -1803,4 +1898,8 @@ public sealed class NeteaseMemoryPlaybackProbe : ITrackAwarePlaybackStateProvide
         long? SegmentPositionMicroseconds,
         MemoryClockLocation[] AbsoluteClockLocations,
         MemoryScanHint[] AbsoluteClockHints);
+
+    private sealed record MemoryClockScanResult(
+        MemoryClockDiscovery? Discovery,
+        bool? IsPlayingObservation);
 }

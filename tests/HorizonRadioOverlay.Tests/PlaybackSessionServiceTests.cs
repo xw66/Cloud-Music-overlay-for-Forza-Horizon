@@ -6,7 +6,7 @@ namespace HorizonRadioOverlay.Tests;
 public sealed class PlaybackSessionServiceTests
 {
     [Theory]
-    [InlineData(PlaybackSourceIds.Netease, 2000)]
+    [InlineData(PlaybackSourceIds.Netease, 500)]
     [InlineData(PlaybackSourceIds.Smtc, 800)]
     public void GetTrackRefreshInterval_keeps_smtc_responsive(
         string sourceId,
@@ -59,6 +59,78 @@ public sealed class PlaybackSessionServiceTests
         Assert.Equal(1, snapshot.TimelineVersion);
         Assert.Equal(PlaybackDataHealth.Healthy, snapshot.Health);
         Assert.Equal(0, snapshot.ConsecutiveFailures);
+    }
+
+    [Fact]
+    public async Task RefreshTrackAsync_does_not_publish_unchanged_track_again()
+    {
+        FakePlaybackSource source = new(PlaybackSourceIds.Netease)
+        {
+            Track = new TrackInfo
+            {
+                Name = "Track",
+                Artist = "Artist",
+                SongId = "123",
+                CoverBytes = [1, 2, 3]
+            }
+        };
+        PlaybackCoordinator coordinator = new([source]);
+        using PlaybackSessionService session = new(coordinator);
+
+        PlaybackSnapshot first = await session.RefreshTrackAsync();
+        source.Track = new TrackInfo
+        {
+            Name = "Track",
+            Artist = "Artist",
+            SongId = "123",
+            CoverBytes = [1, 2, 3]
+        };
+        PlaybackSnapshot second = await session.RefreshTrackAsync();
+
+        Assert.Equal(1, first.TrackVersion);
+        Assert.Equal(first.TrackVersion, second.TrackVersion);
+    }
+
+    [Fact]
+    public async Task RefreshTrackAsync_publishes_same_track_when_cover_is_enriched()
+    {
+        FakePlaybackSource source = new(PlaybackSourceIds.Netease)
+        {
+            Track = new TrackInfo { Name = "Track", Artist = "Artist" }
+        };
+        PlaybackCoordinator coordinator = new([source]);
+        using PlaybackSessionService session = new(coordinator);
+
+        PlaybackSnapshot first = await session.RefreshTrackAsync();
+        source.Track = new TrackInfo
+        {
+            Name = "Track",
+            Artist = "Artist",
+            CoverBytes = [1, 2, 3]
+        };
+        PlaybackSnapshot second = await session.RefreshTrackAsync();
+
+        Assert.Equal(first.TrackVersion + 1, second.TrackVersion);
+    }
+
+    [Fact]
+    public async Task RefreshTimelineAsync_does_not_publish_identical_paused_sample_again()
+    {
+        FakePlaybackSource source = new(PlaybackSourceIds.Netease)
+        {
+            Timeline = (TimeSpan.FromSeconds(42), false)
+        };
+        PlaybackCoordinator coordinator = new([source]);
+        using PlaybackSessionService session = new(coordinator);
+        session.Configure(PlaybackSourceIds.Netease, timelineEnabled: true);
+
+        PlaybackSnapshot first = await session.RefreshTimelineAsync();
+        PlaybackSnapshot second = await session.RefreshTimelineAsync();
+        source.Timeline = (TimeSpan.FromSeconds(42), true);
+        PlaybackSnapshot resumed = await session.RefreshTimelineAsync();
+
+        Assert.Equal(first.TimelineVersion, second.TimelineVersion);
+        Assert.Equal(second.TimelineVersion + 1, resumed.TimelineVersion);
     }
 
     [Fact]
@@ -154,6 +226,87 @@ public sealed class PlaybackSessionServiceTests
         Assert.Equal(TimeSpan.FromSeconds(8), snapshot.Position);
         Assert.True(source.TrackReadCount > 0);
         Assert.True(source.TimelineReadCount > 0);
+    }
+
+    [Fact]
+    public async Task Timeline_failures_do_not_back_off_track_refreshes()
+    {
+        FakePlaybackSource source = new(PlaybackSourceIds.Netease)
+        {
+            Track = new TrackInfo { Name = "Responsive", Artist = "Artist" },
+            Timeline = null
+        };
+        PlaybackCoordinator coordinator = new([source]);
+        using PlaybackSessionService session = new(
+            coordinator,
+            trackInterval: TimeSpan.FromMilliseconds(20),
+            timelineInterval: TimeSpan.FromMilliseconds(20),
+            failureCooldown: TimeSpan.FromSeconds(10));
+        session.Configure(PlaybackSourceIds.Netease, timelineEnabled: true);
+
+        session.Start();
+        await WaitForSnapshotAsync(
+            session,
+            _ => source.TimelineReadCount >=
+                PlaybackSessionService.FailureThreshold);
+        int trackReadsBeforeDelay = source.TrackReadCount;
+        await Task.Delay(120);
+        session.Stop();
+
+        Assert.True(source.TrackReadCount > trackReadsBeforeDelay);
+    }
+
+    [Fact]
+    public async Task Track_failures_do_not_back_off_smtc_timeline_refreshes()
+    {
+        FakePlaybackSource source = new(PlaybackSourceIds.Smtc)
+        {
+            Track = null,
+            Timeline = (TimeSpan.FromSeconds(12), true)
+        };
+        PlaybackCoordinator coordinator = new([
+            new FakePlaybackSource(PlaybackSourceIds.Netease),
+            source
+        ]);
+        using PlaybackSessionService session = new(
+            coordinator,
+            trackInterval: TimeSpan.FromMilliseconds(20),
+            timelineInterval: TimeSpan.FromMilliseconds(20),
+            failureCooldown: TimeSpan.FromSeconds(10));
+        session.Configure(PlaybackSourceIds.Smtc, timelineEnabled: true);
+
+        session.Start();
+        await WaitForSnapshotAsync(
+            session,
+            _ => source.TrackReadCount >= PlaybackSessionService.FailureThreshold);
+        int timelineReadsBeforeDelay = source.TimelineReadCount;
+        await Task.Delay(120);
+        session.Stop();
+
+        Assert.True(source.TimelineReadCount > timelineReadsBeforeDelay);
+    }
+
+    [Fact]
+    public async Task Faster_track_refresh_does_not_postpone_timeline_refresh()
+    {
+        FakePlaybackSource source = new(PlaybackSourceIds.Netease)
+        {
+            Track = new TrackInfo { Name = "Track", Artist = "Artist" },
+            Timeline = (TimeSpan.FromSeconds(12), true)
+        };
+        PlaybackCoordinator coordinator = new([source]);
+        using PlaybackSessionService session = new(
+            coordinator,
+            trackInterval: TimeSpan.FromMilliseconds(20),
+            timelineInterval: TimeSpan.FromMilliseconds(60));
+        session.Configure(PlaybackSourceIds.Netease, timelineEnabled: true);
+
+        session.Start();
+        await Task.Delay(260);
+        session.Stop();
+
+        Assert.True(source.TrackReadCount >= 5);
+        Assert.True(source.TimelineReadCount >= 3);
     }
 
     private static async Task<PlaybackSnapshot> WaitForSnapshotAsync(

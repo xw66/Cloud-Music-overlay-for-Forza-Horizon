@@ -28,6 +28,22 @@ public sealed class NeteaseLyricTimingControllerTests
     }
 
     [Fact]
+    public void UpdateFromPlayer_freezes_immediately_when_paused_position_is_stale()
+    {
+        DateTime start = new(2026, 6, 7, 10, 0, 0, DateTimeKind.Utc);
+        NeteaseLyricTimingController controller = new();
+        controller.Start(start);
+        controller.UpdateFromPlayer(120, isPlaying: true, start.AddSeconds(1));
+
+        controller.UpdateFromPlayer(20, isPlaying: false, start.AddSeconds(3));
+
+        Assert.InRange(
+            controller.GetCurrentPositionSeconds(start.AddSeconds(10)),
+            121.99,
+            122.01);
+    }
+
+    [Fact]
     public void UpdateFromPlayer_anchors_and_advances_when_player_is_playing()
     {
         DateTime start = new(2026, 6, 7, 10, 0, 0, DateTimeKind.Utc);
@@ -37,6 +53,38 @@ public sealed class NeteaseLyricTimingControllerTests
         controller.UpdateFromPlayer(45, isPlaying: true, start.AddSeconds(2));
 
         Assert.InRange(controller.GetCurrentPositionSeconds(start.AddSeconds(3)), 45.99, 46.01);
+    }
+
+    [Fact]
+    public void Suspend_freezes_wall_clock_when_player_timeline_is_unavailable()
+    {
+        DateTime start = new(2026, 6, 7, 10, 0, 0, DateTimeKind.Utc);
+        NeteaseLyricTimingController controller = new();
+        controller.Start(start);
+        controller.UpdateFromPlayer(30, isPlaying: true, start.AddSeconds(1));
+
+        controller.Suspend(start.AddSeconds(2));
+
+        Assert.InRange(
+            controller.GetCurrentPositionSeconds(start.AddSeconds(8)),
+            30.99,
+            31.01);
+    }
+
+    [Fact]
+    public void Suspend_keeps_wall_clock_running_before_first_player_sample()
+    {
+        DateTime start = new(2026, 6, 7, 10, 0, 0, DateTimeKind.Utc);
+        NeteaseLyricTimingController controller = new();
+        controller.Start(start);
+
+        controller.Suspend(start.AddSeconds(1));
+
+        Assert.False(controller.HasPlayerState);
+        Assert.InRange(
+            controller.GetCurrentPositionSeconds(start.AddSeconds(8)),
+            7.99,
+            8.01);
     }
 
     [Fact]

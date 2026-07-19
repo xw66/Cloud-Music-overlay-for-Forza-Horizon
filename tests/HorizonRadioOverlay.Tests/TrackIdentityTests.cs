@@ -65,4 +65,28 @@ public sealed class TrackIdentityTests
 
         Assert.NotEqual(keyA, keyB);
     }
+
+    [Fact]
+    public void Netease_track_key_ignores_background_metadata_enrichment()
+    {
+        TrackInfo immediate = new()
+        {
+            Name = "Song",
+            Artist = "Artist",
+            SourceAppId = "CloudMusic(ProcessTitle)"
+        };
+        TrackInfo enriched = new()
+        {
+            Name = "Song",
+            Artist = "Artist",
+            SourceAppId = "CloudMusic(OfficialById:123)",
+            SongId = "123",
+            DurationSeconds = 240,
+            CoverBytes = [1, 2, 3]
+        };
+
+        Assert.Equal(
+            TrackIdentity.BuildNeteaseTrackKey(immediate),
+            TrackIdentity.BuildNeteaseTrackKey(enriched));
+    }
 }

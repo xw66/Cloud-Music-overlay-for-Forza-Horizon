@@ -18,6 +18,10 @@
             <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}">
                 <StackPanel>
                     <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.LyricsSource}" />
+                    <TextBlock Margin="0,8,0,0"
+                               Foreground="{StaticResource SubtleTextBrush}"
+                               Text="{x:Static local:UiText.PlaybackSourceDescription}"
+                               TextWrapping="Wrap" />
                     <ComboBox x:Name="TrackSourceComboBox" x:FieldModifier="public" Margin="0,14,0,0" />
                 </StackPanel>
             </Border>

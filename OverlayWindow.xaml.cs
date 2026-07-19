@@ -679,7 +679,8 @@ public partial class OverlayWindow : Window
 
     public void UpdateCover(byte[]? coverBytes)
     {
-        SetCover(CreateCoverImage(coverBytes));
+        ImageSource? coverImage = CreateCoverImage(coverBytes);
+        SetCover(coverImage);
     }
 
     private async Task HideWithAnimationAsync(CancellationToken token)

@@ -4,6 +4,11 @@ namespace HorizonRadioOverlay.Services;
 
 public static class TrackIdentity
 {
+    public static string BuildNeteaseTrackKey(TrackInfo track)
+    {
+        return $"{track.Name.Trim()}|{track.Artist.Trim()}";
+    }
+
     public static string BuildTrackKey(TrackInfo track, bool includeSourceAppId)
     {
         string album = (track.AlbumTitle ?? string.Empty).Trim();

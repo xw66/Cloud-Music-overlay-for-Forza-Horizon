@@ -30,7 +30,7 @@ public sealed class NeteasePlaybackSource : IPlaybackSource
 
     public string Id => PlaybackSourceIds.Netease;
 
-    public string DisplayName => "网易云窗口标题";
+    public string DisplayName => "网易云专用渠道（默认）";
 
     public PlaybackSourceCapabilities Capabilities =>
         PlaybackSourceCapabilities.TrackMetadata |

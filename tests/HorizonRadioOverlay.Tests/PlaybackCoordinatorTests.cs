@@ -37,6 +37,30 @@ public sealed class PlaybackCoordinatorTests
         Assert.Equal(1, smtc.ReadCount);
     }
 
+    [Theory]
+    [InlineData(PlaybackSourceIds.Netease, PlaybackSourceIds.Smtc)]
+    [InlineData(PlaybackSourceIds.Smtc, PlaybackSourceIds.Netease)]
+    public async Task Selected_route_never_reads_or_controls_the_other_route(
+        string selectedSourceId,
+        string otherSourceId)
+    {
+        var selected = new FakePlaybackSource(selectedSourceId, "Selected");
+        var other = new FakePlaybackSource(otherSourceId, "Other");
+        var coordinator = new PlaybackCoordinator([selected, other]);
+        var settings = new OverlaySettings { TrackSource = selectedSourceId };
+
+        await coordinator.GetCurrentTrackAsync(selectedSourceId);
+        await coordinator.GetPlaybackStateAsync(selectedSourceId);
+        await coordinator.ExecuteAsync(PlaybackCommand.Next, settings);
+
+        Assert.Equal(1, selected.ReadCount);
+        Assert.Equal(1, selected.StateReadCount);
+        Assert.Equal(1, selected.ExecuteCount);
+        Assert.Equal(0, other.ReadCount);
+        Assert.Equal(0, other.StateReadCount);
+        Assert.Equal(0, other.ExecuteCount);
+    }
+
     [Fact]
     public async Task GetCurrentTrackAsync_falls_back_to_netease_for_unknown_source()
     {
@@ -149,6 +173,7 @@ public sealed class PlaybackCoordinatorTests
             PlaybackSourceCapabilities.TransportControls;
         public bool IsAvailable { get; set; } = true;
         public int ReadCount { get; private set; }
+        public int StateReadCount { get; private set; }
         public int ExecuteCount { get; private set; }
 
         public Task<TrackInfo?> GetCurrentTrackAsync()
@@ -163,6 +188,7 @@ public sealed class PlaybackCoordinatorTests
 
         public Task<(TimeSpan Position, bool IsPlaying)?> GetPlaybackStateAsync()
         {
+            StateReadCount++;
             return Task.FromResult<(TimeSpan Position, bool IsPlaying)?>(
                 (TimeSpan.FromSeconds(10), true));
         }

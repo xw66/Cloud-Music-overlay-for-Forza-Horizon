@@ -5,6 +5,17 @@ namespace HorizonRadioOverlay.Tests;
 public sealed class LyricsServiceTests
 {
     [Fact]
+    public void ParseLrc_supports_multiple_timestamps_and_late_offset()
+    {
+        List<(double Time, string Text)> lines = LyricsService.ParseLrc(
+            "[00:01.00][00:05.50]repeat\n[offset:1000]");
+
+        Assert.Equal(2, lines.Count);
+        Assert.Equal((2.0, "repeat"), lines[0]);
+        Assert.Equal((6.5, "repeat"), lines[1]);
+    }
+
+    [Fact]
     public void Reset_clears_cached_state()
     {
         using LyricsService service = new(new DiagnosticService());

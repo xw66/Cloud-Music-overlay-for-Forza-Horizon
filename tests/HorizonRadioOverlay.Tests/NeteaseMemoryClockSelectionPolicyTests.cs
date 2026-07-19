@@ -200,6 +200,22 @@ public sealed class NeteaseMemoryClockOffsetPolicyTests
 
         Assert.Null(result);
     }
+
+    [Fact]
+    public void IsPlausibleSeekRebase_rejects_segment_clock_mistaken_for_absolute_clock()
+    {
+        Assert.False(NeteaseMemoryClockOffsetPolicy.IsPlausibleSeekRebase(
+            previousAbsolutePositionMicroseconds: 102_000_000,
+            baseOffsetMicroseconds: 181_000));
+    }
+
+    [Fact]
+    public void IsPlausibleSeekRebase_accepts_absolute_clock_after_seek()
+    {
+        Assert.True(NeteaseMemoryClockOffsetPolicy.IsPlausibleSeekRebase(
+            previousAbsolutePositionMicroseconds: 102_000_000,
+            baseOffsetMicroseconds: 172_338_000));
+    }
 }
 
 public sealed class NeteaseMemorySegmentClockPolicyTests
@@ -216,5 +232,38 @@ public sealed class NeteaseMemorySegmentClockPolicyTests
         Assert.False(NeteaseMemorySegmentClockPolicy.IsReset(12_000_000, 12_100_000));
         Assert.False(NeteaseMemorySegmentClockPolicy.IsReset(12_000_000, 11_700_000));
         Assert.False(NeteaseMemorySegmentClockPolicy.IsReset(null, 2_000_000));
+    }
+}
+
+public sealed class NeteaseMemoryActivityPolicyTests
+{
+    [Fact]
+    public void ExtrapolatePosition_advances_the_last_playing_sample()
+    {
+        DateTime lastSample = new(2026, 7, 18, 10, 0, 0, DateTimeKind.Utc);
+
+        long result = NeteaseMemoryActivityPolicy.ExtrapolatePosition(
+            120_000_000,
+            lastSample,
+            wasPlaying: true,
+            lastSample.AddSeconds(3),
+            maximumPositionMicroseconds: 300_000_000);
+
+        Assert.Equal(123_000_000, result);
+    }
+
+    [Fact]
+    public void ExtrapolatePosition_keeps_the_last_paused_sample()
+    {
+        DateTime lastSample = new(2026, 7, 18, 10, 0, 0, DateTimeKind.Utc);
+
+        long result = NeteaseMemoryActivityPolicy.ExtrapolatePosition(
+            120_000_000,
+            lastSample,
+            wasPlaying: false,
+            lastSample.AddSeconds(10),
+            maximumPositionMicroseconds: 300_000_000);
+
+        Assert.Equal(120_000_000, result);
     }
 }

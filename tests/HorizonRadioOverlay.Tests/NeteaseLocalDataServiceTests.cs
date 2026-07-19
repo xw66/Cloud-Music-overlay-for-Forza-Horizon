@@ -6,6 +6,56 @@ namespace HorizonRadioOverlay.Tests;
 public class NeteaseLocalDataServiceTests
 {
     [Fact]
+    public void MetadataCache_reuses_complete_metadata_for_the_same_track()
+    {
+        TrackInfo liveTrack = new() { Name = "Song", Artist = "Artist" };
+        TrackInfo cachedTrack = new()
+        {
+            Name = "Song",
+            Artist = "Artist",
+            CoverBytes = [1, 2, 3]
+        };
+
+        Assert.True(NeteaseTrackMetadataCachePolicy.ShouldReuse(
+            liveTrack,
+            cachedTrack,
+            elapsedMilliseconds: 60_000));
+    }
+
+    [Fact]
+    public void MetadataCache_retries_incomplete_metadata_after_cooldown()
+    {
+        TrackInfo liveTrack = new() { Name = "Song", Artist = "Artist" };
+        TrackInfo cachedTrack = new() { Name = "Song", Artist = "Artist" };
+
+        Assert.True(NeteaseTrackMetadataCachePolicy.ShouldReuse(
+            liveTrack,
+            cachedTrack,
+            NeteaseTrackMetadataCachePolicy.RetryIncompleteMetadataAfterMilliseconds - 1));
+        Assert.False(NeteaseTrackMetadataCachePolicy.ShouldReuse(
+            liveTrack,
+            cachedTrack,
+            NeteaseTrackMetadataCachePolicy.RetryIncompleteMetadataAfterMilliseconds));
+    }
+
+    [Fact]
+    public void MetadataCache_does_not_reuse_a_different_track()
+    {
+        TrackInfo liveTrack = new() { Name = "Next Song", Artist = "Artist" };
+        TrackInfo cachedTrack = new()
+        {
+            Name = "Song",
+            Artist = "Artist",
+            CoverBytes = [1, 2, 3]
+        };
+
+        Assert.False(NeteaseTrackMetadataCachePolicy.ShouldReuse(
+            liveTrack,
+            cachedTrack,
+            elapsedMilliseconds: 0));
+    }
+
+    [Fact]
     public void ParseSongIdHintFromJson_PrefersFmPlayCurrentIndexBeforeScoring()
     {
         const string json = """
@@ -64,6 +114,40 @@ public class NeteaseLocalDataServiceTests
 
         Assert.Equal("333", hint?.SongId);
         Assert.Equal("playingList:root-id", hint?.Source);
+    }
+
+    [Fact]
+    public void ParseSongIdHintFromJson_ReturnsLocalCoverAndDurationForScoredMatch()
+    {
+        const string json = """
+            {
+              "list": [
+                {
+                  "track": {
+                    "id": "444",
+                    "name": "Target Song",
+                    "duration": 213500,
+                    "artists": [{ "name": "Target Artist" }],
+                    "album": {
+                      "picUrl": "https://example.test/cover.jpg"
+                    }
+                  }
+                }
+              ]
+            }
+            """;
+
+        NeteaseLocalDataService.LocalSongIdHint? hint =
+            NeteaseLocalDataService.ParseSongIdHintFromJson(
+                json,
+                "Target Song",
+                "Target Artist",
+                hasTrackWrapper: true,
+                fileLabel: "playingList");
+
+        Assert.Equal("444", hint?.SongId);
+        Assert.Equal("https://example.test/cover.jpg", hint?.CoverUrl);
+        Assert.Equal(213.5, hint?.DurationSeconds);
     }
 
     [Fact]

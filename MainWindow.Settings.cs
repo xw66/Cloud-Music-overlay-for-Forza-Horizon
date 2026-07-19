@@ -404,7 +404,7 @@ public partial class MainWindow
         {
             smtcItem.IsEnabled = smtcSupported;
             smtcItem.ToolTip = smtcSupported
-                ? "使用系统媒体会话读取歌曲信息"
+                ? "独立使用系统媒体会话读取歌曲、封面、播放状态和时间轴；不会读取网易云专用渠道"
                 : "当前系统版本不支持 SMTC";
         }
 
@@ -421,8 +421,8 @@ public partial class MainWindow
         _floatingSettingsPageView.EnableLyricsCheckBox.ToolTip = TrackSourcePolicy.GetLyricsTooltip(useSmtc);
         _floatingSettingsPageView.EnableNeteaseMemoryTimelineCheckBox.IsEnabled = !useSmtc;
         _floatingSettingsPageView.EnableNeteaseMemoryTimelineCheckBox.ToolTip = useSmtc
-            ? "该选项仅用于网易云来源"
-            : "只读扫描网易云进程时间轴；关闭后歌词使用本地计时降级";
+            ? "该选项仅用于网易云专用渠道，SMTC 渠道不会访问网易云进程"
+            : "只读扫描网易云进程时间轴，不使用 SMTC；关闭后歌词使用本地计时降级";
     }
 
     private string GetSelectedTrackSource()

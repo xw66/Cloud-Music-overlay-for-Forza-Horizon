@@ -205,7 +205,7 @@ public partial class MainWindow
             PlaybackDataHealth.Healthy when useSmtc =>
                 "正在通过系统媒体会话同步。",
             PlaybackDataHealth.Healthy when _activeSettings.EnableNeteaseMemoryTimeline =>
-                "网易云内存时间轴（实验）工作正常。",
+                "快进快退后，歌词需要一段时间才能正常显示。",
             PlaybackDataHealth.Healthy =>
                 "网易云歌词当前使用本地计时。",
             PlaybackDataHealth.Degraded when !useSmtc && _activeSettings.EnableNeteaseMemoryTimeline =>
@@ -392,7 +392,9 @@ public partial class MainWindow
                 return;
             }
 
-            string currentTrackKey = TrackIdentity.BuildTrackKey(track, includeSourceAppId: useSmtc);
+            string currentTrackKey = useSmtc
+                ? TrackIdentity.BuildTrackKey(track, includeSourceAppId: true)
+                : TrackIdentity.BuildNeteaseTrackKey(track);
             bool changed = !string.Equals(_lastTrackKey, currentTrackKey, StringComparison.Ordinal);
             _lastTrackKey = currentTrackKey;
             bool shouldDelayImmediateSmtcCover = useSmtc
@@ -429,7 +431,7 @@ public partial class MainWindow
                 if (!SameBytes(_lastPreviewCoverBytes, immediateCoverBytes))
                 {
                     SetCover(immediateCoverBytes);
-                        _overlayWindow.UpdateCoverIfChanged(immediateCoverBytes);
+                    _overlayWindow.UpdateCoverIfChanged(immediateCoverBytes);
                 }
             }
 
