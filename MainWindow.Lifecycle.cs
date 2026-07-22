@@ -93,7 +93,7 @@ public partial class MainWindow
         _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
     }
 
-    private void RestoreFromTray()
+    internal void RestoreFromTray()
     {
         Show();
         WindowState = WindowState.Normal;

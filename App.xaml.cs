@@ -12,11 +12,8 @@ namespace HorizonRadioOverlay;
 [SupportedOSPlatform("windows")]
 public partial class App : Application
 {
-    private const string SingleInstanceMutexName = @"Local\HorizonRadioOverlay.SingleInstance";
-
     private MainWindow? _mainWindow;
-    private Mutex? _singleInstanceMutex;
-    private bool _ownsSingleInstanceMutex;
+    private SingleInstanceService? _singleInstanceService;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -33,17 +30,16 @@ public partial class App : Application
                 return;
             }
 
-            _singleInstanceMutex = new Mutex(
-                initiallyOwned: true,
-                SingleInstanceMutexName,
-                out _ownsSingleInstanceMutex);
-            if (!_ownsSingleInstanceMutex)
+            _singleInstanceService = new SingleInstanceService();
+            if (!_singleInstanceService.TryAcquire())
             {
-                _singleInstanceMutex.Dispose();
-                _singleInstanceMutex = null;
+                _singleInstanceService.NotifyExistingInstance();
                 Shutdown();
                 return;
             }
+
+            _singleInstanceService.ActivationRequested += (_, _) =>
+                Dispatcher.BeginInvoke(() => _mainWindow?.RestoreFromTray());
 
             bool startHiddenToTray = AppLaunchPolicy.ShouldStartHiddenToTray(e.Args);
 
@@ -64,20 +60,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        if (_ownsSingleInstanceMutex)
-        {
-            try
-            {
-                _singleInstanceMutex?.ReleaseMutex();
-            }
-            catch (ApplicationException)
-            {
-            }
-        }
-
-        _singleInstanceMutex?.Dispose();
-        _singleInstanceMutex = null;
-        _ownsSingleInstanceMutex = false;
+        _singleInstanceService?.Dispose();
+        _singleInstanceService = null;
         base.OnExit(e);
     }
 
