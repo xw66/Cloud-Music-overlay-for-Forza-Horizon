@@ -40,6 +40,9 @@ public sealed class OverlaySettings
     public string ArtistColor { get; set; } = "#C0D0E0";
     public double TitleOpacity { get; set; } = 1.0;
     public double ArtistOpacity { get; set; } = 0.86;
+    public double TitleFontSize { get; set; } = 19.0;
+    public double ArtistFontSize { get; set; } = 14.0;
+    public double LyricsFontSize { get; set; } = 11.0;
     public bool DiagnosticMode { get; set; } = false;
     public bool EnableLyrics { get; set; } = true;
     public bool EnableNeteaseMemoryTimeline { get; set; } = true;

@@ -110,6 +110,38 @@ public partial class MainWindow
         SetStatus("状态：快捷键已应用。", false);
     }
 
+    private void ToggleOverlayDragReposition()
+    {
+        bool nextState = !_floatingSettingsViewModel.IsPositionAdjusting;
+        _floatingSettingsViewModel.IsPositionAdjusting = nextState;
+
+        if (nextState)
+        {
+            // 如果悬浮窗尚未显示内容或没有曲目，先填充预览曲目方便拖拽
+            if (!_overlayWindow.IsContentVisible)
+            {
+                TrackInfo previewTrack = new()
+                {
+                    Name = "有些",
+                    Artist = "颜人中",
+                    SourceAppId = "位置调整",
+                    CoverBytes = CreatePreviewCoverBytes("有些", "颜人中", Color.FromRgb(39, 94, 113))
+                };
+                _ = _overlayWindow.ShowTrackAsync(previewTrack);
+            }
+
+            _overlayWindow.SetInteractiveDragMode(true);
+            SetStatus("状态：正在调整悬浮窗位置。按住悬浮窗拖动，完成后点击“完成位置调整”或右键退出。", false);
+        }
+        else
+        {
+            _overlayWindow.SetInteractiveDragMode(false);
+            ApplyOverlaySettingsFromControls();
+            _overlaySettingsService.Save(_activeSettings);
+            SetStatus($"状态：位置已更新并保存（X: {_activeSettings.LeftPercent * 100:0}%, Y: {_activeSettings.TopPercent * 100:0}%）。", false);
+        }
+    }
+
     private void ResetOverlaySettings_Click(object sender, RoutedEventArgs e)
     {
         _activeSettings = new OverlaySettings();
@@ -360,6 +392,7 @@ public partial class MainWindow
         ApplyAutoStart(_activeSettings.AutoStartOnBoot);
         ApplyDisplayColors(_activeSettings);
         UpdateOverlayControlLabels();
+        _remoteControlService.ApplySettings(_activeSettings);
         UpdateRemoteControlPage();
     }
 
@@ -415,6 +448,7 @@ public partial class MainWindow
             var titleBrush = new System.Windows.Media.SolidColorBrush(titleColor);
             _themeSettingsPageView.ThemePreviewTitle.Foreground = titleBrush.Clone();
             _themeSettingsPageView.ThemePreviewTitle.Opacity = settings.TitleOpacity;
+            _themeSettingsPageView.ThemePreviewTitle.FontSize = settings.TitleFontSize;
         }
         catch { }
 
@@ -424,6 +458,7 @@ public partial class MainWindow
             var artistBrush = new System.Windows.Media.SolidColorBrush(artistColor);
             _themeSettingsPageView.ThemePreviewArtist.Foreground = artistBrush.Clone();
             _themeSettingsPageView.ThemePreviewArtist.Opacity = settings.ArtistOpacity;
+            _themeSettingsPageView.ThemePreviewArtist.FontSize = settings.ArtistFontSize;
         }
         catch { }
 
@@ -432,6 +467,7 @@ public partial class MainWindow
             var lyricsColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(settings.LyricsColor);
             _themeSettingsPageView.ThemePreviewLyrics.Foreground = new System.Windows.Media.SolidColorBrush(lyricsColor);
             _themeSettingsPageView.ThemePreviewLyrics.Opacity = settings.LyricsOpacity;
+            _themeSettingsPageView.ThemePreviewLyrics.FontSize = settings.LyricsFontSize;
         }
         catch { }
     }

@@ -432,10 +432,7 @@ public sealed class NeteaseOfficialResolver
 
     private static HttpRequestMessage CreateRequest(string url)
     {
-        HttpRequestMessage request = new(HttpMethod.Get, url);
-        request.Headers.Referrer = new Uri("https://music.163.com/");
-        request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-        return request;
+        return NeteaseHttpPolicy.CreateRequest(url);
     }
 
     private static string? ReadString(JsonElement element, string name)

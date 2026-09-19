@@ -56,6 +56,9 @@ public static class UiText
     public const string HorizontalPosition = "\u6C34\u5E73\u4F4D\u7F6E";
     public const string VerticalPosition = "\u5782\u76F4\u4F4D\u7F6E";
     public const string Scale = "\u7F29\u653E";
+    public const string StartDragReposition = "调整位置（拖拽定位）";
+    public const string FinishDragReposition = "完成位置调整";
+    public const string DragTip = "按住悬浮窗拖动位置，右键或按 Esc 完成";
     public const string DisplayAndBehavior = "\u663E\u793A\u4E0E\u884C\u4E3A";
     public const string EnableLyrics = "\u663E\u793A\u6B4C\u8BCD";
     public const string EnableNeteaseMemoryTimeline = "\u7F51\u6613\u4E91\u5185\u5B58\u65F6\u95F4\u8F74\uFF08\u5B9E\u9A8C\u529F\u80FD\uFF0C\u53EA\u8BFB\uFF09";
@@ -84,12 +87,16 @@ public static class UiText
     public const string CopyRemoteAddress = "\u590D\u5236\u5730\u5740";
     public const string ResetRemoteToken = "\u91CD\u7F6E\u8FDE\u63A5\u4EE4\u724C";
     public const string RemoteControlQr = "\u626B\u7801\u8FDE\u63A5";
+    public const string ConfigureFirewall = "放行防火墙";
 
-    public const string TextColorsAndOpacity = "\u6587\u5B57\u989C\u8272\u4E0E\u900F\u660E\u5EA6";
+    public const string TextColorsAndOpacity = "\u6587\u5B57\u989C\u8272\u3001\u5B57\u53F7\u4E0E\u900F\u660E\u5EA6";
     public const string ThemeAccent = "\u4E3B\u9898\u4E3B\u8272";
     public const string TitleColor = "\u6B4C\u540D\u989C\u8272";
     public const string ArtistColor = "\u6B4C\u624B\u989C\u8272";
     public const string LyricsColor = "\u6B4C\u8BCD\u989C\u8272";
+    public const string TitleFontSize = "歌名字号";
+    public const string ArtistFontSize = "歌手字号";
+    public const string LyricsFontSize = "歌词字号";
     public const string RealtimePreview = "\u5B9E\u65F6\u9884\u89C8";
     public const string RealtimePreviewDesc = "\u4EC5\u5F71\u54CD\u4E3B\u7A97\u53E3\u4E2D\u7684\u9884\u89C8\u5361\u7247\uFF0C\u4E0D\u6539\u53D8\u771F\u5B9E\u60AC\u6D6E\u7A97\u903B\u8F91\u3002";
     public const string Weak = "\u67D4\u548C";

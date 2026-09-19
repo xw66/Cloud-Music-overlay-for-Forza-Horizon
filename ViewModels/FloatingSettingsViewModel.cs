@@ -58,6 +58,9 @@ public sealed partial class FloatingSettingsViewModel : ObservableObject
     private bool _diagnosticMode;
 
     [ObservableProperty]
+    private bool _isPositionAdjusting;
+
+    [ObservableProperty]
     private bool _isNeteaseTimelineEnabled = true;
 
     [ObservableProperty]
@@ -72,11 +75,40 @@ public sealed partial class FloatingSettingsViewModel : ObservableObject
     public string HorizontalText => $"{HorizontalPercent:0}%";
     public string BottomOffsetText => $"{BottomOffsetPercent:0}%";
     public string ScaleText => $"{ScalePercent:0}%";
+    public string AdjustPositionButtonText => IsPositionAdjusting ? UiText.FinishDragReposition : UiText.StartDragReposition;
 
     public event Action? SettingsChanged;
     public event Action? TrackSourceChanged;
+    public event Action? ToggleDragRepositionRequested;
 
     private bool _suppressNotification;
+
+    partial void OnIsPositionAdjustingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(AdjustPositionButtonText));
+    }
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void ToggleDragReposition()
+    {
+        ToggleDragRepositionRequested?.Invoke();
+    }
+
+    public void UpdatePositionFromDrag(double leftPercent, double topPercent)
+    {
+        _suppressNotification = true;
+        try
+        {
+            HorizontalPercent = leftPercent * 100.0;
+            BottomOffsetPercent = topPercent * 100.0;
+            OnPropertyChanged(nameof(HorizontalText));
+            OnPropertyChanged(nameof(BottomOffsetText));
+        }
+        finally
+        {
+            _suppressNotification = false;
+        }
+    }
 
     partial void OnHorizontalPercentChanged(double value)
     {

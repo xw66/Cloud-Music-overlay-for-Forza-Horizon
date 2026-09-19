@@ -1,0 +1,139 @@
+<UserControl x:Class="HorizonRadioOverlay.Views.ColorPickerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="320"
+             Background="#1E2433">
+    <UserControl.Resources>
+        <LinearGradientBrush x:Key="HueBarBrush" StartPoint="0,0.5" EndPoint="1,0.5">
+            <GradientStop Color="#FF0000" Offset="0.00" />
+            <GradientStop Color="#FFFF00" Offset="0.17" />
+            <GradientStop Color="#00FF00" Offset="0.33" />
+            <GradientStop Color="#00FFFF" Offset="0.50" />
+            <GradientStop Color="#0000FF" Offset="0.67" />
+            <GradientStop Color="#FF00FF" Offset="0.83" />
+            <GradientStop Color="#FF0000" Offset="1.00" />
+        </LinearGradientBrush>
+        <DropShadowEffect x:Key="TextGlow" Color="#0B1017" BlurRadius="6" ShadowDepth="1" Opacity="0.9" />
+    </UserControl.Resources>
+
+    <Border Padding="16" CornerRadius="12" Background="#1E2433" BorderBrush="#2E3852" BorderThickness="1">
+        <StackPanel>
+            <!-- 头部标题与 HEX 输入 -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="ColorTargetLabel"
+                           VerticalAlignment="Center"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Foreground="#F1F5F9"
+                           Text="颜色调节" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="24" Height="24" CornerRadius="6" BorderThickness="1" BorderBrush="#475569" Margin="0,0,8,0">
+                        <Border.Background>
+                            <SolidColorBrush x:Name="ColorPreviewSwatch" Color="#FFFFFF" />
+                        </Border.Background>
+                    </Border>
+                    <TextBox x:Name="HexInputBox"
+                             Width="80"
+                             Height="28"
+                             Padding="4,2"
+                             FontSize="12"
+                             FontFamily="Consolas"
+                             Foreground="#F8FAFC"
+                             Background="#0F172A"
+                             BorderBrush="#334155"
+                             Text="#FFFFFF"
+                             KeyDown="HexInputBox_KeyDown"
+                             LostFocus="HexInputBox_LostFocus" />
+                </StackPanel>
+            </Grid>
+
+            <!-- 2D 饱和度与明度调色盘 (Sat-Val Box) -->
+            <Border x:Name="SatValBox"
+                    Height="160"
+                    CornerRadius="8"
+                    ClipToBounds="True"
+                    BorderThickness="1"
+                    BorderBrush="#334155"
+                    Cursor="Cross"
+                    MouseDown="SatValBox_MouseDown"
+                    MouseMove="SatValBox_MouseMove"
+                    MouseUp="SatValBox_MouseUp">
+                <Grid x:Name="SatValCanvas">
+                    <!-- 底层纯色 (由 Hue 决定) -->
+                    <Rectangle x:Name="HueBackgroundRect" Fill="#FF0000" />
+                    <!-- 水平从白到透明渐变 (控制饱和度 S) -->
+                    <Rectangle>
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                <GradientStop Color="#FFFFFFFF" Offset="0" />
+                                <GradientStop Color="#00FFFFFF" Offset="1" />
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+                    <!-- 垂直从透明到黑色渐变 (控制明度 V) -->
+                    <Rectangle>
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                                <GradientStop Color="#00000000" Offset="0" />
+                                <GradientStop Color="#FF000000" Offset="1" />
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+
+                    <!-- 取色手柄圆环 -->
+                    <Canvas IsHitTestVisible="False">
+                        <Ellipse x:Name="SatValCursor"
+                                 Width="14"
+                                 Height="14"
+                                 Stroke="White"
+                                 StrokeThickness="2"
+                                 Effect="{StaticResource TextGlow}"
+                                 Canvas.Left="0"
+                                 Canvas.Top="0" />
+                    </Canvas>
+                </Grid>
+            </Border>
+
+            <!-- 色相条 (Hue Bar) -->
+            <Grid Margin="0,14,0,0">
+                <Border x:Name="HueBar"
+                        Height="18"
+                        CornerRadius="9"
+                        ClipToBounds="True"
+                        BorderThickness="1"
+                        BorderBrush="#334155"
+                        Background="{StaticResource HueBarBrush}"
+                        Cursor="Hand"
+                        MouseDown="HueBar_MouseDown"
+                        MouseMove="HueBar_MouseMove"
+                        MouseUp="HueBar_MouseUp">
+                    <Canvas IsHitTestVisible="False">
+                        <Ellipse x:Name="HueCursor"
+                                 Width="16"
+                                 Height="16"
+                                 Stroke="White"
+                                 StrokeThickness="2"
+                                 Fill="Transparent"
+                                 Canvas.Left="0"
+                                 Canvas.Top="0" />
+                    </Canvas>
+                </Border>
+            </Grid>
+
+            <!-- 快捷常用色块 -->
+            <StackPanel Orientation="Horizontal" Margin="0,14,0,0" HorizontalAlignment="Center">
+                <Border Width="24" Height="24" CornerRadius="12" Margin="0,0,10,0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand" MouseDown="QuickColor_MouseDown" Tag="#FFFFFF" />
+                <Border Width="24" Height="24" CornerRadius="12" Margin="0,0,10,0" Background="#D0E0F0" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand" MouseDown="QuickColor_MouseDown" Tag="#D0E0F0" />
+                <Border Width="24" Height="24" CornerRadius="12" Margin="0,0,10,0" Background="#F0E080" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand" MouseDown="QuickColor_MouseDown" Tag="#F0E080" />
+                <Border Width="24" Height="24" CornerRadius="12" Margin="0,0,10,0" Background="#90EE90" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand" MouseDown="QuickColor_MouseDown" Tag="#90EE90" />
+                <Border Width="24" Height="24" CornerRadius="12" Margin="0,0,10,0" Background="#FFB366" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand" MouseDown="QuickColor_MouseDown" Tag="#FFB366" />
+                <Border Width="24" Height="24" CornerRadius="12" Margin="0,0,10,0" Background="#3B82F6" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand" MouseDown="QuickColor_MouseDown" Tag="#3B82F6" />
+                <Border Width="24" Height="24" CornerRadius="12" Background="#F43F5E" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand" MouseDown="QuickColor_MouseDown" Tag="#F43F5E" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

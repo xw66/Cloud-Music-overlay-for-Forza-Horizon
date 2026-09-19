@@ -1,4 +1,5 @@
 using HorizonRadioOverlay.Models;
+using HorizonRadioOverlay.Services;
 using HorizonRadioOverlay.ViewModels;
 
 namespace HorizonRadioOverlay.Tests;
@@ -88,6 +89,44 @@ public sealed class SecondaryViewModelsTests
     }
 
     [Fact]
+    public void RemoteControlViewModel_TogglingProperties_TriggersSettingsChanged()
+    {
+        var vm = new RemoteControlViewModel();
+        int changedCount = 0;
+        vm.SettingsChanged += () => changedCount++;
+
+        vm.EnableRemoteControl = true;
+        Assert.Equal(1, changedCount);
+
+        vm.AllowLan = false;
+        Assert.Equal(2, changedCount);
+
+        vm.PortText = "37888";
+        Assert.Equal(3, changedCount);
+    }
+
+    [Fact]
+    public void RemoteControlViewModel_UpdateRuntimeStatus_WhenServiceStopped_HidesAddress()
+    {
+        var vm = new RemoteControlViewModel();
+        using var service = new RemoteControlService();
+        var settings = new OverlaySettings
+        {
+            EnableRemoteControl = true,
+            RemoteControlPort = 39992,
+            RemoteControlAllowLan = true
+        };
+
+        // service 未启动 (IsRunning == false)
+        vm.UpdateRuntimeStatus(service, settings);
+
+        // 此时 Address 和二维码应保持空，防止展示无效地址
+        Assert.Empty(vm.Address);
+        Assert.Null(vm.QrCodeImage);
+        Assert.Equal("未启用", vm.StatusText);
+    }
+
+    [Fact]
     public void LogsViewModel_Refresh_InvokesScrollCallback()
     {
         var vm = new LogsViewModel();
@@ -107,5 +146,39 @@ public sealed class SecondaryViewModelsTests
         Assert.False(string.IsNullOrWhiteSpace(vm.AppTitle));
         Assert.False(string.IsNullOrWhiteSpace(vm.VersionText));
         Assert.False(string.IsNullOrWhiteSpace(vm.Description));
+    }
+
+    [Fact]
+    public void ThemeSettingsViewModel_FontSize_LoadAndApply_And_Formatting()
+    {
+        var vm = new ThemeSettingsViewModel();
+        var settings = new OverlaySettings
+        {
+            TitleFontSize = 24.0,
+            ArtistFontSize = 18.0,
+            LyricsFontSize = 13.0
+        };
+
+        vm.LoadFrom(settings);
+
+        Assert.Equal(24.0, vm.TitleFontSize);
+        Assert.Equal(18.0, vm.ArtistFontSize);
+        Assert.Equal(13.0, vm.LyricsFontSize);
+        Assert.Equal("24 pt", vm.TitleFontSizeText);
+        Assert.Equal("18 pt", vm.ArtistFontSizeText);
+        Assert.Equal("13 pt", vm.LyricsFontSizeText);
+
+        bool eventFired = false;
+        vm.SettingsChanged += () => eventFired = true;
+
+        vm.TitleFontSize = 28.0;
+        Assert.True(eventFired);
+        Assert.Equal("28 pt", vm.TitleFontSizeText);
+
+        var targetSettings = new OverlaySettings();
+        vm.ApplyTo(targetSettings);
+        Assert.Equal(28.0, targetSettings.TitleFontSize);
+        Assert.Equal(18.0, targetSettings.ArtistFontSize);
+        Assert.Equal(13.0, targetSettings.LyricsFontSize);
     }
 }

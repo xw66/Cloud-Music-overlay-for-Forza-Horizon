@@ -25,6 +25,11 @@ public static class OverlayTopmostPolicy
         return existingStyle | WsExLayered | WsExTransparent | WsExNoActivate | WsExToolWindow;
     }
 
+    public static int ApplyInteractiveExtendedStyle(int existingStyle)
+    {
+        return (existingStyle & ~WsExTransparent & ~WsExNoActivate) | WsExLayered | WsExToolWindow;
+    }
+
     public static uint GetTopmostFlags()
     {
         return SwpNosize | SwpNomove | SwpNoactivate | SwpNoownerzorder | SwpNoSendChanging | SwpShowwindow;

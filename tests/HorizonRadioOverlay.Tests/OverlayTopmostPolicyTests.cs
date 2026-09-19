@@ -15,6 +15,21 @@ public sealed class OverlayTopmostPolicyTests
     }
 
     [Fact]
+    public void ApplyInteractiveExtendedStyle_removes_transparent_and_noactivate_bits()
+    {
+        int existingWithTransparent = 0x00080000 | 0x00000020 | 0x08000000 | 0x00000080;
+
+        int result = OverlayTopmostPolicy.ApplyInteractiveExtendedStyle(existingWithTransparent);
+
+        // 验证 WS_EX_TRANSPARENT (0x20) 和 WS_EX_NOACTIVATE (0x08000000) 被清除
+        Assert.Equal(0, result & 0x00000020);
+        Assert.Equal(0, result & 0x08000000);
+        // 验证 WS_EX_LAYERED (0x80000) 和 WS_EX_TOOLWINDOW (0x80) 保持存在
+        Assert.NotEqual(0, result & 0x00080000);
+        Assert.NotEqual(0, result & 0x00000080);
+    }
+
+    [Fact]
     public void GetTopmostFlags_uses_non_activating_size_preserving_topmost_refresh()
     {
         uint flags = OverlayTopmostPolicy.GetTopmostFlags();

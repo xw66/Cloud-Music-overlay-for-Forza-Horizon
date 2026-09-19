@@ -864,7 +864,7 @@ public partial class MainWindow
 
     private void SetCover(byte[]? coverBytes)
     {
-        if (ReferenceEquals(_lastPreviewCoverBytes, coverBytes))
+        if (SameBytes(_lastPreviewCoverBytes, coverBytes))
         {
             return;
         }

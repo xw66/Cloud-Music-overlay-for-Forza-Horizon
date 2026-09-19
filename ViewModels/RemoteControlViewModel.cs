@@ -69,6 +69,34 @@ public sealed partial class RemoteControlViewModel : ObservableObject
         RequestResetToken?.Invoke();
     }
 
+    [RelayCommand]
+    private void ConfigureFirewall()
+    {
+        try
+        {
+            if (!int.TryParse(PortText, out int port) || port < 1024 || port > 65535)
+            {
+                port = RemoteControlPolicy.DefaultPort;
+            }
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "netsh",
+                Arguments = $"advfirewall firewall add rule name=\"HorizonRadioOverlay\" dir=in action=allow protocol=TCP localport={port}",
+                Verb = "runas",
+                UseShellExecute = true,
+                CreateNoWindow = true,
+                WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+            };
+            System.Diagnostics.Process.Start(psi);
+            StatusNotification?.Invoke($"状态：已请求管理员权限放行 TCP 端口 {port}。", false);
+        }
+        catch (Exception ex)
+        {
+            StatusNotification?.Invoke($"状态：配置防火墙规则取消或失败：{ex.Message}", true);
+        }
+    }
+
     public void LoadFromSettings(OverlaySettings settings)
     {
         EnableRemoteControl = settings.EnableRemoteControl;
@@ -88,9 +116,10 @@ public sealed partial class RemoteControlViewModel : ObservableObject
 
     public void UpdateRuntimeStatus(RemoteControlService service, OverlaySettings settings)
     {
+        bool running = settings.EnableRemoteControl && service.IsRunning;
         string displayUrl = settings.RemoteControlAllowLan ? service.LanUrl : service.LocalUrl;
         StatusText = settings.EnableRemoteControl ? service.StatusMessage : "未启用";
-        Address = settings.EnableRemoteControl ? displayUrl : string.Empty;
+        Address = running ? displayUrl : string.Empty;
         HelpText = BuildHelpText(service, settings);
         QrCodeImage = GenerateQrCode(Address);
     }

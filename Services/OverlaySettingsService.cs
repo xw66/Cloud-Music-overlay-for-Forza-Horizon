@@ -179,6 +179,9 @@ public sealed class OverlaySettingsService
         settings.LeftPercent = Clamp(settings.LeftPercent, 0.0, 1.0);
         settings.TopPercent = Clamp(settings.TopPercent, 0.0, 1.0);
         settings.Scale = Clamp(settings.Scale, 0.8, 1.8);
+        settings.TitleFontSize = settings.TitleFontSize <= 0 ? 19.0 : Clamp(settings.TitleFontSize, 12.0, 32.0);
+        settings.ArtistFontSize = settings.ArtistFontSize <= 0 ? 14.0 : Clamp(settings.ArtistFontSize, 10.0, 24.0);
+        settings.LyricsFontSize = settings.LyricsFontSize <= 0 ? 11.0 : Clamp(settings.LyricsFontSize, 9.0, 20.0);
         settings.RemoteControlPort = RemoteControlPolicy.NormalizePort(settings.RemoteControlPort);
         if (string.IsNullOrWhiteSpace(settings.RemoteControlToken))
         {

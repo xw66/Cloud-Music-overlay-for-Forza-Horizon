@@ -549,11 +549,7 @@ public sealed class LyricsService : IDisposable
             try
             {
                 string url = $"https://music.163.com/api/search/get?s={Uri.EscapeDataString(query)}&type=1&limit=3";
-
-                using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Referrer = new Uri("https://music.163.com/");
-                request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
+                using HttpRequestMessage request = NeteaseHttpPolicy.CreateRequest(url);
                 using HttpResponseMessage response = await _httpClient.SendAsync(request);
                 response.EnsureSuccessStatusCode();
                 string json = await response.Content.ReadAsStringAsync();
@@ -827,11 +823,7 @@ public sealed class LyricsService : IDisposable
     private async Task<string> FetchLyricPayloadAsync(string songId)
     {
         string url = $"https://music.163.com/api/song/lyric?id={songId}&lv=1&kv=1&tv=-1";
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Referrer = new Uri("https://music.163.com/");
-        request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
+        using HttpRequestMessage request = NeteaseHttpPolicy.CreateRequest(url);
         using HttpResponseMessage response = await _httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();

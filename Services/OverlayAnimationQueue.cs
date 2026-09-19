@@ -27,7 +27,7 @@ public sealed class OverlayAnimationQueue : IDisposable
                 long id = Interlocked.Increment(ref _sequenceId);
                 try
                 {
-                    await dispatcher.InvokeAsync(() => handler(track, id, _cts.Token));
+                    await dispatcher.InvokeAsync(async () => await handler(track, id, _cts.Token)).Task.Unwrap();
                 }
                 catch (OperationCanceledException)
                 {

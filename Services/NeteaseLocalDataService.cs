@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using HorizonRadioOverlay.Models;
+using Microsoft.Win32;
 
 namespace HorizonRadioOverlay.Services;
 
@@ -80,6 +81,17 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool QueryFullProcessImageName(IntPtr hProcess, int dwFlags, System.Text.StringBuilder lpExeName, ref int lpdwSize);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr hObject);
+
+    private const int PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
@@ -437,6 +449,30 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
         return null;
     }
 
+    private static readonly string[] PlayingListFileCandidates =
+    [
+        Path.Combine("webdata", "file", "playingList"),
+        Path.Combine("file", "playingList"),
+        "playingList"
+    ];
+
+    private static readonly string[] FmPlayFileCandidates =
+    [
+        Path.Combine("webdata", "file", "fmPlay"),
+        Path.Combine("file", "fmPlay"),
+        "fmPlay"
+    ];
+
+    private static string ResolveCandidateFile(string dir, string[] candidates, string fallbackRelative)
+    {
+        foreach (string candidate in candidates)
+        {
+            string path = Path.Combine(dir, candidate);
+            if (File.Exists(path)) return path;
+        }
+        return Path.Combine(dir, fallbackRelative);
+    }
+
     private async Task<LocalSongIdHint?> TryGetSongIdHintAsync(string name, string artist, string traceId)
     {
         List<string> dataDirs = FindAllNeteaseDataDirs();
@@ -444,11 +480,11 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
             ("count", dataDirs.Count), ("paths", string.Join(" | ", dataDirs))));
         foreach (string dataDir in dataDirs)
         {
-            string playingList = Path.Combine(dataDir, "webdata", "file", "playingList");
+            string playingList = ResolveCandidateFile(dataDir, PlayingListFileCandidates, Path.Combine("webdata", "file", "playingList"));
             LocalSongIdHint? result = await TryGetSongIdFromFileAsync(playingList, name, artist, hasTrackWrapper: true, traceId);
             if (result.HasValue) return result;
 
-            string fmPlay = Path.Combine(dataDir, "webdata", "file", "fmPlay");
+            string fmPlay = ResolveCandidateFile(dataDir, FmPlayFileCandidates, Path.Combine("webdata", "file", "fmPlay"));
             result = await TryGetSongIdFromFileAsync(fmPlay, name, artist, hasTrackWrapper: false, traceId);
             if (result.HasValue) return result;
         }
@@ -456,33 +492,294 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
         return null;
     }
 
-    private static List<string> FindAllNeteaseDataDirs()
+    internal static string? GetProcessExecutablePath(Process process)
     {
-        var dirs = new List<string>();
+        try
+        {
+            IntPtr hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process.Id);
+            if (hProcess != IntPtr.Zero)
+            {
+                try
+                {
+                    var sb = new System.Text.StringBuilder(1024);
+                    int size = sb.Capacity;
+                    if (QueryFullProcessImageName(hProcess, 0, sb, ref size))
+                    {
+                        return sb.ToString();
+                    }
+                }
+                finally
+                {
+                    CloseHandle(hProcess);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore limited query error and fall back
+        }
 
+        try
+        {
+            return process.MainModule?.FileName;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static IEnumerable<string> GetProcessDirectories()
+    {
+        Process[] processes;
+        try
+        {
+            processes = Process.GetProcessesByName("cloudmusic");
+        }
+        catch
+        {
+            yield break;
+        }
+
+        foreach (Process p in processes)
+        {
+            string? exePath = GetProcessExecutablePath(p);
+            if (string.IsNullOrWhiteSpace(exePath))
+            {
+                continue;
+            }
+
+            string? dir = null;
+            try
+            {
+                dir = Path.GetDirectoryName(exePath);
+            }
+            catch
+            {
+                // Ignore path errors
+            }
+
+            if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+            {
+                yield return dir;
+
+                string? parent = Directory.GetParent(dir)?.FullName;
+                if (!string.IsNullOrEmpty(parent) && Directory.Exists(parent))
+                {
+                    yield return parent;
+                }
+            }
+        }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static List<string> GetRegistryInstallPaths()
+    {
+        var results = new List<string>();
+        if (!OperatingSystem.IsWindows())
+        {
+            return results;
+        }
+
+        string[] subKeys =
+        [
+            @"SOFTWARE\WOW6432Node\Netease\CloudMusic",
+            @"SOFTWARE\Netease\CloudMusic",
+            @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\CloudMusic",
+            @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\CloudMusic"
+        ];
+        string[] valueNames = ["install_dir", "InstallLocation", "DataPath", "Path"];
+
+        foreach (string subKey in subKeys)
+        {
+            results.AddRange(ReadRegistryValues(Registry.LocalMachine, subKey, valueNames));
+            results.AddRange(ReadRegistryValues(Registry.CurrentUser, subKey, valueNames));
+        }
+
+        return results;
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static List<string> ReadRegistryValues(RegistryKey root, string subKeyPath, string[] valueNames)
+    {
+        var found = new List<string>();
+        RegistryKey? key = null;
+        try
+        {
+            key = root.OpenSubKey(subKeyPath);
+            if (key != null)
+            {
+                foreach (string valName in valueNames)
+                {
+                    if (key.GetValue(valName) is string val && !string.IsNullOrWhiteSpace(val) && Directory.Exists(val))
+                    {
+                        found.Add(val);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Ignore registry permission or access errors
+        }
+        finally
+        {
+            key?.Dispose();
+        }
+
+        return found;
+    }
+
+    private static IEnumerable<string> GetStorePackageDirectories()
+    {
         string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        foreach (string sub in LocalDataDirs)
+        string packagesDir = Path.Combine(localAppData, "Packages");
+        if (!Directory.Exists(packagesDir)) yield break;
+
+        string[] matchPatterns = ["*Netease*", "*1F8CA9F7*"];
+        foreach (string pattern in matchPatterns)
         {
-            string path = Path.Combine(localAppData, sub);
-            if (Directory.Exists(path)) dirs.Add(path);
+            string[] matchingDirs;
+            try
+            {
+                matchingDirs = Directory.GetDirectories(packagesDir, pattern);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (string packageDir in matchingDirs)
+            {
+                yield return Path.Combine(packageDir, "LocalCache", "Local");
+                yield return Path.Combine(packageDir, "LocalCache", "Roaming");
+                yield return Path.Combine(packageDir, "LocalState");
+            }
+        }
+    }
+
+    internal static List<string> RankDataDirs(IEnumerable<string> candidateDirs)
+    {
+        var distinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scored = new List<(string Dir, DateTime LastModified, bool HasFiles)>();
+
+        foreach (string dir in candidateDirs)
+        {
+            if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+            {
+                continue;
+            }
+
+            string normalized = Path.GetFullPath(dir);
+            if (!distinct.Add(normalized))
+            {
+                continue;
+            }
+
+            DateTime latest = DateTime.MinValue;
+            bool hasFiles = false;
+
+            string[] probeFiles =
+            [
+                Path.Combine(normalized, "webdata", "file", "playingList"),
+                Path.Combine(normalized, "webdata", "file", "fmPlay"),
+                Path.Combine(normalized, "file", "playingList"),
+                Path.Combine(normalized, "file", "fmPlay"),
+                Path.Combine(normalized, "playingList"),
+                Path.Combine(normalized, "fmPlay")
+            ];
+
+            foreach (string file in probeFiles)
+            {
+                if (File.Exists(file))
+                {
+                    hasFiles = true;
+                    try
+                    {
+                        DateTime modified = File.GetLastWriteTimeUtc(file);
+                        if (modified > latest)
+                        {
+                            latest = modified;
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore file access timing error
+                    }
+                }
+            }
+
+            scored.Add((normalized, latest, hasFiles));
         }
 
-        string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-        foreach (string sub in LocalDataDirs)
+        return scored
+            .OrderByDescending(x => x.HasFiles)
+            .ThenByDescending(x => x.LastModified)
+            .Select(x => x.Dir)
+            .ToList();
+    }
+
+    internal static List<string> FindAllNeteaseDataDirs(IEnumerable<string>? customRoots = null)
+    {
+        var rawCandidates = new List<string>();
+
+        if (customRoots != null)
         {
-            string path = Path.Combine(programData, sub);
-            if (Directory.Exists(path)) dirs.Add(path);
+            rawCandidates.AddRange(customRoots);
+        }
+        else
+        {
+            rawCandidates.AddRange(GetProcessDirectories());
+            if (OperatingSystem.IsWindows())
+            {
+                rawCandidates.AddRange(GetRegistryInstallPaths());
+            }
+
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrEmpty(localAppData)) rawCandidates.Add(localAppData);
+
+            string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+            if (!string.IsNullOrEmpty(programData)) rawCandidates.Add(programData);
+
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string appDataRoaming = Path.Combine(userProfile, "AppData", "Roaming");
+            if (Directory.Exists(appDataRoaming)) rawCandidates.Add(appDataRoaming);
+
+            rawCandidates.AddRange(GetStorePackageDirectories());
         }
 
-        string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string appDataRoaming = Path.Combine(userProfile, "AppData", "Roaming");
-        foreach (string sub in LocalDataDirs)
+        string[] candidateSubDirs =
+        [
+            "",
+            "webdata",
+            "data",
+            "UserData",
+            "user",
+            "profile",
+            "Netease\\CloudMusic",
+            "Netease\\cloudmusic",
+            "NetEase Music"
+        ];
+
+        var fullDataDirs = new List<string>();
+        foreach (string root in rawCandidates)
         {
-            string path = Path.Combine(appDataRoaming, sub);
-            if (Directory.Exists(path)) dirs.Add(path);
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            {
+                continue;
+            }
+
+            foreach (string sub in candidateSubDirs)
+            {
+                string target = string.IsNullOrEmpty(sub) ? root : Path.Combine(root, sub);
+                if (Directory.Exists(target))
+                {
+                    fullDataDirs.Add(target);
+                }
+            }
         }
 
-        return dirs;
+        return RankDataDirs(fullDataDirs);
     }
 
     private async Task<LocalSongIdHint?> TryGetSongIdFromFileAsync(string filePath, string name, string artist, bool hasTrackWrapper, string traceId)
@@ -774,9 +1071,7 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
             Stopwatch stopwatch = Stopwatch.StartNew();
             try
             {
-                using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Referrer = new Uri("https://music.163.com/");
-                request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                using HttpRequestMessage request = NeteaseHttpPolicy.CreateRequest(url);
                 using var response = await _httpClient.SendAsync(request);
                 string? contentType = response.Content.Headers.ContentType?.MediaType;
                 _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-cover", "cover-http",

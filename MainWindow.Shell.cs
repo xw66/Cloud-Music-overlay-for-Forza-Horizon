@@ -75,6 +75,27 @@ public partial class MainWindow
                 await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
                 SetStatus("状态：数据来源已切换（点击“保存”可持久化）。", false);
             };
+            _floatingSettingsViewModel.ToggleDragRepositionRequested += ToggleOverlayDragReposition;
+            _overlayWindow.PositionDragged += (leftPercent, topPercent) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    _floatingSettingsViewModel.UpdatePositionFromDrag(leftPercent, topPercent);
+                    _activeSettings.LeftPercent = leftPercent;
+                    _activeSettings.TopPercent = topPercent;
+                    UpdateOverlayControlLabels();
+                });
+            };
+            _overlayWindow.DragRepositionCompleted += () =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    if (_floatingSettingsViewModel.IsPositionAdjusting)
+                    {
+                        ToggleOverlayDragReposition();
+                    }
+                });
+            };
             _floatingSettingsPageWired = true;
             _floatingSettingsViewModel.LoadFrom(_activeSettings, _playbackCoordinator);
         }
@@ -99,6 +120,8 @@ public partial class MainWindow
             {
                 if (_isInitializingOverlayControls) return;
                 ApplyOverlaySettingsFromControls();
+                _overlaySettingsService.Save(_activeSettings);
+                SetStatus(_remoteControlService.IsRunning ? "状态：手机遥控已应用。" : $"状态：{_remoteControlService.StatusMessage}", !_remoteControlService.IsRunning && _activeSettings.EnableRemoteControl);
             };
             _remoteControlViewModel.RequestResetToken += () =>
             {
@@ -127,6 +150,10 @@ public partial class MainWindow
             _themeSettingsPageView.ThemeAccentGreenButton.Click += (_, _) => ApplyThemeAccentColor("#22C55E");
             _themeSettingsPageView.ThemeAccentAmberButton.Click += (_, _) => ApplyThemeAccentColor("#F59E0B");
             _themeSettingsPageView.ThemeAccentRoseButton.Click += (_, _) => ApplyThemeAccentColor("#F43F5E");
+            _themeSettingsPageView.MainColorPicker.ColorChanged += hex =>
+            {
+                _themeSettingsViewModel.ApplyColorFromPicker(hex);
+            };
             _themeSettingsPageWired = true;
             _themeSettingsViewModel.LoadFrom(_activeSettings);
         }

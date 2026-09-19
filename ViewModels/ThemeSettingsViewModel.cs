@@ -19,6 +19,15 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
     private string _lyricsColor = "#A0B8D0";
 
     [ObservableProperty]
+    private string _activeColorTarget = "Title"; // "Title" | "Artist" | "Lyrics"
+
+    [ObservableProperty]
+    private string _activeColorHex = "#FFFFFF";
+
+    [ObservableProperty]
+    private string _activeColorTargetTitle = "歌名颜色";
+
+    [ObservableProperty]
     private double _titleOpacity = 100.0;
 
     [ObservableProperty]
@@ -26,6 +35,15 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private double _lyricsOpacity = 70.0;
+
+    [ObservableProperty]
+    private double _titleFontSize = 19.0;
+
+    [ObservableProperty]
+    private double _artistFontSize = 14.0;
+
+    [ObservableProperty]
+    private double _lyricsFontSize = 11.0;
 
     [ObservableProperty]
     private int _previewEffectLevel = 1;
@@ -42,6 +60,9 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
     public string TitleOpacityText => $"{TitleOpacity:0}%";
     public string ArtistOpacityText => $"{ArtistOpacity:0}%";
     public string LyricsOpacityText => $"{LyricsOpacity:0}%";
+    public string TitleFontSizeText => $"{TitleFontSize:0} pt";
+    public string ArtistFontSizeText => $"{ArtistFontSize:0} pt";
+    public string LyricsFontSizeText => $"{LyricsFontSize:0} pt";
 
     public double TitleOpacityRatio => Math.Clamp(TitleOpacity / 100.0, 0.2, 1.0);
     public double ArtistOpacityRatio => Math.Clamp(ArtistOpacity / 100.0, 0.2, 1.0);
@@ -90,6 +111,24 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
         NotifySettingsChanged();
     }
 
+    partial void OnTitleFontSizeChanged(double value)
+    {
+        OnPropertyChanged(nameof(TitleFontSizeText));
+        NotifySettingsChanged();
+    }
+
+    partial void OnArtistFontSizeChanged(double value)
+    {
+        OnPropertyChanged(nameof(ArtistFontSizeText));
+        NotifySettingsChanged();
+    }
+
+    partial void OnLyricsFontSizeChanged(double value)
+    {
+        OnPropertyChanged(nameof(LyricsFontSizeText));
+        NotifySettingsChanged();
+    }
+
     partial void OnPreviewEffectLevelChanged(int value)
     {
         NotifySettingsChanged();
@@ -101,6 +140,10 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(hex))
         {
             TitleColor = hex;
+            if (ActiveColorTarget == "Title")
+            {
+                ActiveColorHex = hex;
+            }
         }
     }
 
@@ -110,6 +153,10 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(hex))
         {
             ArtistColor = hex;
+            if (ActiveColorTarget == "Artist")
+            {
+                ActiveColorHex = hex;
+            }
         }
     }
 
@@ -119,6 +166,50 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(hex))
         {
             LyricsColor = hex;
+            if (ActiveColorTarget == "Lyrics")
+            {
+                ActiveColorHex = hex;
+            }
+        }
+    }
+
+    [RelayCommand]
+    public void SetActiveTarget(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target)) return;
+
+        ActiveColorTarget = target;
+        switch (target)
+        {
+            case "Title":
+                ActiveColorHex = TitleColor;
+                ActiveColorTargetTitle = "歌名颜色";
+                break;
+            case "Artist":
+                ActiveColorHex = ArtistColor;
+                ActiveColorTargetTitle = "歌手颜色";
+                break;
+            case "Lyrics":
+                ActiveColorHex = LyricsColor;
+                ActiveColorTargetTitle = "歌词颜色";
+                break;
+        }
+    }
+
+    public void ApplyColorFromPicker(string hex)
+    {
+        ActiveColorHex = hex;
+        switch (ActiveColorTarget)
+        {
+            case "Title":
+                TitleColor = hex;
+                break;
+            case "Artist":
+                ArtistColor = hex;
+                break;
+            case "Lyrics":
+                LyricsColor = hex;
+                break;
         }
     }
 
@@ -178,6 +269,15 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
             TitleOpacity = settings.TitleOpacity * 100.0;
             ArtistOpacity = settings.ArtistOpacity * 100.0;
             LyricsOpacity = settings.LyricsOpacity * 100.0;
+            TitleFontSize = settings.TitleFontSize <= 0 ? 19.0 : settings.TitleFontSize;
+            ArtistFontSize = settings.ArtistFontSize <= 0 ? 14.0 : settings.ArtistFontSize;
+            LyricsFontSize = settings.LyricsFontSize <= 0 ? 11.0 : settings.LyricsFontSize;
+            ActiveColorHex = ActiveColorTarget switch
+            {
+                "Artist" => ArtistColor,
+                "Lyrics" => LyricsColor,
+                _ => TitleColor
+            };
             UpdateBrushes();
         }
         finally
@@ -194,5 +294,8 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
         settings.TitleOpacity = TitleOpacityRatio;
         settings.ArtistOpacity = ArtistOpacityRatio;
         settings.LyricsOpacity = LyricsOpacityRatio;
+        settings.TitleFontSize = TitleFontSize;
+        settings.ArtistFontSize = ArtistFontSize;
+        settings.LyricsFontSize = LyricsFontSize;
     }
 }

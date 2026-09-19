@@ -120,6 +120,8 @@ public sealed class RemoteControlService : IDisposable
         {
             IPAddress address = _settings.RemoteControlAllowLan ? IPAddress.Any : IPAddress.Loopback;
             _listener = new TcpListener(address, _settings.RemoteControlPort);
+            _listener.ExclusiveAddressUse = false;
+            _listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
             _listener.Start();
             _cts = new CancellationTokenSource();
             IsRunning = true;

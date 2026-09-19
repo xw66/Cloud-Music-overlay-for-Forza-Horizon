@@ -1,6 +1,7 @@
 <Window x:Class="HorizonRadioOverlay.OverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:HorizonRadioOverlay"
         Title="[直播源] 网易云悬浮窗 v3.1.0"
         Width="210"
         Height="198"
@@ -112,6 +113,40 @@
                                Effect="{StaticResource TextGlow}" />
                 </Viewbox>
             </Grid>
+
+            <Border Name="DragOverlayBorder"
+                    Grid.RowSpan="2"
+                    BorderThickness="2"
+                    BorderBrush="#3B82F6"
+                    CornerRadius="8"
+                    Background="#331E293B"
+                    Visibility="Collapsed"
+                    Cursor="SizeAll">
+                <Grid>
+                    <TextBlock Name="DragCoordinateText"
+                               Text="X: 0%  Y: 59%"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="#60A5FA"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Top"
+                               Margin="0,4,0,0">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="1" Opacity="0.8" />
+                        </TextBlock.Effect>
+                    </TextBlock>
+                    <TextBlock Text="{x:Static local:UiText.DragTip}"
+                               FontSize="9.5"
+                               Foreground="#E2E8F0"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Bottom"
+                               Margin="4,0,4,4">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="1" Opacity="0.8" />
+                        </TextBlock.Effect>
+                    </TextBlock>
+                </Grid>
+            </Border>
         </Grid>
     </Viewbox>
 </Window>

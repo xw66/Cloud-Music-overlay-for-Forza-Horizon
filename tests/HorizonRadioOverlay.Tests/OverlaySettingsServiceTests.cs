@@ -19,6 +19,36 @@ public sealed class OverlaySettingsServiceTests
     }
 
     [Fact]
+    public void Normalize_clamps_font_size_range()
+    {
+        OverlaySettings settings = new()
+        {
+            TitleFontSize = 100.0,
+            ArtistFontSize = 5.0,
+            LyricsFontSize = 50.0
+        };
+
+        OverlaySettings normalized = OverlaySettingsService.NormalizeForTests(settings);
+
+        Assert.Equal(32.0, normalized.TitleFontSize);
+        Assert.Equal(10.0, normalized.ArtistFontSize);
+        Assert.Equal(20.0, normalized.LyricsFontSize);
+
+        OverlaySettings settingsLow = new()
+        {
+            TitleFontSize = 2.0,
+            ArtistFontSize = 30.0,
+            LyricsFontSize = 3.0
+        };
+
+        OverlaySettings normalizedLow = OverlaySettingsService.NormalizeForTests(settingsLow);
+
+        Assert.Equal(12.0, normalizedLow.TitleFontSize);
+        Assert.Equal(24.0, normalizedLow.ArtistFontSize);
+        Assert.Equal(9.0, normalizedLow.LyricsFontSize);
+    }
+
+    [Fact]
     public void OverlaySettings_defaults_include_overlay_visibility_controls()
     {
         OverlaySettings settings = new();

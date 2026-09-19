@@ -191,4 +191,83 @@ public class NeteaseLocalDataServiceTests
 
         Assert.True(NeteaseLocalDataService.ShouldTrustPreferredSongId(liveTrack, resolved));
     }
+
+    [Fact]
+    public void NeteaseHttpPolicy_AppliesAntiRiskHeaders()
+    {
+        using var request = NeteaseHttpPolicy.CreateRequest("https://music.163.com/api/test");
+
+        Assert.Equal("https://music.163.com/", request.Headers.Referrer?.ToString());
+        Assert.Contains("Chrome", request.Headers.UserAgent.ToString());
+        Assert.True(request.Headers.TryGetValues("Cookie", out var cookies));
+        string cookieHeader = string.Join(";", cookies);
+        Assert.Contains("os=pc", cookieHeader);
+        Assert.Contains("appver=3.0.0", cookieHeader);
+        Assert.True(request.Headers.TryGetValues("X-Real-IP", out var realIps));
+        Assert.Equal(NeteaseHttpPolicy.DomesticProxyIp, realIps.First());
+    }
+
+    [Fact]
+    public void RankDataDirs_PrefersFoldersWithExistingFilesAndNewerTimestamps()
+    {
+        string baseTemp = Path.Combine(Path.GetTempPath(), "HRONeteaseTest_" + Guid.NewGuid().ToString("N"));
+        string dirOld = Path.Combine(baseTemp, "OldInstall");
+        string dirNew = Path.Combine(baseTemp, "NewPortable");
+        string dirEmpty = Path.Combine(baseTemp, "EmptyDir");
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(dirOld, "webdata", "file"));
+            Directory.CreateDirectory(Path.Combine(dirNew, "webdata", "file"));
+            Directory.CreateDirectory(dirEmpty);
+
+            string fileOld = Path.Combine(dirOld, "webdata", "file", "playingList");
+            string fileNew = Path.Combine(dirNew, "webdata", "file", "playingList");
+
+            File.WriteAllText(fileOld, "{}");
+            File.SetLastWriteTimeUtc(fileOld, DateTime.UtcNow.AddHours(-2));
+
+            File.WriteAllText(fileNew, "{}");
+            File.SetLastWriteTimeUtc(fileNew, DateTime.UtcNow);
+
+            var ranked = NeteaseLocalDataService.RankDataDirs([dirEmpty, dirOld, dirNew]);
+
+            Assert.Equal(3, ranked.Count);
+            Assert.Equal(Path.GetFullPath(dirNew), ranked[0]);
+            Assert.Equal(Path.GetFullPath(dirOld), ranked[1]);
+            Assert.Equal(Path.GetFullPath(dirEmpty), ranked[2]);
+        }
+        finally
+        {
+            if (Directory.Exists(baseTemp))
+            {
+                Directory.Delete(baseTemp, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void FindAllNeteaseDataDirs_WithCustomRoots_DiscoversCandidateSubfolders()
+    {
+        string baseTemp = Path.Combine(Path.GetTempPath(), "HRONeteaseCustom_" + Guid.NewGuid().ToString("N"));
+        string portableData = Path.Combine(baseTemp, "UserData", "webdata", "file");
+
+        try
+        {
+            Directory.CreateDirectory(portableData);
+            string file = Path.Combine(portableData, "playingList");
+            File.WriteAllText(file, "{}");
+
+            var dirs = NeteaseLocalDataService.FindAllNeteaseDataDirs([baseTemp]);
+
+            Assert.Contains(dirs, d => d.EndsWith("UserData", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(baseTemp))
+            {
+                Directory.Delete(baseTemp, true);
+            }
+        }
+    }
 }

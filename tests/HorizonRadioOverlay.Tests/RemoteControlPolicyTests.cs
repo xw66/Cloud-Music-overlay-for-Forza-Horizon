@@ -56,4 +56,29 @@ public sealed class RemoteControlPolicyTests
     {
         Assert.Equal(expected, RemoteControlPolicy.IsUsableLanAddress(IPAddress.Parse(address)));
     }
+
+    [Fact]
+    public void RemoteControlService_Can_Start_And_Toggle_Lan()
+    {
+        var lanAddresses = RemoteControlService.GetLanAddresses();
+        using var service = new RemoteControlService();
+
+        var settings = new HorizonRadioOverlay.Models.OverlaySettings
+        {
+            EnableRemoteControl = true,
+            RemoteControlPort = 39991,
+            RemoteControlAllowLan = false
+        };
+
+        service.ApplySettings(settings);
+        Assert.True(service.IsRunning, $"Service failed to start: {service.LastError}");
+        Assert.Contains("127.0.0.1", service.LocalUrl);
+
+        // Toggle LAN
+        settings.RemoteControlAllowLan = true;
+        service.ApplySettings(settings);
+        Assert.True(service.IsRunning, $"Service failed to toggle LAN: {service.LastError}");
+        Assert.NotEmpty(lanAddresses);
+        Assert.Contains("http://", service.LanUrl);
+    }
 }

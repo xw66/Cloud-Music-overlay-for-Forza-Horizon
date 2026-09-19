@@ -1,7 +1,8 @@
-﻿using System.IO;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -28,6 +29,9 @@ public partial class OverlayWindow : Window
     private readonly System.Windows.Threading.DispatcherTimer _topmostRefreshTimer;
     private DateTime _boostTopmostUntilUtc;
     private ImageBrush? _coverFlowCenterBrush;
+    private byte[]? _displayedCoverBytes;
+    private string _displayedTitle = string.Empty;
+    private string _displayedArtist = string.Empty;
     public const double BaseWidth = 210;
     private const double CoverFlowWidth = 760;
     public const double BaseHeight = 198;
@@ -44,6 +48,14 @@ public partial class OverlayWindow : Window
 
     public OverlaySettings CurrentSettings { get; private set; } = new();
     public bool IsContentVisible => _isContentVisible;
+    public bool IsInDragMode { get; private set; }
+
+    public event Action<double, double>? PositionDragged;
+    public event Action? DragRepositionCompleted;
+
+    private Point _dragStartCursorPos;
+    private Point _dragStartWindowPos;
+    private bool _isMouseDownOnOverlay;
 
     public OverlayWindow()
     {
@@ -69,6 +81,23 @@ public partial class OverlayWindow : Window
         };
         SourceInitialized += OverlayWindow_SourceInitialized;
         Closed += (_, _) => StopTopmostRefresh();
+        MouseLeftButtonDown += OverlayWindow_MouseLeftButtonDown;
+        MouseLeftButtonUp += OverlayWindow_MouseLeftButtonUp;
+        MouseMove += OverlayWindow_MouseMove;
+        MouseRightButtonUp += (_, _) =>
+        {
+            if (IsInDragMode)
+            {
+                DragRepositionCompleted?.Invoke();
+            }
+        };
+        KeyDown += (_, e) =>
+        {
+            if (IsInDragMode && e.Key == Key.Escape)
+            {
+                DragRepositionCompleted?.Invoke();
+            }
+        };
         Visibility = Visibility.Hidden;
     }
 
@@ -87,7 +116,10 @@ public partial class OverlayWindow : Window
             EnableLyrics = settings.EnableLyrics,
             EnableCoverWingEffect = settings.EnableCoverWingEffect,
             LyricsColor = settings.LyricsColor,
-            LyricsOpacity = Clamp(settings.LyricsOpacity, 0.2, 1.0)
+            LyricsOpacity = Clamp(settings.LyricsOpacity, 0.2, 1.0),
+            TitleFontSize = settings.TitleFontSize <= 0 ? 19.0 : Clamp(settings.TitleFontSize, 12.0, 32.0),
+            ArtistFontSize = settings.ArtistFontSize <= 0 ? 14.0 : Clamp(settings.ArtistFontSize, 10.0, 24.0),
+            LyricsFontSize = settings.LyricsFontSize <= 0 ? 11.0 : Clamp(settings.LyricsFontSize, 9.0, 20.0)
         };
 
         double layoutWidth = CurrentSettings.EnableCoverWingEffect ? CoverFlowWidth : BaseWidth;
@@ -114,6 +146,9 @@ public partial class OverlayWindow : Window
 
     public void ApplyTextColors()
     {
+        TitleText.FontSize = CurrentSettings.TitleFontSize;
+        ArtistText.FontSize = CurrentSettings.ArtistFontSize;
+        LyricsText.FontSize = CurrentSettings.LyricsFontSize;
         try
         {
             var titleColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(CurrentSettings.TitleColor);
@@ -172,6 +207,31 @@ public partial class OverlayWindow : Window
         _hideCts = new CancellationTokenSource();
 
         bool isCurrentlyVisible = _isContentVisible && OverlayRoot.Opacity > 0.5;
+        bool isSameTrack = string.Equals(_displayedTitle, track.Name, StringComparison.Ordinal)
+            && string.Equals(_displayedArtist, track.Artist, StringComparison.Ordinal);
+        bool isSameCover = SameBytes(_displayedCoverBytes, track.CoverBytes);
+
+        if (isCurrentlyVisible && isSameTrack && isSameCover && CoverImage.Source != null)
+        {
+            if (!CurrentSettings.AlwaysShowOverlay)
+            {
+                ScheduleHide(_hideCts.Token);
+            }
+            BoostTopmostRefresh();
+            return;
+        }
+
+        if (isCurrentlyVisible && isSameTrack && !isSameCover && track.CoverBytes is { Length: > 0 })
+        {
+            UpdateCover(track.CoverBytes);
+            if (!CurrentSettings.AlwaysShowOverlay)
+            {
+                ScheduleHide(_hideCts.Token);
+            }
+            BoostTopmostRefresh();
+            return;
+        }
+
         bool transitionOnlyCenterCover = isCurrentlyVisible && CurrentSettings.EnableCoverWingEffect;
 
         if (isCurrentlyVisible && !transitionOnlyCenterCover)
@@ -205,6 +265,9 @@ public partial class OverlayWindow : Window
 
             TitleText.Text = track.Name;
             ArtistText.Text = track.Artist;
+            _displayedTitle = track.Name;
+            _displayedArtist = track.Artist;
+            _displayedCoverBytes = track.CoverBytes;
 
             ImageSource? coverImage = CreateCoverImage(track.CoverBytes);
             if (transitionOnlyCenterCover)
@@ -679,8 +742,21 @@ public partial class OverlayWindow : Window
 
     public void UpdateCover(byte[]? coverBytes)
     {
+        if (SameBytes(_displayedCoverBytes, coverBytes) && CoverImage.Source != null)
+        {
+            return;
+        }
+
+        _displayedCoverBytes = coverBytes;
         ImageSource? coverImage = CreateCoverImage(coverBytes);
         SetCover(coverImage);
+    }
+
+    private static bool SameBytes(byte[]? left, byte[]? right)
+    {
+        if (ReferenceEquals(left, right)) return true;
+        if (left is null || right is null || left.Length != right.Length) return false;
+        return left.AsSpan().SequenceEqual(right);
     }
 
     private async Task HideWithAnimationAsync(CancellationToken token)
@@ -807,6 +883,111 @@ public partial class OverlayWindow : Window
         }
 
         return value;
+    }
+
+    public void SetInteractiveDragMode(bool isDragMode)
+    {
+        IsInDragMode = isDragMode;
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+        {
+            int exStyle = GetWindowLong(hwnd, GwlExstyle);
+            int newStyle = isDragMode
+                ? OverlayTopmostPolicy.ApplyInteractiveExtendedStyle(exStyle)
+                : OverlayTopmostPolicy.ApplyExtendedStyle(exStyle);
+            SetWindowLong(hwnd, GwlExstyle, newStyle);
+        }
+
+        DragOverlayBorder.Visibility = isDragMode ? Visibility.Visible : Visibility.Collapsed;
+        UpdateDragCoordinateLabel();
+
+        if (isDragMode)
+        {
+            _hideCts?.Cancel();
+            _hideCts = null;
+            OverlayRoot.BeginAnimation(UIElement.OpacityProperty, null);
+            OverlayRoot.Opacity = 1;
+            RootTransform.BeginAnimation(TranslateTransform.YProperty, null);
+            RootTransform.Y = 0;
+            Show();
+            Visibility = Visibility.Visible;
+            _isContentVisible = true;
+            BoostTopmostRefresh();
+        }
+        else
+        {
+            _isMouseDownOnOverlay = false;
+            ReleaseMouseCapture();
+            if (!CurrentSettings.AlwaysShowOverlay)
+            {
+                _hideCts = new CancellationTokenSource();
+                ScheduleHide(_hideCts.Token);
+            }
+        }
+    }
+
+    private void UpdateDragCoordinateLabel()
+    {
+        DragCoordinateText.Text = $"X: {CurrentSettings.LeftPercent * 100:0}%  Y: {CurrentSettings.TopPercent * 100:0}%";
+    }
+
+    private void OverlayWindow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsInDragMode) return;
+
+        _isMouseDownOnOverlay = true;
+        _dragStartCursorPos = PointToScreen(e.GetPosition(this));
+        _dragStartWindowPos = new Point(Left, Top);
+        CaptureMouse();
+    }
+
+    private void OverlayWindow_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!IsInDragMode || !_isMouseDownOnOverlay || e.LeftButton != MouseButtonState.Pressed) return;
+
+        Point currentCursorPos = PointToScreen(e.GetPosition(this));
+        double deltaX = currentCursorPos.X - _dragStartCursorPos.X;
+        double deltaY = currentCursorPos.Y - _dragStartCursorPos.Y;
+
+        double targetLeft = _dragStartWindowPos.X + deltaX;
+        double targetTop = _dragStartWindowPos.Y + deltaY;
+
+        double screenWidth = SystemParameters.PrimaryScreenWidth;
+        double screenHeight = SystemParameters.PrimaryScreenHeight;
+        double maxLeft = Math.Max(0, screenWidth - Width);
+        double maxTop = Math.Max(0, screenHeight - Height);
+
+        // 磁吸吸附逻辑 (阈值 16px)
+        const double snapThreshold = 16.0;
+        if (Math.Abs(targetLeft) < snapThreshold) targetLeft = 0;
+        if (Math.Abs(targetLeft - maxLeft) < snapThreshold) targetLeft = maxLeft;
+        if (Math.Abs(targetLeft - maxLeft / 2.0) < snapThreshold) targetLeft = maxLeft / 2.0;
+
+        if (Math.Abs(targetTop) < snapThreshold) targetTop = 0;
+        if (Math.Abs(targetTop - maxTop) < snapThreshold) targetTop = maxTop;
+        if (Math.Abs(targetTop - maxTop / 2.0) < snapThreshold) targetTop = maxTop / 2.0;
+
+        targetLeft = Clamp(targetLeft, 0, maxLeft);
+        targetTop = Clamp(targetTop, 0, maxTop);
+
+        Left = targetLeft;
+        Top = targetTop;
+
+        double leftPercent = maxLeft > 0 ? Clamp(targetLeft / maxLeft, 0.0, 1.0) : 0.0;
+        double topPercent = maxTop > 0 ? Clamp(targetTop / maxTop, 0.0, 1.0) : 0.0;
+
+        CurrentSettings.LeftPercent = leftPercent;
+        CurrentSettings.TopPercent = topPercent;
+        UpdateDragCoordinateLabel();
+
+        PositionDragged?.Invoke(leftPercent, topPercent);
+    }
+
+    private void OverlayWindow_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsInDragMode) return;
+        _isMouseDownOnOverlay = false;
+        ReleaseMouseCapture();
     }
 }
 

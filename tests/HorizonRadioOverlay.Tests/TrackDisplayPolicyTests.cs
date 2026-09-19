@@ -63,4 +63,14 @@ public sealed class TrackDisplayPolicyTests
 
         Assert.False(shouldRefresh);
     }
+
+    [Fact]
+    public void SmtcCoverRefreshPolicy_SameCoverBytes_ShouldNotUpdateDisplayedCover()
+    {
+        byte[] cover = [10, 20, 30, 40];
+        byte[] duplicate = [10, 20, 30, 40];
+
+        bool shouldUpdate = SmtcCoverRefreshPolicy.ShouldUpdateDisplayedCover(cover, duplicate);
+        Assert.False(shouldUpdate);
+    }
 }
