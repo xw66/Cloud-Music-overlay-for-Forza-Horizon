@@ -2,6 +2,11 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:HorizonRadioOverlay"
+             xmlns:viewmodels="clr-namespace:HorizonRadioOverlay.ViewModels"
+             d:DataContext="{d:DesignInstance Type=viewmodels:HotkeySettingsViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
              Background="Transparent">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24">
@@ -22,22 +27,22 @@
                     <Grid Margin="0,18,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Previous}" />
-                        <TextBox x:Name="AppPrevHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="AppPrevHotkeyBox" Grid.Column="1" Text="{Binding AppPrevHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Next}" />
-                        <TextBox x:Name="AppNextHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="AppNextHotkeyBox" Grid.Column="1" Text="{Binding AppNextHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.PlayPause}" />
-                        <TextBox x:Name="AppToggleHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="AppToggleHotkeyBox" Grid.Column="1" Text="{Binding AppToggleHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.ToggleOverlayVisibility}" />
-                        <TextBox x:Name="AppToggleOverlayHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="AppToggleOverlayHotkeyBox" Grid.Column="1" Text="{Binding AppToggleOverlayHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                 </StackPanel>
             </Border>
@@ -49,17 +54,17 @@
                     <Grid Margin="0,18,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Previous}" />
-                        <TextBox x:Name="NeteasePrevHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="NeteasePrevHotkeyBox" Grid.Column="1" Text="{Binding NeteasePrevHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Next}" />
-                        <TextBox x:Name="NeteaseNextHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="NeteaseNextHotkeyBox" Grid.Column="1" Text="{Binding NeteaseNextHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.PlayPause}" />
-                        <TextBox x:Name="NeteaseToggleHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="NeteaseToggleHotkeyBox" Grid.Column="1" Text="{Binding NeteaseToggleHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                 </StackPanel>
             </Border>
@@ -68,28 +73,28 @@
                 <StackPanel>
                     <DockPanel LastChildFill="False">
                         <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.GamepadHotkeys}" />
-                        <CheckBox x:Name="EnableGamepadCheckBox" x:FieldModifier="public" DockPanel.Dock="Right" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.EnableXboxGamepad}" />
+                        <CheckBox x:Name="EnableGamepadCheckBox" DockPanel.Dock="Right" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.EnableXboxGamepad}" IsChecked="{Binding EnableGamepadHotkeys, Mode=TwoWay}" />
                     </DockPanel>
                     <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyTextStyle}" Text="{x:Static local:UiText.GamepadHotkeysDesc}" />
                     <Grid Margin="0,18,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Previous}" />
-                        <TextBox x:Name="GamepadPrevHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="GamepadPrevHotkeyBox" Grid.Column="1" Text="{Binding GamepadPrevHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Next}" />
-                        <TextBox x:Name="GamepadNextHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="GamepadNextHotkeyBox" Grid.Column="1" Text="{Binding GamepadNextHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.PlayPause}" />
-                        <TextBox x:Name="GamepadToggleHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="GamepadToggleHotkeyBox" Grid.Column="1" Text="{Binding GamepadToggleHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.ToggleOverlayVisibility}" />
-                        <TextBox x:Name="GamepadToggleOverlayHotkeyBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="GamepadToggleOverlayHotkeyBox" Grid.Column="1" Text="{Binding GamepadToggleOverlayHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                 </StackPanel>
             </Border>

@@ -2,6 +2,11 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:HorizonRadioOverlay"
+             xmlns:viewmodels="clr-namespace:HorizonRadioOverlay.ViewModels"
+             d:DataContext="{d:DesignInstance Type=viewmodels:RemoteControlViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
              Background="Transparent">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24">
@@ -19,10 +24,10 @@
                     <DockPanel LastChildFill="False">
                         <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.RemoteControl}" />
                         <CheckBox x:Name="EnableRemoteControlCheckBox"
-                                  x:FieldModifier="public"
                                   DockPanel.Dock="Right"
                                   Style="{StaticResource ToggleSwitchStyle}"
-                                  Content="{x:Static local:UiText.EnableRemoteControl}" />
+                                  Content="{x:Static local:UiText.EnableRemoteControl}"
+                                  IsChecked="{Binding EnableRemoteControl, Mode=TwoWay}" />
                     </DockPanel>
                     <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyTextStyle}" Text="{x:Static local:UiText.RemoteControlDesc}" />
 
@@ -32,13 +37,13 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.RemoteControlPort}" />
-                        <TextBox x:Name="RemoteControlPortBox" x:FieldModifier="public" Grid.Column="1" />
+                        <TextBox x:Name="RemoteControlPortBox" Grid.Column="1" Text="{Binding PortText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
                     </Grid>
 
                     <CheckBox x:Name="RemoteControlAllowLanCheckBox"
-                              x:FieldModifier="public"
                               Margin="160,14,0,0"
-                              Content="{x:Static local:UiText.RemoteControlAllowLan}" />
+                              Content="{x:Static local:UiText.RemoteControlAllowLan}"
+                              IsChecked="{Binding AllowLan, Mode=TwoWay}" />
                 </StackPanel>
             </Border>
 
@@ -52,35 +57,35 @@
                     <StackPanel>
                         <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.RemoteControlStatus}" />
                         <TextBlock x:Name="RemoteControlStatusText"
-                                   x:FieldModifier="public"
                                    Margin="0,8,0,0"
-                                   Style="{StaticResource BodyTextStyle}" />
+                                   Style="{StaticResource BodyTextStyle}"
+                                   Text="{Binding StatusText}" />
 
                         <TextBlock Margin="0,22,0,0" Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.RemoteControlAddress}" />
                         <TextBox x:Name="RemoteControlAddressBox"
-                                 x:FieldModifier="public"
                                  Margin="0,10,0,0"
                                  IsReadOnly="True"
-                                 TextWrapping="Wrap" />
+                                 TextWrapping="Wrap"
+                                 Text="{Binding Address, Mode=OneWay}" />
 
                         <TextBlock x:Name="RemoteControlHelpText"
-                                   x:FieldModifier="public"
                                    Margin="0,10,0,0"
                                    Style="{StaticResource BodyTextStyle}"
-                                   TextWrapping="Wrap" />
+                                   TextWrapping="Wrap"
+                                   Text="{Binding HelpText}" />
 
                         <StackPanel Margin="0,16,0,0" Orientation="Horizontal">
                             <Button x:Name="CopyRemoteAddressButton"
-                                    x:FieldModifier="public"
                                     Width="112"
                                     Height="38"
                                     Margin="0,0,12,0"
-                                    Content="{x:Static local:UiText.CopyRemoteAddress}" />
+                                    Content="{x:Static local:UiText.CopyRemoteAddress}"
+                                    Command="{Binding CopyAddressCommand}" />
                             <Button x:Name="ResetRemoteTokenButton"
-                                    x:FieldModifier="public"
                                     Width="132"
                                     Height="38"
-                                    Content="{x:Static local:UiText.ResetRemoteToken}" />
+                                    Content="{x:Static local:UiText.ResetRemoteToken}"
+                                    Command="{Binding ResetTokenCommand}" />
                         </StackPanel>
                     </StackPanel>
 
@@ -93,8 +98,8 @@
                                 Background="White"
                                 CornerRadius="8">
                             <Image x:Name="RemoteControlQrImage"
-                                   x:FieldModifier="public"
-                                   Stretch="Uniform" />
+                                   Stretch="Uniform"
+                                   Source="{Binding QrCodeImage}" />
                         </Border>
                     </StackPanel>
                 </Grid>

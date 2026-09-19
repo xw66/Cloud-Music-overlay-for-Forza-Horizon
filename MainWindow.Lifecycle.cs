@@ -1,7 +1,9 @@
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -93,16 +95,106 @@ public partial class MainWindow
         _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
     }
 
-    private void RestoreFromTray()
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    /// <summary>
+    /// 唤醒主窗口并确保其可见、在屏幕可视边界内，并置于前台获焦。
+    /// </summary>
+    public void ActivateAndEnsureVisible()
     {
-        Show();
-        WindowState = WindowState.Normal;
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(ActivateAndEnsureVisible);
+            return;
+        }
+
+        if (Visibility != Visibility.Visible)
+        {
+            Show();
+        }
+
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
         ShowInTaskbar = true;
+        EnsureWindowInVisibleBounds();
+
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+        {
+            SetForegroundWindow(hwnd);
+        }
+
         Activate();
+        Focus();
+
         if (_trayIcon != null)
         {
             _trayIcon.Visible = false;
         }
+    }
+
+    private void EnsureWindowInVisibleBounds()
+    {
+        try
+        {
+            double left = Left;
+            double top = Top;
+            double width = ActualWidth > 0 ? ActualWidth : (double.IsNaN(Width) ? 800 : Width);
+            double height = ActualHeight > 0 ? ActualHeight : (double.IsNaN(Height) ? 600 : Height);
+
+            if (double.IsNaN(left) || double.IsNaN(top) || double.IsInfinity(left) || double.IsInfinity(top))
+            {
+                CenterWindowOnScreen();
+                return;
+            }
+
+            var windowRect = new System.Drawing.Rectangle(
+                (int)left,
+                (int)top,
+                (int)Math.Max(100, width),
+                (int)Math.Max(100, height));
+
+            bool isVisibleOnAnyScreen = false;
+            foreach (var screen in System.Windows.Forms.Screen.AllScreens)
+            {
+                var intersection = System.Drawing.Rectangle.Intersect(screen.WorkingArea, windowRect);
+                if (intersection.Width >= 50 && intersection.Height >= 50)
+                {
+                    isVisibleOnAnyScreen = true;
+                    break;
+                }
+            }
+
+            if (!isVisibleOnAnyScreen)
+            {
+                CenterWindowOnScreen();
+            }
+        }
+        catch
+        {
+            // 忽略屏幕工作区查询异常
+        }
+    }
+
+    private void CenterWindowOnScreen()
+    {
+        var primaryScreen = System.Windows.Forms.Screen.PrimaryScreen?.WorkingArea
+                            ?? new System.Drawing.Rectangle(0, 0, 1920, 1080);
+        double width = ActualWidth > 0 ? ActualWidth : (double.IsNaN(Width) ? 800 : Width);
+        double height = ActualHeight > 0 ? ActualHeight : (double.IsNaN(Height) ? 600 : Height);
+
+        Left = primaryScreen.Left + (primaryScreen.Width - width) / 2;
+        Top = primaryScreen.Top + (primaryScreen.Height - height) / 2;
+    }
+
+    private void RestoreFromTray()
+    {
+        ActivateAndEnsureVisible();
     }
 
     private void RealExit()

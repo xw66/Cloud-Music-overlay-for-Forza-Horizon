@@ -10,8 +10,8 @@ namespace HorizonRadioOverlay.Services;
 
 public sealed class RemoteControlService : IDisposable
 {
-    private readonly Func<Task<RemoteControlStatus>> _statusProvider;
-    private readonly Func<string, Task> _controlHandler;
+    private Func<Task<RemoteControlStatus>> _statusProvider;
+    private Func<string, Task> _controlHandler;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoopTask;
@@ -31,12 +31,25 @@ public sealed class RemoteControlService : IDisposable
 
     public IReadOnlyList<string> LanUrls => BuildLanUrls(_settings);
 
+    public RemoteControlService()
+        : this(() => Task.FromResult(new RemoteControlStatus()), _ => Task.CompletedTask)
+    {
+    }
+
     public RemoteControlService(
         Func<Task<RemoteControlStatus>> statusProvider,
         Func<string, Task> controlHandler)
     {
         _statusProvider = statusProvider;
         _controlHandler = controlHandler;
+    }
+
+    public void SetHandlers(
+        Func<Task<RemoteControlStatus>> statusProvider,
+        Func<string, Task> controlHandler)
+    {
+        _statusProvider = statusProvider ?? throw new ArgumentNullException(nameof(statusProvider));
+        _controlHandler = controlHandler ?? throw new ArgumentNullException(nameof(controlHandler));
     }
 
     public static string GenerateToken()

@@ -84,4 +84,121 @@ public sealed class OverlaySettingsServiceTests
         Assert.Equal(2, migrated.SchemaVersion);
         Assert.True(migrated.EnableNeteaseMemoryTimeline);
     }
+
+    [Fact]
+    public void Save_and_Load_roundtrip_with_custom_path()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"HRO_Test_{Guid.NewGuid():N}");
+        string settingsPath = Path.Combine(tempDir, "custom-settings.json");
+
+        try
+        {
+            var service = new OverlaySettingsService(settingsPath);
+            var initial = service.Load();
+            Assert.Equal(OverlaySettings.CurrentVersion, initial.SchemaVersion);
+
+            var settingsToSave = new OverlaySettings
+            {
+                AppPrevHotkey = "Ctrl+Alt+P",
+                TitleColor = "#123456",
+                Scale = 1.5,
+                RemoteControlPort = 18888
+            };
+
+            service.Save(settingsToSave);
+
+            Assert.True(File.Exists(settingsPath));
+
+            var loaded = service.Load();
+            Assert.Equal("Ctrl+Alt+P", loaded.AppPrevHotkey);
+            Assert.Equal("#123456", loaded.TitleColor);
+            Assert.Equal(1.5, loaded.Scale);
+            Assert.Equal(18888, loaded.RemoteControlPort);
+
+            // 第二次保存，验证 .bak 生成
+            settingsToSave.TitleColor = "#654321";
+            service.Save(settingsToSave);
+
+            Assert.True(File.Exists(service.BackupFilePath));
+            string backupContent = File.ReadAllText(service.BackupFilePath);
+            Assert.Contains("#123456", backupContent);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Load_recovers_from_backup_when_main_file_is_corrupted()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"HRO_Test_{Guid.NewGuid():N}");
+        string settingsPath = Path.Combine(tempDir, "custom-settings.json");
+
+        try
+        {
+            var service = new OverlaySettingsService(settingsPath);
+            var settings = new OverlaySettings
+            {
+                AppPrevHotkey = "Ctrl+Shift+Z",
+                TitleColor = "#AABBCC"
+            };
+
+            // 第一次保存，生成主文件
+            service.Save(settings);
+            // 第二次保存，生成备份文件（备份内容为 #AABBCC）
+            service.Save(settings);
+
+            // 人为破坏主文件（写坏 JSON 模拟异常断电 0 字节或垃圾数据）
+            File.WriteAllText(settingsPath, "{ corrupted invalid json ... 00000");
+
+            var recovered = service.Load();
+
+            // 验证从备份文件中完好恢复
+            Assert.Equal("Ctrl+Shift+Z", recovered.AppPrevHotkey);
+            Assert.Equal("#AABBCC", recovered.TitleColor);
+
+            // 验证自动修复了主文件
+            string repairedJson = File.ReadAllText(settingsPath);
+            Assert.Contains("#AABBCC", repairedJson);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Load_returns_defaults_when_both_files_corrupted()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"HRO_Test_{Guid.NewGuid():N}");
+        string settingsPath = Path.Combine(tempDir, "custom-settings.json");
+
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var service = new OverlaySettingsService(settingsPath);
+
+            File.WriteAllText(settingsPath, "INVALID_MAIN");
+            File.WriteAllText(service.BackupFilePath, "INVALID_BACKUP");
+
+            var result = service.Load();
+
+            Assert.NotNull(result);
+            Assert.Equal(OverlaySettings.CurrentVersion, result.SchemaVersion);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
 }

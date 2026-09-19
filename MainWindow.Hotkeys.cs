@@ -20,18 +20,7 @@ public partial class MainWindow
 {
     private void SetupHotkeyCaptureInputs()
     {
-        ConfigureKeyboardHotkeyInput(AppPrevHotkeyBox);
-        ConfigureKeyboardHotkeyInput(AppNextHotkeyBox);
-        ConfigureKeyboardHotkeyInput(AppToggleHotkeyBox);
-        ConfigureKeyboardHotkeyInput(AppToggleOverlayHotkeyBox);
-        ConfigureKeyboardHotkeyInput(NeteasePrevHotkeyBox);
-        ConfigureKeyboardHotkeyInput(NeteaseNextHotkeyBox);
-        ConfigureKeyboardHotkeyInput(NeteaseToggleHotkeyBox);
-
-        ConfigureGamepadHotkeyInput(GamepadPrevHotkeyBox);
-        ConfigureGamepadHotkeyInput(GamepadNextHotkeyBox);
-        ConfigureGamepadHotkeyInput(GamepadToggleHotkeyBox);
-        ConfigureGamepadHotkeyInput(GamepadToggleOverlayHotkeyBox);
+        _hotkeySettingsPageView?.SetupCaptures(ConfigureKeyboardHotkeyInput, ConfigureGamepadHotkeyInput);
     }
 
     private void ConfigureKeyboardHotkeyInput(TextBox textBox)

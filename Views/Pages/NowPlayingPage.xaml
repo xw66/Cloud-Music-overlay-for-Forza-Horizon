@@ -25,7 +25,7 @@
                 <StackPanel>
                     <Border Width="220" Height="220" CornerRadius="18" ClipToBounds="True"
                             HorizontalAlignment="Center" Background="#E2E8F0">
-                        <Image x:Name="CoverPreview" x:FieldModifier="public" Stretch="UniformToFill" />
+                        <Image x:Name="CoverPreview" x:FieldModifier="public" Source="{Binding CoverImage}" Stretch="UniformToFill" />
                     </Border>
                     <TextBlock x:Name="CurrentTitle" x:FieldModifier="public"
                                Margin="0,18,0,0"
@@ -35,7 +35,7 @@
                                TextTrimming="None"
                                HorizontalAlignment="Center"
                                TextAlignment="Center"
-                               Text="{x:Static local:UiText.NoTrackDetected}" />
+                               Text="{Binding Title, FallbackValue={x:Static local:UiText.NoTrackDetected}}" />
                     <TextBlock x:Name="CurrentArtist" x:FieldModifier="public"
                                Margin="0,8,0,0"
                                FontSize="16"
@@ -44,19 +44,19 @@
                                TextTrimming="None"
                                HorizontalAlignment="Center"
                                TextAlignment="Center"
-                               Text="{x:Static local:UiText.PleasePlayMedia}" />
+                               Text="{Binding Artist, FallbackValue={x:Static local:UiText.PleasePlayMedia}}" />
                     <TextBlock x:Name="CurrentMeta" x:FieldModifier="public"
                                Margin="0,6,0,0"
                                FontSize="13"
                                Foreground="{StaticResource SubtleTextBrush}"
                                TextAlignment="Center"
-                               Text="{x:Static local:UiText.SourceUnknown}" />
+                               Text="{Binding SourceText, FallbackValue={x:Static local:UiText.SourceUnknown}}" />
 
                     <UniformGrid Margin="0,24,0,0" Columns="4">
-                        <Button x:Name="PrevButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.Previous}" />
-                        <Button x:Name="PlayPauseButton" x:FieldModifier="public" Margin="0,0,12,0" Style="{StaticResource PrimaryButtonStyle}" Content="{x:Static local:UiText.PlayPause}" />
-                        <Button x:Name="NextButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.Next}" />
-                        <Button x:Name="RefreshButton" x:FieldModifier="public" Style="{StaticResource GhostButtonStyle}" Content="{x:Static local:UiText.Refresh}" />
+                        <Button x:Name="PrevButton" x:FieldModifier="public" Margin="0,0,12,0" Command="{Binding PrevCommand}" Content="{x:Static local:UiText.Previous}" />
+                        <Button x:Name="PlayPauseButton" x:FieldModifier="public" Margin="0,0,12,0" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding PlayPauseCommand}" Content="{x:Static local:UiText.PlayPause}" />
+                        <Button x:Name="NextButton" x:FieldModifier="public" Margin="0,0,12,0" Command="{Binding NextCommand}" Content="{x:Static local:UiText.Next}" />
+                        <Button x:Name="RefreshButton" x:FieldModifier="public" Style="{StaticResource GhostButtonStyle}" Command="{Binding RefreshCommand}" Content="{x:Static local:UiText.Refresh}" />
                     </UniformGrid>
                 </StackPanel>
             </Border>
@@ -76,7 +76,7 @@
                                        HorizontalAlignment="Center"
                                        TextAlignment="Center"
                                        LineHeight="28"
-                                       Text="{x:Static local:UiText.LyricsPreviewPlaceholder}" />
+                                       Text="{Binding LyricsPreview, FallbackValue={x:Static local:UiText.LyricsPreviewPlaceholder}}" />
                         </Border>
                     </StackPanel>
                 </Border>
@@ -89,12 +89,12 @@
                             <TextBlock x:Name="ConnectionStatusText" x:FieldModifier="public" Margin="10,0,0,0"
                                        FontSize="14"
                                        Foreground="{StaticResource TextBrush}"
-                                       Text="{x:Static local:UiText.Connected}" />
+                                       Text="{Binding ConnectionStatus, FallbackValue={x:Static local:UiText.Connected}}" />
                         </StackPanel>
                         <TextBlock x:Name="ConnectionStatusSubText" x:FieldModifier="public"
                                    Margin="20,4,0,0"
                                    Style="{StaticResource BodyTextStyle}"
-                                   Text="{x:Static local:UiText.RuntimeWaiting}" />
+                                   Text="{Binding ConnectionStatusDetail, FallbackValue={x:Static local:UiText.RuntimeWaiting}}" />
                     </StackPanel>
                 </Border>
 
@@ -102,8 +102,8 @@
                     <StackPanel>
                         <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.QuickActions}" />
                         <UniformGrid Margin="0,16,0,0" Columns="2">
-                            <Button x:Name="OpenFloatingSettingsButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.OpenFloatingSettings}" />
-                            <Button x:Name="OpenHotkeySettingsButton" x:FieldModifier="public" Content="{x:Static local:UiText.OpenHotkeySettings}" />
+                            <Button x:Name="OpenFloatingSettingsButton" x:FieldModifier="public" Margin="0,0,12,0" Command="{Binding NavigateCommand}" CommandParameter="FloatingSettings" Content="{x:Static local:UiText.OpenFloatingSettings}" />
+                            <Button x:Name="OpenHotkeySettingsButton" x:FieldModifier="public" Command="{Binding NavigateCommand}" CommandParameter="Hotkeys" Content="{x:Static local:UiText.OpenHotkeySettings}" />
                         </UniformGrid>
                     </StackPanel>
                 </Border>

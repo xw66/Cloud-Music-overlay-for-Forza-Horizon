@@ -28,122 +28,122 @@ public partial class MainWindow
     {
         if (_nowPlayingPageView != null && !_nowPlayingPageWired)
         {
-            _nowPlayingPageView.PrevButton.Click += Prev_Click;
-            _nowPlayingPageView.PlayPauseButton.Click += PlayPause_Click;
-            _nowPlayingPageView.NextButton.Click += Next_Click;
-            _nowPlayingPageView.RefreshButton.Click += Refresh_Click;
-            _nowPlayingPageView.OpenFloatingSettingsButton.Click += (_, _) => NavigateTo("FloatingSettings");
-            _nowPlayingPageView.OpenHotkeySettingsButton.Click += (_, _) => NavigateTo("Hotkeys");
+            _nowPlayingPageView.DataContext = _nowPlayingViewModel;
+            _nowPlayingViewModel.PrevCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand(PrevAsync);
+            _nowPlayingViewModel.PlayPauseCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand(TogglePlayPauseAsync);
+            _nowPlayingViewModel.NextCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand(NextAsync);
+            _nowPlayingViewModel.RefreshCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand(async () => await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false));
+            _nowPlayingViewModel.NavigateCommand = new CommunityToolkit.Mvvm.Input.RelayCommand<string>(key =>
+            {
+                if (!string.IsNullOrEmpty(key)) NavigateTo(key);
+            });
             _nowPlayingPageWired = true;
         }
 
         if (_floatingSettingsPageView != null && !_floatingSettingsPageWired)
         {
-            _floatingSettingsPageView.TrackSourceComboBox.SelectionChanged += TrackSourceComboBox_SelectionChanged;
-            _floatingSettingsPageView.HorizontalSlider.ValueChanged += HorizontalSlider_ValueChanged;
-            _floatingSettingsPageView.BottomOffsetSlider.ValueChanged += BottomOffsetSlider_ValueChanged;
-            _floatingSettingsPageView.ScaleSlider.ValueChanged += ScaleSlider_ValueChanged;
-            _floatingSettingsPageView.MinimizeToTrayCheckBox.Checked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.MinimizeToTrayCheckBox.Unchecked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.AutoStartCheckBox.Checked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.AutoStartCheckBox.Unchecked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.AlwaysShowCheckBox.Checked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.AlwaysShowCheckBox.Unchecked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.HideOverlayWhenPausedCheckBox.Checked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.HideOverlayWhenPausedCheckBox.Unchecked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.DiagnosticCheckBox.Checked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.DiagnosticCheckBox.Unchecked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.EnableLyricsCheckBox.Checked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.EnableLyricsCheckBox.Unchecked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.EnableNeteaseMemoryTimelineCheckBox.Checked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.EnableNeteaseMemoryTimelineCheckBox.Unchecked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.EnableCoverWingEffectCheckBox.Checked += SettingCheckBox_Changed;
-            _floatingSettingsPageView.EnableCoverWingEffectCheckBox.Unchecked += SettingCheckBox_Changed;
+            _floatingSettingsPageView.DataContext = _floatingSettingsViewModel;
+            _floatingSettingsViewModel.SettingsChanged += () =>
+            {
+                if (_isInitializingOverlayControls) return;
+                ApplyOverlaySettingsFromControls();
+                _diagnostic.Enabled = _activeSettings.DiagnosticMode;
+                _overlaySettingsService.Save(_activeSettings);
+                _remoteControlService.ApplySettings(_activeSettings);
+                UpdateRemoteControlPage();
+                _ = ApplyPauseOverlayVisibilityRuleAsync();
+            };
+            _floatingSettingsViewModel.TrackSourceChanged += async () =>
+            {
+                if (_isInitializingOverlayControls) return;
+                ApplyOverlaySettingsFromControls();
+                _floatingSettingsViewModel.UpdateCapabilities(_playbackCoordinator);
+                _smtcCoverRefreshCts?.Cancel();
+                _smtcCoverRefreshCts = null;
+                lock (_lyricGate)
+                {
+                    _lyricsService.Reset();
+                    _lastSmtcPlaybackPositionSeconds = null;
+                    _smtcLyricTimingController.Reset();
+                    _neteaseLyricTimingController.Reset();
+                }
+                _lastTrackKey = string.Empty;
+                _lastDisplayTrackKey = string.Empty;
+                _lastPreviewCoverBytes = null;
+                SetCover(null);
+                _overlayWindow.SetLyrics(null);
+                await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
+                SetStatus("状态：数据来源已切换（点击“保存”可持久化）。", false);
+            };
             _floatingSettingsPageWired = true;
-            InitializeOverlayControls(_activeSettings);
+            _floatingSettingsViewModel.LoadFrom(_activeSettings, _playbackCoordinator);
         }
 
         if (_hotkeySettingsPageView != null && !_hotkeySettingsPageWired)
         {
-            _hotkeySettingsPageView.EnableGamepadCheckBox.Checked += SettingCheckBox_Changed;
-            _hotkeySettingsPageView.EnableGamepadCheckBox.Unchecked += SettingCheckBox_Changed;
-            _hotkeySettingsPageView.AppPrevHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-            _hotkeySettingsPageView.AppNextHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-            _hotkeySettingsPageView.AppToggleHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-            _hotkeySettingsPageView.AppToggleOverlayHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-            _hotkeySettingsPageView.NeteasePrevHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-            _hotkeySettingsPageView.NeteaseNextHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-            _hotkeySettingsPageView.NeteaseToggleHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-            _hotkeySettingsPageView.GamepadPrevHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-            _hotkeySettingsPageView.GamepadNextHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-            _hotkeySettingsPageView.GamepadToggleHotkeyBox.LostFocus += HotkeyBox_LostFocus;
-            _hotkeySettingsPageView.GamepadToggleOverlayHotkeyBox.LostFocus += HotkeyBox_LostFocus;
+            _hotkeySettingsPageView.DataContext = _hotkeySettingsViewModel;
+            _hotkeySettingsViewModel.SettingsChanged += () =>
+            {
+                if (_isInitializingOverlayControls) return;
+                ApplyHotkeySettings();
+            };
             _hotkeySettingsPageWired = true;
-            InitializeOverlayControls(_activeSettings);
+            _hotkeySettingsViewModel.LoadFromSettings(_activeSettings);
             SetupHotkeyCaptureInputs();
         }
 
         if (_remoteControlPageView != null && !_remoteControlPageWired)
         {
-            _remoteControlPageView.EnableRemoteControlCheckBox.Checked += RemoteControlSetting_Changed;
-            _remoteControlPageView.EnableRemoteControlCheckBox.Unchecked += RemoteControlSetting_Changed;
-            _remoteControlPageView.RemoteControlAllowLanCheckBox.Checked += RemoteControlSetting_Changed;
-            _remoteControlPageView.RemoteControlAllowLanCheckBox.Unchecked += RemoteControlSetting_Changed;
-            _remoteControlPageView.RemoteControlPortBox.LostFocus += RemoteControlSetting_Changed;
-            _remoteControlPageView.CopyRemoteAddressButton.Click += CopyRemoteAddress_Click;
-            _remoteControlPageView.ResetRemoteTokenButton.Click += ResetRemoteToken_Click;
+            _remoteControlPageView.DataContext = _remoteControlViewModel;
+            _remoteControlViewModel.SettingsChanged += () =>
+            {
+                if (_isInitializingOverlayControls) return;
+                ApplyOverlaySettingsFromControls();
+            };
+            _remoteControlViewModel.RequestResetToken += () =>
+            {
+                _activeSettings.RemoteControlToken = RemoteControlService.GenerateToken();
+                _overlaySettingsService.Save(_activeSettings);
+                _remoteControlService.ApplySettings(_activeSettings);
+                UpdateRemoteControlPage();
+                SetStatus("状态：手机遥控连接令牌已重置。", false);
+            };
+            _remoteControlViewModel.StatusNotification += (msg, isErr) => SetStatus(msg, isErr);
             _remoteControlPageWired = true;
-            InitializeOverlayControls(_activeSettings);
+            _remoteControlViewModel.LoadFromSettings(_activeSettings);
+            UpdateRemoteControlPage();
         }
 
         if (_themeSettingsPageView != null && !_themeSettingsPageWired)
         {
-            _themeSettingsPageView.TitleColor_White.Click += TitleColor_Click;
-            _themeSettingsPageView.TitleColor_Light.Click += TitleColor_Click;
-            _themeSettingsPageView.TitleColor_Yellow.Click += TitleColor_Click;
-            _themeSettingsPageView.TitleColor_Green.Click += TitleColor_Click;
-            _themeSettingsPageView.TitleColor_Orange.Click += TitleColor_Click;
-            _themeSettingsPageView.ArtistColor_Light.Click += ArtistColor_Click;
-            _themeSettingsPageView.ArtistColor_White.Click += ArtistColor_Click;
-            _themeSettingsPageView.ArtistColor_Yellow.Click += ArtistColor_Click;
-            _themeSettingsPageView.ArtistColor_Green.Click += ArtistColor_Click;
-            _themeSettingsPageView.ArtistColor_Orange.Click += ArtistColor_Click;
-            _themeSettingsPageView.LyricsColor_Light.Click += LyricsColor_Click;
-            _themeSettingsPageView.LyricsColor_White.Click += LyricsColor_Click;
-            _themeSettingsPageView.LyricsColor_Yellow.Click += LyricsColor_Click;
-            _themeSettingsPageView.LyricsColor_Green.Click += LyricsColor_Click;
-            _themeSettingsPageView.LyricsColor_Orange.Click += LyricsColor_Click;
-            _themeSettingsPageView.TitleOpacitySlider.ValueChanged += TitleOpacitySlider_ValueChanged;
-            _themeSettingsPageView.ArtistOpacitySlider.ValueChanged += ArtistOpacitySlider_ValueChanged;
-            _themeSettingsPageView.LyricsOpacitySlider.ValueChanged += LyricsOpacitySlider_ValueChanged;
+            _themeSettingsPageView.DataContext = _themeSettingsViewModel;
+            _themeSettingsViewModel.SettingsChanged += () =>
+            {
+                if (_isInitializingOverlayControls) return;
+                ApplyOverlaySettingsFromControls();
+            };
             _themeSettingsPageView.ThemeAccentIndigoButton.Click += (_, _) => ApplyThemeAccentColor("#5B5CEB");
             _themeSettingsPageView.ThemeAccentBlueButton.Click += (_, _) => ApplyThemeAccentColor("#3B82F6");
             _themeSettingsPageView.ThemeAccentGreenButton.Click += (_, _) => ApplyThemeAccentColor("#22C55E");
             _themeSettingsPageView.ThemeAccentAmberButton.Click += (_, _) => ApplyThemeAccentColor("#F59E0B");
             _themeSettingsPageView.ThemeAccentRoseButton.Click += (_, _) => ApplyThemeAccentColor("#F43F5E");
-            _themeSettingsPageView.PreviewEffectSoftButton.Click += (_, _) => SetPreviewEffect(0);
-            _themeSettingsPageView.PreviewEffectMediumButton.Click += (_, _) => SetPreviewEffect(1);
-            _themeSettingsPageView.PreviewEffectStrongButton.Click += (_, _) => SetPreviewEffect(2);
             _themeSettingsPageWired = true;
-            InitializeOverlayControls(_activeSettings);
-            ApplyPreviewEffect();
+            _themeSettingsViewModel.LoadFrom(_activeSettings);
         }
 
         if (_logsPageView != null && !_logsPageWired)
         {
-            _logsPageView.OpenLogFileButton.Click += OpenLogFileButton_Click;
-            _logsPageView.CopyLogButton.Click += CopyLogButton_Click;
-            _logsPageView.ClearLogButton.Click += ClearLogButton_Click;
+            _logsPageView.DataContext = _logsViewModel;
+            _logsViewModel.StatusNotification += (msg, isErr) => SetStatus(msg, isErr);
             _logsPageWired = true;
             InitializeLogWatcher();
         }
 
         if (_aboutPageView != null && !_aboutPageWired)
         {
-            _aboutPageView.ProjectHomeButton.Click += GitHubButton_Click;
-            _aboutPageView.CheckUpdateButton.Click += CheckUpdate_Click;
-            _aboutPageView.LicenseButton.Click += OpenLicenseButton_Click;
-            _aboutPageView.VersionText.Text = $"{UiText.VersionPrefix} {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "3.0.1"}";
+            _aboutPageView.DataContext = _aboutViewModel;
+            _aboutViewModel.RequestCheckUpdate += () => CheckUpdate_Click(this, new RoutedEventArgs());
+            _aboutViewModel.StatusNotification += (msg, isErr) => SetStatus(msg, isErr);
             _aboutPageWired = true;
         }
     }
@@ -334,72 +334,6 @@ public partial class MainWindow
 
     private void RefreshLogView()
     {
-        try
-        {
-            LogTextBlock.Text = _diagnostic.ReadCurrentLogText();
-            LogScrollViewer.ScrollToEnd();
-        }
-        catch
-        {
-        }
-    }
-
-    private void OpenLogFileButton_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            _diagnostic.Event("打开日志文件。");
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = _diagnostic.LogFilePath,
-                UseShellExecute = true
-            });
-        }
-        catch
-        {
-        }
-    }
-
-    private void CopyLogButton_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            Clipboard.SetText(LogTextBlock.Text ?? string.Empty);
-            _diagnostic.Event("复制日志内容。");
-            SetStatus("状态：日志已复制。", true);
-        }
-        catch
-        {
-            SetStatus("状态：复制日志失败。", false);
-        }
-    }
-
-    private void ClearLogButton_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            _diagnostic.Clear();
-            RefreshLogView();
-            SetStatus("状态：日志已清空。", true);
-        }
-        catch
-        {
-            SetStatus("状态：清空日志失败。", false);
-        }
-    }
-
-    private void OpenLicenseButton_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "https://github.com/",
-                UseShellExecute = true
-            });
-        }
-        catch
-        {
-        }
+        _logsViewModel.Refresh();
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Runtime.Versioning;
 using System.Windows;
 
@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using HorizonRadioOverlay.Models;
 using HorizonRadioOverlay.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace HorizonRadioOverlay;
 
@@ -15,8 +16,10 @@ public partial class App : Application
     private const string SingleInstanceMutexName = @"Local\HorizonRadioOverlay.SingleInstance";
 
     private MainWindow? _mainWindow;
+    private ServiceProvider? _serviceProvider;
     private Mutex? _singleInstanceMutex;
     private bool _ownsSingleInstanceMutex;
+    private SingleInstanceIpcService? _singleInstanceIpcService;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -41,13 +44,23 @@ public partial class App : Application
             {
                 _singleInstanceMutex.Dispose();
                 _singleInstanceMutex = null;
+                SingleInstanceIpcService.NotifyExistingInstance("ACTIVATE");
                 Shutdown();
                 return;
             }
 
+            _singleInstanceIpcService = new SingleInstanceIpcService();
+            _singleInstanceIpcService.MessageReceived += OnIpcMessageReceived;
+            _singleInstanceIpcService.StartServer();
+
             bool startHiddenToTray = AppLaunchPolicy.ShouldStartHiddenToTray(e.Args);
 
-            _mainWindow = new MainWindow(startHiddenToTray);
+            ServiceCollection services = new();
+            services.AddAppServices();
+            _serviceProvider = services.BuildServiceProvider();
+            AppServices.Current = _serviceProvider;
+
+            _mainWindow = ActivatorUtilities.CreateInstance<MainWindow>(_serviceProvider, startHiddenToTray);
             MainWindow = _mainWindow;
             if (startHiddenToTray)
             {
@@ -62,8 +75,22 @@ public partial class App : Application
         }
     }
 
+    private void OnIpcMessageReceived(string message)
+    {
+        if (string.Equals(message, "ACTIVATE", StringComparison.OrdinalIgnoreCase))
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                _mainWindow?.ActivateAndEnsureVisible();
+            });
+        }
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _singleInstanceIpcService?.Dispose();
+        _singleInstanceIpcService = null;
+
         if (_ownsSingleInstanceMutex)
         {
             try
@@ -78,6 +105,11 @@ public partial class App : Application
         _singleInstanceMutex?.Dispose();
         _singleInstanceMutex = null;
         _ownsSingleInstanceMutex = false;
+
+        _serviceProvider?.Dispose();
+        _serviceProvider = null;
+        AppServices.Current = null;
+
         base.OnExit(e);
     }
 

@@ -32,12 +32,26 @@ public partial class MainWindow : Window
     private readonly DiagnosticService _diagnostic;
     private readonly LyricsService _lyricsService;
     private readonly RemoteControlService _remoteControlService;
-    private readonly DispatcherTimer _pollTimer;
-    private readonly MainShellViewModel _shellViewModel = new();
+    private CancellationTokenSource? _pollCts;
+    private Task? _pollTask;
+    private readonly SemaphoreSlim _pollWakeSignal = new(0, 1);
+    private readonly object _lyricGate = new();
+    private volatile bool _isMainWindowVisible = true;
+    private volatile bool _isOverlayVisible;
+    private PlaybackDataHealth? _lastReportedHealth;
+    private string? _lastReportedHealthError;
+    private string? _lastReportedHealthSourceId;
+    private readonly MainShellViewModel _shellViewModel;
+    private readonly NowPlayingViewModel _nowPlayingViewModel;
+    private readonly FloatingSettingsViewModel _floatingSettingsViewModel;
+    private readonly ThemeSettingsViewModel _themeSettingsViewModel;
+    private readonly HotkeySettingsViewModel _hotkeySettingsViewModel;
+    private readonly RemoteControlViewModel _remoteControlViewModel;
+    private readonly LogsViewModel _logsViewModel;
+    private readonly AboutViewModel _aboutViewModel;
 
     private GlobalHotkeyService? _hotkeyService;
     private readonly ServiceLifecycle _lifecycle = new();
-    private bool _isPolling;
     private bool _isInitializingOverlayControls;
     private OverlaySettings _activeSettings;
     private string _lastTrackKey = string.Empty;
@@ -69,8 +83,8 @@ public partial class MainWindow : Window
     private FileSystemWatcher? _logWatcher;
     private double? _lastSmtcPlaybackPositionSeconds;
     private bool _overlayHiddenByPause;
-    private readonly SmtcLyricTimingController _smtcLyricTimingController = new();
-    private readonly NeteaseLyricTimingController _neteaseLyricTimingController = new();
+    private readonly SmtcLyricTimingController _smtcLyricTimingController;
+    private readonly NeteaseLyricTimingController _neteaseLyricTimingController;
     private NowPlayingPage? _nowPlayingPageView;
     private FloatingSettingsPage? _floatingSettingsPageView;
     private HotkeySettingsPage? _hotkeySettingsPageView;
@@ -137,86 +151,124 @@ public partial class MainWindow : Window
     private TextBlock LyricsPreviewText => (_nowPlayingPageView ??= new NowPlayingPage()).LyricsPreviewText;
     private TextBlock ConnectionStatusText => (_nowPlayingPageView ??= new NowPlayingPage()).ConnectionStatusText;
     private TextBlock ConnectionStatusSubText => (_nowPlayingPageView ??= new NowPlayingPage()).ConnectionStatusSubText;
-    private TextBlock ThemePreviewTitle => (_themeSettingsPageView ??= new ThemeSettingsPage()).ThemePreviewTitle;
-    private TextBlock ThemePreviewArtist => (_themeSettingsPageView ??= new ThemeSettingsPage()).ThemePreviewArtist;
-    private TextBlock ThemePreviewLyrics => (_themeSettingsPageView ??= new ThemeSettingsPage()).ThemePreviewLyrics;
 
-    private ComboBox TrackSourceComboBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).TrackSourceComboBox;
-    private Slider HorizontalSlider => (_floatingSettingsPageView ??= new FloatingSettingsPage()).HorizontalSlider;
-    private Slider BottomOffsetSlider => (_floatingSettingsPageView ??= new FloatingSettingsPage()).BottomOffsetSlider;
-    private Slider ScaleSlider => (_floatingSettingsPageView ??= new FloatingSettingsPage()).ScaleSlider;
-    private TextBlock HorizontalValueText => (_floatingSettingsPageView ??= new FloatingSettingsPage()).HorizontalValueText;
-    private TextBlock BottomOffsetValueText => (_floatingSettingsPageView ??= new FloatingSettingsPage()).BottomOffsetValueText;
-    private TextBlock ScaleValueText => (_floatingSettingsPageView ??= new FloatingSettingsPage()).ScaleValueText;
-    private CheckBox MinimizeToTrayCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).MinimizeToTrayCheckBox;
-    private CheckBox AutoStartCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).AutoStartCheckBox;
-    private CheckBox AlwaysShowCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).AlwaysShowCheckBox;
-    private CheckBox HideOverlayWhenPausedCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).HideOverlayWhenPausedCheckBox;
-    private CheckBox DiagnosticCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).DiagnosticCheckBox;
-    private CheckBox EnableLyricsCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).EnableLyricsCheckBox;
-    private CheckBox EnableNeteaseMemoryTimelineCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).EnableNeteaseMemoryTimelineCheckBox;
-    private CheckBox EnableCoverWingEffectCheckBox => (_floatingSettingsPageView ??= new FloatingSettingsPage()).EnableCoverWingEffectCheckBox;
-
-    private TextBox AppPrevHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).AppPrevHotkeyBox;
-    private TextBox AppNextHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).AppNextHotkeyBox;
-    private TextBox AppToggleHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).AppToggleHotkeyBox;
-    private TextBox AppToggleOverlayHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).AppToggleOverlayHotkeyBox;
-    private TextBox NeteasePrevHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).NeteasePrevHotkeyBox;
-    private TextBox NeteaseNextHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).NeteaseNextHotkeyBox;
-    private TextBox NeteaseToggleHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).NeteaseToggleHotkeyBox;
-    private CheckBox EnableGamepadCheckBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).EnableGamepadCheckBox;
-    private TextBox GamepadPrevHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).GamepadPrevHotkeyBox;
-    private TextBox GamepadNextHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).GamepadNextHotkeyBox;
-    private TextBox GamepadToggleHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).GamepadToggleHotkeyBox;
-    private TextBox GamepadToggleOverlayHotkeyBox => (_hotkeySettingsPageView ??= new HotkeySettingsPage()).GamepadToggleOverlayHotkeyBox;
-
-    private RadioButton TitleColor_White => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleColor_White;
-    private RadioButton TitleColor_Light => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleColor_Light;
-    private RadioButton TitleColor_Yellow => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleColor_Yellow;
-    private RadioButton TitleColor_Green => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleColor_Green;
-    private RadioButton TitleColor_Orange => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleColor_Orange;
-    private RadioButton ArtistColor_Light => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistColor_Light;
-    private RadioButton ArtistColor_White => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistColor_White;
-    private RadioButton ArtistColor_Yellow => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistColor_Yellow;
-    private RadioButton ArtistColor_Green => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistColor_Green;
-    private RadioButton ArtistColor_Orange => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistColor_Orange;
-    private RadioButton LyricsColor_Light => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsColor_Light;
-    private RadioButton LyricsColor_White => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsColor_White;
-    private RadioButton LyricsColor_Yellow => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsColor_Yellow;
-    private RadioButton LyricsColor_Green => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsColor_Green;
-    private RadioButton LyricsColor_Orange => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsColor_Orange;
-    private Slider TitleOpacitySlider => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleOpacitySlider;
-    private Slider ArtistOpacitySlider => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistOpacitySlider;
-    private Slider LyricsOpacitySlider => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsOpacitySlider;
-    private TextBlock TitleOpacityValueText => (_themeSettingsPageView ??= new ThemeSettingsPage()).TitleOpacityValueText;
-    private TextBlock ArtistOpacityValueText => (_themeSettingsPageView ??= new ThemeSettingsPage()).ArtistOpacityValueText;
-    private TextBlock LyricsOpacityValueText => (_themeSettingsPageView ??= new ThemeSettingsPage()).LyricsOpacityValueText;
-
-    private TextBlock LogTextBlock => (_logsPageView ??= new LogsPage()).LogTextBlock;
-    private ScrollViewer LogScrollViewer => (_logsPageView ??= new LogsPage()).LogScrollViewer;
 
     public MainWindow(bool startHiddenToTray = false)
+        : this(
+            AppServices.GetRequiredService<PlaybackCoordinator>(),
+            AppServices.GetRequiredService<PlaybackSessionService>(),
+            AppServices.GetRequiredService<OverlaySettingsService>(),
+            AppServices.GetRequiredService<OverlayWindow>(),
+            AppServices.GetRequiredService<GamepadInputService>(),
+            AppServices.GetRequiredService<UpdateService>(),
+            AppServices.GetRequiredService<DiagnosticService>(),
+            AppServices.GetRequiredService<LyricsService>(),
+            AppServices.GetRequiredService<RemoteControlService>(),
+            AppServices.GetRequiredService<MainShellViewModel>(),
+            AppServices.GetRequiredService<NowPlayingViewModel>(),
+            AppServices.GetRequiredService<FloatingSettingsViewModel>(),
+            AppServices.GetRequiredService<ThemeSettingsViewModel>(),
+            AppServices.GetRequiredService<HotkeySettingsViewModel>(),
+            AppServices.GetRequiredService<RemoteControlViewModel>(),
+            AppServices.GetRequiredService<LogsViewModel>(),
+            AppServices.GetRequiredService<AboutViewModel>(),
+            AppServices.GetRequiredService<SmtcLyricTimingController>(),
+            AppServices.GetRequiredService<NeteaseLyricTimingController>(),
+            startHiddenToTray)
+    {
+    }
+
+    public MainWindow(
+        PlaybackCoordinator playbackCoordinator,
+        PlaybackSessionService playbackSession,
+        OverlaySettingsService overlaySettingsService,
+        OverlayWindow overlayWindow,
+        GamepadInputService gamepadInputService,
+        UpdateService updateService,
+        DiagnosticService diagnostic,
+        LyricsService lyricsService,
+        RemoteControlService remoteControlService,
+        MainShellViewModel shellViewModel,
+        NowPlayingViewModel nowPlayingViewModel,
+        FloatingSettingsViewModel floatingSettingsViewModel,
+        ThemeSettingsViewModel themeSettingsViewModel,
+        HotkeySettingsViewModel hotkeySettingsViewModel,
+        RemoteControlViewModel remoteControlViewModel,
+        LogsViewModel logsViewModel,
+        AboutViewModel aboutViewModel,
+        SmtcLyricTimingController smtcLyricTimingController,
+        NeteaseLyricTimingController neteaseLyricTimingController)
+        : this(
+            playbackCoordinator,
+            playbackSession,
+            overlaySettingsService,
+            overlayWindow,
+            gamepadInputService,
+            updateService,
+            diagnostic,
+            lyricsService,
+            remoteControlService,
+            shellViewModel,
+            nowPlayingViewModel,
+            floatingSettingsViewModel,
+            themeSettingsViewModel,
+            hotkeySettingsViewModel,
+            remoteControlViewModel,
+            logsViewModel,
+            aboutViewModel,
+            smtcLyricTimingController,
+            neteaseLyricTimingController,
+            startHiddenToTray: false)
+    {
+    }
+
+    public MainWindow(
+        PlaybackCoordinator playbackCoordinator,
+        PlaybackSessionService playbackSession,
+        OverlaySettingsService overlaySettingsService,
+        OverlayWindow overlayWindow,
+        GamepadInputService gamepadInputService,
+        UpdateService updateService,
+        DiagnosticService diagnostic,
+        LyricsService lyricsService,
+        RemoteControlService remoteControlService,
+        MainShellViewModel shellViewModel,
+        NowPlayingViewModel nowPlayingViewModel,
+        FloatingSettingsViewModel floatingSettingsViewModel,
+        ThemeSettingsViewModel themeSettingsViewModel,
+        HotkeySettingsViewModel hotkeySettingsViewModel,
+        RemoteControlViewModel remoteControlViewModel,
+        LogsViewModel logsViewModel,
+        AboutViewModel aboutViewModel,
+        SmtcLyricTimingController smtcLyricTimingController,
+        NeteaseLyricTimingController neteaseLyricTimingController,
+        bool startHiddenToTray)
     {
         _isInitializingOverlayControls = true;
         _startHiddenToTray = startHiddenToTray;
 
-        _diagnostic = new DiagnosticService();
-        var coverCache = new CoverCacheService(_diagnostic);
-        var neteaseOfficialResolver = new NeteaseOfficialResolver(_diagnostic);
-        var neteaseLocalDataService = new NeteaseLocalDataService(coverCache, _diagnostic, neteaseOfficialResolver);
-        var neteaseMemoryPlaybackProbe = new NeteaseMemoryPlaybackProbe(_diagnostic);
-        var smtcTrackService = new SmtcTrackService(_diagnostic);
-        _playbackCoordinator = new PlaybackCoordinator([
-            new NeteasePlaybackSource(neteaseLocalDataService, new NeteaseShortcutSender(), neteaseMemoryPlaybackProbe),
-            new SmtcPlaybackSource(smtcTrackService)
-        ]);
-        _playbackSession = new PlaybackSessionService(_playbackCoordinator, _diagnostic);
-        _overlaySettingsService = new OverlaySettingsService();
-        _overlayWindow = new OverlayWindow();
-        _gamepadInputService = new GamepadInputService();
-        _updateService = new UpdateService();
-        _lyricsService = new LyricsService(_diagnostic);
-        _remoteControlService = new RemoteControlService(GetRemoteControlStatusAsync, HandleRemoteControlActionAsync);
+        _playbackCoordinator = playbackCoordinator;
+        _playbackSession = playbackSession;
+        _overlaySettingsService = overlaySettingsService;
+        _overlayWindow = overlayWindow;
+        _gamepadInputService = gamepadInputService;
+        _updateService = updateService;
+        _diagnostic = diagnostic;
+        _lyricsService = lyricsService;
+        _remoteControlService = remoteControlService;
+        _shellViewModel = shellViewModel;
+        _nowPlayingViewModel = nowPlayingViewModel;
+        _floatingSettingsViewModel = floatingSettingsViewModel;
+        _themeSettingsViewModel = themeSettingsViewModel;
+        _hotkeySettingsViewModel = hotkeySettingsViewModel;
+        _remoteControlViewModel = remoteControlViewModel;
+        _logsViewModel = logsViewModel;
+        _aboutViewModel = aboutViewModel;
+        _smtcLyricTimingController = smtcLyricTimingController;
+        _neteaseLyricTimingController = neteaseLyricTimingController;
+
+        _remoteControlService.SetHandlers(GetRemoteControlStatusAsync, HandleRemoteControlActionAsync);
+
         OverlaySettings loadedSettings = _overlaySettingsService.Load();
         _activeSettings = loadedSettings;
         UpdatePlaybackSessionConfiguration();
@@ -231,11 +283,10 @@ public partial class MainWindow : Window
         ApplyAutoWindowSize();
         ApplyRuntimeFeatureAvailability();
 
-        _pollTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(PollSlowMs)
-        };
-        _pollTimer.Tick += PollTimer_Tick;
+        IsVisibleChanged += (_, _) => UpdateUiVisibilityCache();
+        StateChanged += (_, _) => UpdateUiVisibilityCache();
+        _overlayWindow.IsVisibleChanged += (_, _) => UpdateUiVisibilityCache();
+        UpdateUiVisibilityCache();
 
         _pageMetaUpdateTimer = new DispatcherTimer
         {
@@ -268,9 +319,10 @@ public partial class MainWindow : Window
             onStop: _playbackSession.Stop,
             onDispose: _playbackSession.Dispose);
 
-        _lifecycle.Register("PollTimer",
-            onStart: () => _pollTimer.Start(),
-            onStop: () => _pollTimer.Stop());
+        _lifecycle.Register("PlaybackPoller",
+            onStart: StartPolling,
+            onStop: StopPolling,
+            onDispose: DisposePolling);
 
         _lifecycle.Register("Hotkey",
             onDispose: () => _hotkeyService?.Dispose());

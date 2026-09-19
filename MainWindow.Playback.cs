@@ -18,34 +18,156 @@ namespace HorizonRadioOverlay;
 
 public partial class MainWindow
 {
-    private async void PollTimer_Tick(object? sender, EventArgs e)
+    private void StartPolling()
     {
-        if (_isPolling)
+        lock (_pollWakeSignal)
+        {
+            if (_pollTask is { IsCompleted: false })
+            {
+                return;
+            }
+
+            _pollCts?.Dispose();
+            _pollCts = new CancellationTokenSource();
+            _pollTask = Task.Run(() => PollingLoopAsync(_pollCts.Token));
+        }
+    }
+
+    private void StopPolling()
+    {
+        CancellationTokenSource? cts;
+        lock (_pollWakeSignal)
+        {
+            cts = _pollCts;
+            _pollCts = null;
+        }
+
+        if (cts == null)
         {
             return;
         }
 
-        _isPolling = true;
+        cts.Cancel();
+        WakePolling();
+        cts.Dispose();
+    }
+
+    private void DisposePolling()
+    {
+        StopPolling();
+        _pollWakeSignal.Dispose();
+    }
+
+    private void BoostPolling()
+    {
+        _pollBoostUntil = Environment.TickCount64 + PollBoostDurationMs;
+        _playbackSession.RequestImmediateRefresh();
+        WakePolling();
+    }
+
+    private void WakePolling()
+    {
         try
         {
-            bool isSmtcSource = IsSmtcSource();
-            bool shouldSyncLyrics = SmtcLyricsSyncPolicy.ShouldPrioritizeTimelineSync(_activeSettings.EnableLyrics, isSmtcSource);
-            bool shouldSyncNeteaseLyrics = _activeSettings.EnableLyrics && !isSmtcSource;
-            bool supportsPlaybackState = _playbackCoordinator
-                .GetCapabilities(_activeSettings.TrackSource)
-                .HasFlag(PlaybackSourceCapabilities.PlaybackState);
-            bool shouldSyncNeteaseTimeline = shouldSyncNeteaseLyrics && supportsPlaybackState;
-            bool shouldCheckPauseVisibility = _activeSettings.HideOverlayWhenPaused && isSmtcSource;
-            PlaybackSnapshot snapshot = _playbackSession.LatestSnapshot;
-            CrashReportService.UpdatePlaybackSnapshot(snapshot);
-            UpdatePlaybackHealthText(snapshot);
-            if (snapshot.TimelineVersion > _lastConsumedTimelineVersion)
+            if (_pollWakeSignal.CurrentCount == 0)
             {
-                _lastConsumedTimelineVersion = snapshot.TimelineVersion;
-                if (snapshot.Position is { } position)
+                _pollWakeSignal.Release();
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private void UpdateUiVisibilityCache()
+    {
+        _isMainWindowVisible = IsVisible && WindowState != WindowState.Minimized;
+        _isOverlayVisible = _overlayWindow.IsVisible;
+        WakePolling();
+    }
+
+    private int CalculatePollInterval()
+    {
+        bool keepFast = _activeSettings.EnableLyrics &&
+                        _playbackCoordinator.GetCapabilities(_activeSettings.TrackSource)
+                            .HasFlag(PlaybackSourceCapabilities.Lyrics);
+        bool boosted = Environment.TickCount64 < _pollBoostUntil;
+        return BackgroundPollingPolicy.GetPollIntervalMs(
+            keepFast,
+            _isMainWindowVisible,
+            _isOverlayVisible,
+            boosted);
+    }
+
+    private async Task PollingLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await ExecutePollTickAsync(ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _diagnostic.Error("播放状态后台轮询失败", ex);
+            }
+
+            int delayMs = CalculatePollInterval();
+            try
+            {
+                await _pollWakeSignal.WaitAsync(delayMs, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+        }
+    }
+
+    private async Task ExecutePollTickAsync(CancellationToken ct)
+    {
+        bool isSmtcSource = IsSmtcSource();
+        bool shouldSyncLyrics = SmtcLyricsSyncPolicy.ShouldPrioritizeTimelineSync(_activeSettings.EnableLyrics, isSmtcSource);
+        bool shouldSyncNeteaseLyrics = _activeSettings.EnableLyrics && !isSmtcSource;
+        bool supportsPlaybackState = _playbackCoordinator
+            .GetCapabilities(_activeSettings.TrackSource)
+            .HasFlag(PlaybackSourceCapabilities.PlaybackState);
+        bool shouldSyncNeteaseTimeline = shouldSyncNeteaseLyrics && supportsPlaybackState;
+        bool shouldCheckPauseVisibility = _activeSettings.HideOverlayWhenPaused && isSmtcSource;
+
+        PlaybackSnapshot snapshot = _playbackSession.LatestSnapshot;
+        CrashReportService.UpdatePlaybackSnapshot(snapshot);
+
+        if (snapshot.Health != _lastReportedHealth ||
+            !string.Equals(snapshot.LastError, _lastReportedHealthError, StringComparison.Ordinal) ||
+            !string.Equals(snapshot.SourceId, _lastReportedHealthSourceId, StringComparison.OrdinalIgnoreCase))
+        {
+            _lastReportedHealth = snapshot.Health;
+            _lastReportedHealthError = snapshot.LastError;
+            _lastReportedHealthSourceId = snapshot.SourceId;
+            _ = Dispatcher.BeginInvoke(() => UpdatePlaybackHealthText(snapshot), DispatcherPriority.Background);
+        }
+
+        if (snapshot.TimelineVersion > _lastConsumedTimelineVersion)
+        {
+            _lastConsumedTimelineVersion = snapshot.TimelineVersion;
+            if (snapshot.Position is { } position)
+            {
+                bool isPlaying = snapshot.IsPlaying ?? true;
+                if (shouldCheckPauseVisibility)
                 {
-                    bool isPlaying = snapshot.IsPlaying ?? true;
-                    await ApplyPauseOverlayVisibilityRuleAsync(isSmtcSource, isPlaying);
+                    _ = Dispatcher.BeginInvoke(async () =>
+                    {
+                        await ApplyPauseOverlayVisibilityRuleAsync(isSmtcSource, isPlaying);
+                    }, DispatcherPriority.Background);
+                }
+
+                lock (_lyricGate)
+                {
                     if (shouldSyncLyrics)
                     {
                         _lastSmtcPlaybackPositionSeconds = position.TotalSeconds;
@@ -62,78 +184,47 @@ public partial class MainWindow
                     }
                 }
             }
+        }
 
-            if (shouldSyncLyrics && _smtcLyricTimingController.GetCurrentDisplayPositionSeconds() is { } displayPosition)
+        if (shouldSyncLyrics || shouldSyncNeteaseLyrics)
+        {
+            string? earlyLine = null;
+            lock (_lyricGate)
             {
-                _lyricsService.SetPlaybackPosition(displayPosition);
-            }
-
-            if (shouldSyncNeteaseLyrics)
-            {
-                _lyricsService.SetPlaybackPosition(_neteaseLyricTimingController.GetCurrentPositionSeconds());
-            }
-
-            if (shouldSyncLyrics || shouldSyncNeteaseLyrics)
-            {
-                string? earlyLine = _lyricsService.UpdateCurrentLine();
-                if (earlyLine != null && !string.Equals(_lastLyricsPreviewLine, earlyLine, StringComparison.Ordinal))
+                if (shouldSyncLyrics && _smtcLyricTimingController.GetCurrentDisplayPositionSeconds() is { } displayPosition)
                 {
-                    _lastLyricsPreviewLine = earlyLine;
-                    _ = Dispatcher.BeginInvoke(() =>
-                    {
-                        _overlayWindow.SetLyrics(earlyLine);
-                        SetTextIfChanged(LyricsPreviewText, earlyLine);
-                    }, DispatcherPriority.Background);
+                    _lyricsService.SetPlaybackPosition(displayPosition);
                 }
+                else if (shouldSyncNeteaseLyrics)
+                {
+                    _lyricsService.SetPlaybackPosition(_neteaseLyricTimingController.GetCurrentPositionSeconds());
+                }
+
+                earlyLine = _lyricsService.UpdateCurrentLine();
             }
 
-            if (snapshot.TrackVersion > _lastConsumedTrackVersion)
+            if (earlyLine != null && !string.Equals(_lastLyricsPreviewLine, earlyLine, StringComparison.Ordinal))
             {
-                _lastConsumedTrackVersion = snapshot.TrackVersion;
+                _lastLyricsPreviewLine = earlyLine;
+                _ = Dispatcher.BeginInvoke(() =>
+                {
+                    _overlayWindow.SetLyrics(earlyLine);
+                    SetTextIfChanged(LyricsPreviewText, earlyLine);
+                }, DispatcherPriority.Background);
+            }
+        }
+
+        if (snapshot.TrackVersion > _lastConsumedTrackVersion)
+        {
+            _lastConsumedTrackVersion = snapshot.TrackVersion;
+            _ = Dispatcher.BeginInvoke(async () =>
+            {
                 await RefreshCurrentTrackAsync(
                     showOverlay: false,
                     allowOverlayOnTrackChange: true,
                     snapshot.Track,
                     useSnapshot: true);
-            }
-        }
-        catch (Exception ex)
-        {
-            _diagnostic.Error("播放状态轮询失败", ex);
-        }
-        finally
-        {
-            _isPolling = false;
-            UpdatePollInterval();
-        }
-    }
-
-    private void BoostPolling()
-    {
-        _pollBoostUntil = Environment.TickCount64 + PollBoostDurationMs;
-        _playbackSession.RequestImmediateRefresh();
-        if (_pollTimer.Interval.TotalMilliseconds > PollFastMs)
-        {
-            _pollTimer.Interval = TimeSpan.FromMilliseconds(PollFastMs);
-        }
-    }
-
-    private void UpdatePollInterval()
-    {
-        bool keepFast = _activeSettings.EnableLyrics &&
-                        _playbackCoordinator.GetCapabilities(_activeSettings.TrackSource)
-                            .HasFlag(PlaybackSourceCapabilities.Lyrics);
-        bool isMainWindowVisible = IsVisible && WindowState != WindowState.Minimized;
-        bool isOverlayVisible = _overlayWindow.IsVisible;
-        bool boosted = Environment.TickCount64 < _pollBoostUntil;
-        int target = BackgroundPollingPolicy.GetPollIntervalMs(
-            keepFast,
-            isMainWindowVisible,
-            isOverlayVisible,
-            boosted);
-        if (Math.Abs(_pollTimer.Interval.TotalMilliseconds - target) > 1)
-        {
-            _pollTimer.Interval = TimeSpan.FromMilliseconds(target);
+            }, DispatcherPriority.Background);
         }
     }
 
@@ -217,6 +308,8 @@ public partial class MainWindow
 
         SetTextIfChanged(ConnectionStatusText, status);
         SetTextIfChanged(ConnectionStatusSubText, detail);
+        _nowPlayingViewModel.ConnectionStatus = status;
+        _nowPlayingViewModel.ConnectionStatusDetail = detail;
     }
 
     private async Task<bool> ExecutePlaybackCommandAsync(PlaybackCommand command, string displayName)
@@ -360,10 +453,13 @@ public partial class MainWindow
             {
                 _smtcCoverRefreshCts?.Cancel();
                 _smtcCoverRefreshCts = null;
-                _lyricsService.Reset();
-                _lastSmtcPlaybackPositionSeconds = null;
-                _smtcLyricTimingController.Reset();
-                _neteaseLyricTimingController.Reset();
+                lock (_lyricGate)
+                {
+                    _lyricsService.Reset();
+                    _lastSmtcPlaybackPositionSeconds = null;
+                    _smtcLyricTimingController.Reset();
+                    _neteaseLyricTimingController.Reset();
+                }
                 if (!string.IsNullOrEmpty(_lastLyricsPreviewLine))
                 {
                     _lastLyricsPreviewLine = string.Empty;
@@ -372,12 +468,20 @@ public partial class MainWindow
 
                 if (!string.IsNullOrEmpty(_lastDisplayTrackKey))
                 {
-                    SetTextIfChanged(CurrentTitle, useSmtc ? "未检测到系统媒体会话" : "未检测到网易云歌曲");
-                    SetTextIfChanged(CurrentArtist, useSmtc ? "请先播放任意媒体内容" : "请打开网易云音乐并播放歌曲");
-                    SetTextIfChanged(CurrentMeta, useSmtc
+                    string fallbackTitle = useSmtc ? "未检测到系统媒体会话" : "未检测到网易云歌曲";
+                    string fallbackArtist = useSmtc ? "请先播放任意媒体内容" : "请打开网易云音乐并播放歌曲";
+                    string fallbackMeta = useSmtc
                         ? "来源：SMTC"
-                        : $"来源：{NeteaseCoverDiagnosticPolicy.FormatSourceAppId("CloudMusic(ProcessTitle)", NeteaseCoverDiagnosticPolicy.WindowTitleMissing)}");
+                        : $"来源：{NeteaseCoverDiagnosticPolicy.FormatSourceAppId("CloudMusic(ProcessTitle)", NeteaseCoverDiagnosticPolicy.WindowTitleMissing)}";
+
+                    SetTextIfChanged(CurrentTitle, fallbackTitle);
+                    SetTextIfChanged(CurrentArtist, fallbackArtist);
+                    SetTextIfChanged(CurrentMeta, fallbackMeta);
                     SetTextIfChanged(FooterSourceText, CurrentMeta.Text);
+                    _nowPlayingViewModel.Title = fallbackTitle;
+                    _nowPlayingViewModel.Artist = fallbackArtist;
+                    _nowPlayingViewModel.SourceText = fallbackMeta;
+                    _nowPlayingViewModel.LyricsPreview = UiText.LyricsPreviewPlaceholder;
                     _lastLyricsPreviewLine = string.Empty;
                     SetTextIfChanged(LyricsPreviewText, UiText.LyricsPreviewPlaceholder);
                     if (!SameBytes(_lastPreviewCoverBytes, null))
@@ -418,6 +522,9 @@ public partial class MainWindow
                 SetTextIfChanged(CurrentArtist, track.Artist);
                 SetTextIfChanged(CurrentMeta, $"来源：{track.SourceAppId}");
                 SetTextIfChanged(FooterSourceText, CurrentMeta.Text);
+                _nowPlayingViewModel.Title = track.Name;
+                _nowPlayingViewModel.Artist = track.Artist;
+                _nowPlayingViewModel.SourceText = $"来源：{track.SourceAppId}";
                 if (!SameBytes(_lastPreviewCoverBytes, immediateCoverBytes))
                 {
                     SetCover(immediateCoverBytes);
@@ -428,6 +535,7 @@ public partial class MainWindow
             {
                 SetTextIfChanged(CurrentMeta, $"来源：{track.SourceAppId}");
                 SetTextIfChanged(FooterSourceText, CurrentMeta.Text);
+                _nowPlayingViewModel.SourceText = $"来源：{track.SourceAppId}";
                 if (!SameBytes(_lastPreviewCoverBytes, immediateCoverBytes))
                 {
                     SetCover(immediateCoverBytes);
@@ -462,7 +570,10 @@ public partial class MainWindow
                 double duration = track.DurationSeconds;
                 if (changed)
                 {
-                    _lyricsService.Reset();
+                    lock (_lyricGate)
+                    {
+                        _lyricsService.Reset();
+                    }
                     _ = Dispatcher.BeginInvoke(() => _overlayWindow.SetLyrics(null), DispatcherPriority.Background);
                     _lastLyricsPreviewLine = string.Empty;
                     SetTextIfChanged(LyricsPreviewText, UiText.LyricsPreviewPlaceholder);
@@ -499,20 +610,30 @@ public partial class MainWindow
             {
                 if (changed)
                 {
-                    _lyricsService.Reset();
-                    _neteaseLyricTimingController.Reset();
-                    _neteaseLyricTimingController.Start();
+                    lock (_lyricGate)
+                    {
+                        _lyricsService.Reset();
+                        _neteaseLyricTimingController.Reset();
+                        _neteaseLyricTimingController.Start();
+                    }
                     _ = Dispatcher.BeginInvoke(() => _overlayWindow.SetLyrics(null), DispatcherPriority.Background);
                     _lastLyricsPreviewLine = string.Empty;
                     SetTextIfChanged(LyricsPreviewText, UiText.LyricsPreviewPlaceholder);
                 }
                 else if (!_neteaseLyricTimingController.HasState)
                 {
-                    _neteaseLyricTimingController.Start();
+                    lock (_lyricGate)
+                    {
+                        _neteaseLyricTimingController.Start();
+                    }
                 }
 
-                double startTime = _neteaseLyricTimingController.GetCurrentPositionSeconds();
-                _lyricsService.SetPlaybackPosition(startTime);
+                double startTime;
+                lock (_lyricGate)
+                {
+                    startTime = _neteaseLyricTimingController.GetCurrentPositionSeconds();
+                    _lyricsService.SetPlaybackPosition(startTime);
+                }
                 if (changed || !_lyricsService.HasLyrics)
                 {
                     _ = Task.Run(async () =>
@@ -543,10 +664,13 @@ public partial class MainWindow
             }
             else
             {
-                _lyricsService.Reset();
-                _lastSmtcPlaybackPositionSeconds = null;
-                _smtcLyricTimingController.Reset();
-                _neteaseLyricTimingController.Reset();
+                lock (_lyricGate)
+                {
+                    _lyricsService.Reset();
+                    _lastSmtcPlaybackPositionSeconds = null;
+                    _smtcLyricTimingController.Reset();
+                    _neteaseLyricTimingController.Reset();
+                }
                 if (!string.IsNullOrEmpty(_lastLyricsPreviewLine))
                 {
                     _lastLyricsPreviewLine = string.Empty;
@@ -661,6 +785,7 @@ public partial class MainWindow
             _overlayWindow.SetLyrics(null);
             _lastLyricsPreviewLine = string.Empty;
             SetTextIfChanged(LyricsPreviewText, "未获取到歌词。");
+            _nowPlayingViewModel.LyricsPreview = "未获取到歌词。";
             return;
         }
 
@@ -669,12 +794,14 @@ public partial class MainWindow
             _overlayWindow.SetLyrics(null);
             _lastLyricsPreviewLine = string.Empty;
             SetTextIfChanged(LyricsPreviewText, "歌词已获取，等待同步到当前时间点。");
+            _nowPlayingViewModel.LyricsPreview = "歌词已获取，等待同步到当前时间点。";
             return;
         }
 
         _overlayWindow.SetLyrics(line);
         _lastLyricsPreviewLine = line;
         SetTextIfChanged(LyricsPreviewText, line);
+        _nowPlayingViewModel.LyricsPreview = line;
     }
 
     private void SchedulePageMetaTextsUpdate()
@@ -747,6 +874,7 @@ public partial class MainWindow
         if (coverBytes == null || coverBytes.Length == 0)
         {
             CoverPreview.Source = null;
+            _nowPlayingViewModel.CoverImage = null;
             return;
         }
 
@@ -763,10 +891,12 @@ public partial class MainWindow
             image.Freeze();
 
             CoverPreview.Source = image;
+            _nowPlayingViewModel.CoverImage = image;
         }
         catch
         {
             CoverPreview.Source = null;
+            _nowPlayingViewModel.CoverImage = null;
         }
     }
 
@@ -780,11 +910,6 @@ public partial class MainWindow
         _lastStatusText = text;
         StatusText.Text = text;
         if (isError)
-        {
-            return;
-        }
-
-        if (_isPolling)
         {
             return;
         }

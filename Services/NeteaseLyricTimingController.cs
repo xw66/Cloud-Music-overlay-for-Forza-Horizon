@@ -17,8 +17,33 @@ public sealed class NeteaseLyricTimingController
     private bool _pendingBackwardIsPlaying;
     private int _pendingBackwardSampleCount;
 
-    public bool HasState { get; private set; }
-    public bool HasPlayerState { get; private set; }
+    private readonly object _gate = new();
+    private bool _hasState;
+    private bool _hasPlayerState;
+
+    public bool HasState
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _hasState;
+            }
+        }
+        private set => _hasState = value;
+    }
+
+    public bool HasPlayerState
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _hasPlayerState;
+            }
+        }
+        private set => _hasPlayerState = value;
+    }
 
     public void Start()
     {
@@ -27,20 +52,26 @@ public sealed class NeteaseLyricTimingController
 
     internal void Start(DateTime nowUtc)
     {
-        ClearPendingBackwardSeek();
-        SetAnchor(0, isPlaying: true, nowUtc);
-        HasState = true;
-        HasPlayerState = false;
+        lock (_gate)
+        {
+            ClearPendingBackwardSeek();
+            SetAnchor(0, isPlaying: true, nowUtc);
+            HasState = true;
+            HasPlayerState = false;
+        }
     }
 
     public void Reset()
     {
-        HasState = false;
-        _anchorTimeUtc = default;
-        _anchorPositionSeconds = 0;
-        _isPlaying = false;
-        HasPlayerState = false;
-        ClearPendingBackwardSeek();
+        lock (_gate)
+        {
+            HasState = false;
+            _anchorTimeUtc = default;
+            _anchorPositionSeconds = 0;
+            _isPlaying = false;
+            HasPlayerState = false;
+            ClearPendingBackwardSeek();
+        }
     }
 
     public void UpdateFromPlayer(double positionSeconds, bool isPlaying)
@@ -55,35 +86,38 @@ public sealed class NeteaseLyricTimingController
             return;
         }
 
-        if (HasState)
+        lock (_gate)
         {
-            double currentPositionSeconds = GetCurrentPositionSeconds(nowUtc);
-            if (positionSeconds <
-                currentPositionSeconds - BackwardJumpThresholdSeconds)
+            if (HasState)
             {
-                if (!isPlaying && _isPlaying)
+                double currentPositionSeconds = GetCurrentPositionSeconds(nowUtc);
+                if (positionSeconds <
+                    currentPositionSeconds - BackwardJumpThresholdSeconds)
                 {
-                    SetAnchor(currentPositionSeconds, isPlaying: false, nowUtc);
-                    HasState = true;
-                    HasPlayerState = true;
-                    StartPendingBackwardSeek(positionSeconds, isPlaying: false, nowUtc);
-                    return;
-                }
+                    if (!isPlaying && _isPlaying)
+                    {
+                        SetAnchor(currentPositionSeconds, isPlaying: false, nowUtc);
+                        HasState = true;
+                        HasPlayerState = true;
+                        StartPendingBackwardSeek(positionSeconds, isPlaying: false, nowUtc);
+                        return;
+                    }
 
-                if (!ConfirmBackwardSeek(positionSeconds, isPlaying, nowUtc))
+                    if (!ConfirmBackwardSeek(positionSeconds, isPlaying, nowUtc))
+                    {
+                        return;
+                    }
+                }
+                else
                 {
-                    return;
+                    ClearPendingBackwardSeek();
                 }
             }
-            else
-            {
-                ClearPendingBackwardSeek();
-            }
+
+            SetAnchor(positionSeconds, isPlaying, nowUtc);
+            HasState = true;
+            HasPlayerState = true;
         }
-
-        SetAnchor(positionSeconds, isPlaying, nowUtc);
-        HasState = true;
-        HasPlayerState = true;
     }
 
     public double GetCurrentPositionSeconds()
@@ -98,29 +132,35 @@ public sealed class NeteaseLyricTimingController
 
     internal void Suspend(DateTime nowUtc)
     {
-        if (!HasState || !HasPlayerState || !_isPlaying)
+        lock (_gate)
         {
-            return;
-        }
+            if (!HasState || !HasPlayerState || !_isPlaying)
+            {
+                return;
+            }
 
-        double currentPositionSeconds = GetCurrentPositionSeconds(nowUtc);
-        ClearPendingBackwardSeek();
-        SetAnchor(currentPositionSeconds, isPlaying: false, nowUtc);
+            double currentPositionSeconds = GetCurrentPositionSeconds(nowUtc);
+            ClearPendingBackwardSeek();
+            SetAnchor(currentPositionSeconds, isPlaying: false, nowUtc);
+        }
     }
 
     internal double GetCurrentPositionSeconds(DateTime nowUtc)
     {
-        if (!HasState)
+        lock (_gate)
         {
-            return 0;
-        }
+            if (!HasState)
+            {
+                return 0;
+            }
 
-        if (!_isPlaying)
-        {
-            return _anchorPositionSeconds;
-        }
+            if (!_isPlaying)
+            {
+                return _anchorPositionSeconds;
+            }
 
-        return _anchorPositionSeconds + Math.Max(0, (nowUtc - _anchorTimeUtc).TotalSeconds);
+            return _anchorPositionSeconds + Math.Max(0, (nowUtc - _anchorTimeUtc).TotalSeconds);
+        }
     }
 
     private void SetAnchor(double positionSeconds, bool isPlaying, DateTime nowUtc)

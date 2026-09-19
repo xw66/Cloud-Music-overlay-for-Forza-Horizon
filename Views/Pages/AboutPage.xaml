@@ -2,6 +2,11 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:HorizonRadioOverlay"
+             xmlns:viewmodels="clr-namespace:HorizonRadioOverlay.ViewModels"
+             d:DataContext="{d:DesignInstance Type=viewmodels:AboutViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
              Background="Transparent">
     <Grid Margin="24">
         <Border Style="{StaticResource CardBorderStyle}" Padding="36">
@@ -14,21 +19,21 @@
                                Foreground="White"
                                Text="&#xE189;" />
                 </Border>
-                <TextBlock Margin="0,18,0,0" FontSize="32" FontWeight="SemiBold" Text="{x:Static local:UiText.AppTitle}" />
-                <TextBlock x:Name="VersionText" x:FieldModifier="public"
+                <TextBlock Margin="0,18,0,0" FontSize="32" FontWeight="SemiBold" Text="{Binding AppTitle}" />
+                <TextBlock x:Name="VersionText"
                            Margin="0,8,0,0"
                            Style="{StaticResource BodyTextStyle}"
-                           Text="{x:Static local:UiText.VersionPrefix}" />
+                           Text="{Binding VersionText}" />
                 <TextBlock Margin="0,24,0,0"
                            Width="460"
                            TextAlignment="Center"
                            Style="{StaticResource BodyTextStyle}"
-                           Text="{x:Static local:UiText.AboutDescription}" />
+                           Text="{Binding Description}" />
 
                 <UniformGrid Margin="0,28,0,0" Columns="3">
-                    <Button x:Name="ProjectHomeButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.ProjectHome}" />
-                    <Button x:Name="CheckUpdateButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.CheckUpdate}" />
-                    <Button x:Name="LicenseButton" x:FieldModifier="public" Content="{x:Static local:UiText.OpenSourceLicense}" />
+                    <Button x:Name="ProjectHomeButton" Margin="0,0,12,0" Content="{x:Static local:UiText.ProjectHome}" Command="{Binding OpenProjectHomeCommand}" />
+                    <Button x:Name="CheckUpdateButton" Margin="0,0,12,0" Content="{x:Static local:UiText.CheckUpdate}" Command="{Binding CheckUpdateCommand}" />
+                    <Button x:Name="LicenseButton" Content="{x:Static local:UiText.OpenSourceLicense}" Command="{Binding OpenLicenseCommand}" />
                 </UniformGrid>
             </StackPanel>
         </Border>

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
@@ -45,10 +45,7 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
     private long _lastWindowTitleFailureLogAt;
     private TrackInfo? _cachedTrack;
     private long _cachedTrackAtMilliseconds;
-    private static readonly HttpClient HttpClient = new()
-    {
-        Timeout = TimeSpan.FromSeconds(5)
-    };
+    private readonly HttpClient _httpClient;
 
     private static readonly string[] LocalDataDirs = [
         "Netease\\CloudMusic",
@@ -56,11 +53,16 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
         "NetEase Music"
     ];
 
-    public NeteaseLocalDataService(CoverCacheService coverCache, DiagnosticService diagnostic, NeteaseOfficialResolver? resolver = null)
+    public NeteaseLocalDataService(
+        CoverCacheService coverCache,
+        DiagnosticService diagnostic,
+        NeteaseOfficialResolver? resolver = null,
+        HttpClient? httpClient = null)
     {
         _coverCache = coverCache;
         _diagnostic = diagnostic;
         _officialResolver = resolver ?? new NeteaseOfficialResolver(diagnostic);
+        _httpClient = httpClient ?? AppHttpClientProvider.CreateClient(TimeSpan.FromSeconds(5));
     }
 
     [DllImport("user32.dll")]
@@ -775,7 +777,7 @@ public sealed class NeteaseLocalDataService : ITrackMetadataProvider
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Referrer = new Uri("https://music.163.com/");
                 request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-                using var response = await HttpClient.SendAsync(request);
+                using var response = await _httpClient.SendAsync(request);
                 string? contentType = response.Content.Headers.ContentType?.MediaType;
                 _diagnostic.Info(DiagnosticContext.Format(traceId, "netease-cover", "cover-http",
                     ("attempt", $"{attempt + 1}/{maxRetries + 1}"), ("statusCode", (int)response.StatusCode),

@@ -7,7 +7,7 @@
         xmlns:models="clr-namespace:HorizonRadioOverlay.Models"
         xmlns:pages="clr-namespace:HorizonRadioOverlay.Views.Pages"
         mc:Ignorable="d"
-        Title="网易云悬浮窗 v3.0.1"
+        Title="网易云悬浮窗 v3.0.2"
         MinHeight="720"
         MinWidth="1180"
         Width="1380"

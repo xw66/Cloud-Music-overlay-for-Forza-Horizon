@@ -22,7 +22,10 @@
                                Foreground="{StaticResource SubtleTextBrush}"
                                Text="{x:Static local:UiText.PlaybackSourceDescription}"
                                TextWrapping="Wrap" />
-                    <ComboBox x:Name="TrackSourceComboBox" x:FieldModifier="public" Margin="0,14,0,0" />
+                    <ComboBox x:Name="TrackSourceComboBox" x:FieldModifier="public" Margin="0,14,0,0"
+                              ItemsSource="{Binding TrackSources}"
+                              SelectedItem="{Binding SelectedTrackSource, Mode=TwoWay}"
+                              DisplayMemberPath="DisplayName" />
                 </StackPanel>
             </Border>
 
@@ -35,9 +38,9 @@
                             <ColumnDefinition Width="64" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{x:Static local:UiText.HorizontalPosition}" VerticalAlignment="Center" />
-                        <TextBlock x:Name="HorizontalValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource SubtleTextBrush}" Text="0%" />
+                        <TextBlock x:Name="HorizontalValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource SubtleTextBrush}" Text="{Binding HorizontalText, FallbackValue='0%'}" />
                     </Grid>
-                    <Slider x:Name="HorizontalSlider" x:FieldModifier="public" Margin="0,8,0,0" Minimum="0" Maximum="100" />
+                    <Slider x:Name="HorizontalSlider" x:FieldModifier="public" Margin="0,8,0,0" Minimum="0" Maximum="100" Value="{Binding HorizontalPercent, Mode=TwoWay}" />
 
                     <Grid Margin="0,18,0,0">
                         <Grid.ColumnDefinitions>
@@ -45,9 +48,9 @@
                             <ColumnDefinition Width="64" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{x:Static local:UiText.VerticalPosition}" VerticalAlignment="Center" />
-                        <TextBlock x:Name="BottomOffsetValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource SubtleTextBrush}" Text="0%" />
+                        <TextBlock x:Name="BottomOffsetValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource SubtleTextBrush}" Text="{Binding BottomOffsetText, FallbackValue='0%'}" />
                     </Grid>
-                    <Slider x:Name="BottomOffsetSlider" x:FieldModifier="public" Margin="0,8,0,0" Minimum="0" Maximum="100" />
+                    <Slider x:Name="BottomOffsetSlider" x:FieldModifier="public" Margin="0,8,0,0" Minimum="0" Maximum="100" Value="{Binding BottomOffsetPercent, Mode=TwoWay}" />
 
                     <Grid Margin="0,18,0,0">
                         <Grid.ColumnDefinitions>
@@ -55,23 +58,35 @@
                             <ColumnDefinition Width="64" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{x:Static local:UiText.Scale}" VerticalAlignment="Center" />
-                        <TextBlock x:Name="ScaleValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource SubtleTextBrush}" Text="100%" />
+                        <TextBlock x:Name="ScaleValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource SubtleTextBrush}" Text="{Binding ScaleText, FallbackValue='100%'}" />
                     </Grid>
-                    <Slider x:Name="ScaleSlider" x:FieldModifier="public" Margin="0,8,0,0" Minimum="50" Maximum="220" />
+                    <Slider x:Name="ScaleSlider" x:FieldModifier="public" Margin="0,8,0,0" Minimum="50" Maximum="220" Value="{Binding ScalePercent, Mode=TwoWay}" />
                 </StackPanel>
             </Border>
 
             <Border Grid.Row="4" Style="{StaticResource CardBorderStyle}">
                 <StackPanel>
                     <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.DisplayAndBehavior}" />
-                    <CheckBox x:Name="EnableLyricsCheckBox" x:FieldModifier="public" Margin="0,16,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.EnableLyrics}" />
-                    <CheckBox x:Name="EnableNeteaseMemoryTimelineCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.EnableNeteaseMemoryTimeline}" />
-                    <CheckBox x:Name="AlwaysShowCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.AlwaysShowOverlay}" />
-                    <CheckBox x:Name="HideOverlayWhenPausedCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.HideOverlayWhenPaused}" />
-                    <CheckBox x:Name="EnableCoverWingEffectCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.CoverWingEffect}" />
-                    <CheckBox x:Name="MinimizeToTrayCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.MinimizeToTray}" />
-                    <CheckBox x:Name="AutoStartCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.AutoStart}" />
-                    <CheckBox x:Name="DiagnosticCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.DiagnosticMode}" />
+                    <CheckBox x:Name="EnableLyricsCheckBox" x:FieldModifier="public" Margin="0,16,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.EnableLyrics}"
+                              IsChecked="{Binding EnableLyrics, Mode=TwoWay}"
+                              IsEnabled="{Binding IsLyricsOptionEnabled}"
+                              ToolTip="{Binding LyricsOptionToolTip}" />
+                    <CheckBox x:Name="EnableNeteaseMemoryTimelineCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.EnableNeteaseMemoryTimeline}"
+                              IsChecked="{Binding EnableNeteaseMemoryTimeline, Mode=TwoWay}"
+                              IsEnabled="{Binding IsNeteaseTimelineEnabled}"
+                              ToolTip="{Binding NeteaseTimelineToolTip}" />
+                    <CheckBox x:Name="AlwaysShowCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.AlwaysShowOverlay}"
+                              IsChecked="{Binding AlwaysShowOverlay, Mode=TwoWay}" />
+                    <CheckBox x:Name="HideOverlayWhenPausedCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.HideOverlayWhenPaused}"
+                              IsChecked="{Binding HideOverlayWhenPaused, Mode=TwoWay}" />
+                    <CheckBox x:Name="EnableCoverWingEffectCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.CoverWingEffect}"
+                              IsChecked="{Binding EnableCoverWingEffect, Mode=TwoWay}" />
+                    <CheckBox x:Name="MinimizeToTrayCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.MinimizeToTray}"
+                              IsChecked="{Binding MinimizeToTray, Mode=TwoWay}" />
+                    <CheckBox x:Name="AutoStartCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.AutoStart}"
+                              IsChecked="{Binding AutoStartOnBoot, Mode=TwoWay}" />
+                    <CheckBox x:Name="DiagnosticCheckBox" x:FieldModifier="public" Margin="0,14,0,0" Style="{StaticResource ToggleSwitchStyle}" Content="{x:Static local:UiText.DiagnosticMode}"
+                              IsChecked="{Binding DiagnosticMode, Mode=TwoWay}" />
                 </StackPanel>
             </Border>
         </Grid>

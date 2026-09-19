@@ -22,8 +22,8 @@ public partial class MainWindow
     {
         return Dispatcher.InvokeAsync(() =>
         {
-            string title = _nowPlayingPageView?.CurrentTitle.Text ?? string.Empty;
-            string artist = _nowPlayingPageView?.CurrentArtist.Text ?? string.Empty;
+            string title = _nowPlayingViewModel?.Title ?? string.Empty;
+            string artist = _nowPlayingViewModel?.Artist ?? string.Empty;
             return new RemoteControlStatus
             {
                 Title = title,
@@ -58,55 +58,8 @@ public partial class MainWindow
         }).Task.Unwrap();
     }
 
-    private string GetRemoteDisplayUrl()
-    {
-        return _activeSettings.RemoteControlAllowLan ? _remoteControlService.LanUrl : _remoteControlService.LocalUrl;
-    }
-
     private void UpdateRemoteControlPage()
     {
-        if (_remoteControlPageView == null)
-        {
-            return;
-        }
-
-        string address = GetRemoteDisplayUrl();
-        _remoteControlPageView.RemoteControlStatusText.Text = _activeSettings.EnableRemoteControl
-            ? _remoteControlService.StatusMessage
-            : "未启用";
-        _remoteControlPageView.RemoteControlAddressBox.Text = _activeSettings.EnableRemoteControl ? address : string.Empty;
-        _remoteControlPageView.RemoteControlHelpText.Text = BuildRemoteControlHelpText();
-        _remoteControlPageView.SetQrCode(_activeSettings.EnableRemoteControl ? address : string.Empty);
-    }
-
-    private string BuildRemoteControlHelpText()
-    {
-        if (!_activeSettings.EnableRemoteControl)
-        {
-            return "启用后会生成手机访问地址和二维码。";
-        }
-
-        if (!_remoteControlService.IsRunning)
-        {
-            return "服务未运行。请检查端口是否被占用，或换一个端口后重新启用。";
-        }
-
-        if (!_activeSettings.RemoteControlAllowLan)
-        {
-            return "当前只允许本机访问。若要用手机连接，请勾选允许局域网手机访问。";
-        }
-
-        IReadOnlyList<string> urls = _remoteControlService.LanUrls;
-        if (urls.Count == 0)
-        {
-            return "未检测到可用局域网 IPv4。请确认电脑已连接 Wi-Fi/网线，且网络不是仅本机或虚拟网卡。";
-        }
-
-        if (urls.Count == 1)
-        {
-            return "手机打不开时，请确认手机和电脑在同一 Wi-Fi，并允许 Windows 防火墙放行本程序。";
-        }
-
-        return "备用地址：" + string.Join("  ", urls.Skip(1)) + "。手机打不开首选地址时可尝试备用地址。";
+        _remoteControlViewModel.UpdateRuntimeStatus(_remoteControlService, _activeSettings);
     }
 }

@@ -12,10 +12,7 @@ public sealed class NeteaseOfficialResolver
     private const int SongCacheCapacity = 64;
     private const int TrackCacheCapacity = 96;
 
-    private static readonly HttpClient SharedHttpClient = new()
-    {
-        Timeout = TimeSpan.FromSeconds(5)
-    };
+    private static readonly HttpClient SharedHttpClient = AppHttpClientProvider.CreateClient(TimeSpan.FromSeconds(5));
 
     private static readonly Regex NoiseRegex = new(
         @"(\(.*?(live|\u4f34\u594f|dj|cover|vip|explicit|remaster|version|ver\.?|feat\.?|ft\.?|\u6bcd\u5e26|\u8d85\u54c1\u8d28|\u81fb\u54c1|\u675c\u6bd4|\u5168\u666f\u58f0).*?\))|(\[.*?(live|\u4f34\u594f|dj|cover|vip|explicit|remaster|version|ver\.?|feat\.?|ft\.?|\u6bcd\u5e26|\u8d85\u54c1\u8d28|\u81fb\u54c1|\u675c\u6bd4|\u5168\u666f\u58f0).*?\])|(\b(?:live|\u4f34\u594f|dj\u7248|cover|vip|explicit|remaster|version|ver|feat|ft)\.?)|(\u6bcd\u5e26)|(\u8d85\u54c1\u8d28)|(\u81fb\u54c1)|(\u675c\u6bd4\u5168\u666f\u58f0?)",
@@ -36,7 +33,7 @@ public sealed class NeteaseOfficialResolver
     {
     }
 
-    internal NeteaseOfficialResolver(DiagnosticService diagnostic, HttpClient httpClient)
+    public NeteaseOfficialResolver(DiagnosticService diagnostic, HttpClient httpClient)
     {
         _diagnostic = diagnostic;
         _httpClient = httpClient;

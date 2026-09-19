@@ -28,44 +28,44 @@
 
                     <TextBlock Margin="0,20,0,0" Text="{x:Static local:UiText.TitleColor}" />
                     <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                        <RadioButton x:Name="TitleColor_White" x:FieldModifier="public" GroupName="TitleColor" Tag="#FFFFFF" Background="#FFFFFF" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="TitleColor_Light" x:FieldModifier="public" GroupName="TitleColor" Tag="#D0E0F0" Background="#D0E0F0" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="TitleColor_Yellow" x:FieldModifier="public" GroupName="TitleColor" Tag="#F0E080" Background="#F0E080" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="TitleColor_Green" x:FieldModifier="public" GroupName="TitleColor" Tag="#90EE90" Background="#90EE90" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="TitleColor_Orange" x:FieldModifier="public" GroupName="TitleColor" Tag="#FFB366" Background="#FFB366" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="TitleColor_White" x:FieldModifier="public" GroupName="TitleColor" Tag="#FFFFFF" Background="#FFFFFF" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectTitleColorCommand}" CommandParameter="#FFFFFF" />
+                        <RadioButton x:Name="TitleColor_Light" x:FieldModifier="public" GroupName="TitleColor" Tag="#D0E0F0" Background="#D0E0F0" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectTitleColorCommand}" CommandParameter="#D0E0F0" />
+                        <RadioButton x:Name="TitleColor_Yellow" x:FieldModifier="public" GroupName="TitleColor" Tag="#F0E080" Background="#F0E080" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectTitleColorCommand}" CommandParameter="#F0E080" />
+                        <RadioButton x:Name="TitleColor_Green" x:FieldModifier="public" GroupName="TitleColor" Tag="#90EE90" Background="#90EE90" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectTitleColorCommand}" CommandParameter="#90EE90" />
+                        <RadioButton x:Name="TitleColor_Orange" x:FieldModifier="public" GroupName="TitleColor" Tag="#FFB366" Background="#FFB366" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectTitleColorCommand}" CommandParameter="#FFB366" />
                     </StackPanel>
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="64" /></Grid.ColumnDefinitions>
-                        <Slider x:Name="TitleOpacitySlider" x:FieldModifier="public" Minimum="20" Maximum="100" />
-                        <TextBlock x:Name="TitleOpacityValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Text="100%" Foreground="{StaticResource SubtleTextBrush}" />
+                        <Slider x:Name="TitleOpacitySlider" x:FieldModifier="public" Minimum="20" Maximum="100" Value="{Binding TitleOpacity, Mode=TwoWay}" />
+                        <TextBlock x:Name="TitleOpacityValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Text="{Binding TitleOpacityText, FallbackValue='100%'}" Foreground="{StaticResource SubtleTextBrush}" />
                     </Grid>
 
                     <TextBlock Margin="0,20,0,0" Text="{x:Static local:UiText.ArtistColor}" />
                     <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                        <RadioButton x:Name="ArtistColor_Light" x:FieldModifier="public" GroupName="ArtistColor" Tag="#C0D0E0" Background="#C0D0E0" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="ArtistColor_White" x:FieldModifier="public" GroupName="ArtistColor" Tag="#FFFFFF" Background="#FFFFFF" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="ArtistColor_Yellow" x:FieldModifier="public" GroupName="ArtistColor" Tag="#F0E080" Background="#F0E080" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="ArtistColor_Green" x:FieldModifier="public" GroupName="ArtistColor" Tag="#90EE90" Background="#90EE90" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="ArtistColor_Orange" x:FieldModifier="public" GroupName="ArtistColor" Tag="#FFB366" Background="#FFB366" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="ArtistColor_Light" x:FieldModifier="public" GroupName="ArtistColor" Tag="#C0D0E0" Background="#C0D0E0" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectArtistColorCommand}" CommandParameter="#C0D0E0" />
+                        <RadioButton x:Name="ArtistColor_White" x:FieldModifier="public" GroupName="ArtistColor" Tag="#FFFFFF" Background="#FFFFFF" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectArtistColorCommand}" CommandParameter="#FFFFFF" />
+                        <RadioButton x:Name="ArtistColor_Yellow" x:FieldModifier="public" GroupName="ArtistColor" Tag="#F0E080" Background="#F0E080" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectArtistColorCommand}" CommandParameter="#F0E080" />
+                        <RadioButton x:Name="ArtistColor_Green" x:FieldModifier="public" GroupName="ArtistColor" Tag="#90EE90" Background="#90EE90" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectArtistColorCommand}" CommandParameter="#90EE90" />
+                        <RadioButton x:Name="ArtistColor_Orange" x:FieldModifier="public" GroupName="ArtistColor" Tag="#FFB366" Background="#FFB366" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectArtistColorCommand}" CommandParameter="#FFB366" />
                     </StackPanel>
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="64" /></Grid.ColumnDefinitions>
-                        <Slider x:Name="ArtistOpacitySlider" x:FieldModifier="public" Minimum="20" Maximum="100" />
-                        <TextBlock x:Name="ArtistOpacityValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Text="100%" Foreground="{StaticResource SubtleTextBrush}" />
+                        <Slider x:Name="ArtistOpacitySlider" x:FieldModifier="public" Minimum="20" Maximum="100" Value="{Binding ArtistOpacity, Mode=TwoWay}" />
+                        <TextBlock x:Name="ArtistOpacityValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Text="{Binding ArtistOpacityText, FallbackValue='100%'}" Foreground="{StaticResource SubtleTextBrush}" />
                     </Grid>
 
                     <TextBlock Margin="0,20,0,0" Text="{x:Static local:UiText.LyricsColor}" />
                     <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                        <RadioButton x:Name="LyricsColor_Light" x:FieldModifier="public" GroupName="LyricsColor" Tag="#A0B8D0" Background="#A0B8D0" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="LyricsColor_White" x:FieldModifier="public" GroupName="LyricsColor" Tag="#FFFFFF" Background="#FFFFFF" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="LyricsColor_Yellow" x:FieldModifier="public" GroupName="LyricsColor" Tag="#F0E080" Background="#F0E080" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="LyricsColor_Green" x:FieldModifier="public" GroupName="LyricsColor" Tag="#90EE90" Background="#90EE90" Style="{StaticResource ColorSwatchRadioStyle}" />
-                        <RadioButton x:Name="LyricsColor_Orange" x:FieldModifier="public" GroupName="LyricsColor" Tag="#FFB366" Background="#FFB366" Style="{StaticResource ColorSwatchRadioStyle}" />
+                        <RadioButton x:Name="LyricsColor_Light" x:FieldModifier="public" GroupName="LyricsColor" Tag="#A0B8D0" Background="#A0B8D0" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectLyricsColorCommand}" CommandParameter="#A0B8D0" />
+                        <RadioButton x:Name="LyricsColor_White" x:FieldModifier="public" GroupName="LyricsColor" Tag="#FFFFFF" Background="#FFFFFF" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectLyricsColorCommand}" CommandParameter="#FFFFFF" />
+                        <RadioButton x:Name="LyricsColor_Yellow" x:FieldModifier="public" GroupName="LyricsColor" Tag="#F0E080" Background="#F0E080" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectLyricsColorCommand}" CommandParameter="#F0E080" />
+                        <RadioButton x:Name="LyricsColor_Green" x:FieldModifier="public" GroupName="LyricsColor" Tag="#90EE90" Background="#90EE90" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectLyricsColorCommand}" CommandParameter="#90EE90" />
+                        <RadioButton x:Name="LyricsColor_Orange" x:FieldModifier="public" GroupName="LyricsColor" Tag="#FFB366" Background="#FFB366" Style="{StaticResource ColorSwatchRadioStyle}" Command="{Binding SelectLyricsColorCommand}" CommandParameter="#FFB366" />
                     </StackPanel>
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="64" /></Grid.ColumnDefinitions>
-                        <Slider x:Name="LyricsOpacitySlider" x:FieldModifier="public" Minimum="20" Maximum="100" />
-                        <TextBlock x:Name="LyricsOpacityValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Text="100%" Foreground="{StaticResource SubtleTextBrush}" />
+                        <Slider x:Name="LyricsOpacitySlider" x:FieldModifier="public" Minimum="20" Maximum="100" Value="{Binding LyricsOpacity, Mode=TwoWay}" />
+                        <TextBlock x:Name="LyricsOpacityValueText" x:FieldModifier="public" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Text="{Binding LyricsOpacityText, FallbackValue='100%'}" Foreground="{StaticResource SubtleTextBrush}" />
                     </Grid>
                 </StackPanel>
             </Border>
@@ -75,9 +75,9 @@
                     <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.RealtimePreview}" />
                     <TextBlock Margin="0,8,0,0" Style="{StaticResource BodyTextStyle}" Text="{x:Static local:UiText.RealtimePreviewDesc}" />
                     <UniformGrid Margin="0,18,0,0" Columns="3">
-                        <Button x:Name="PreviewEffectSoftButton" x:FieldModifier="public" Margin="0,0,12,0" Content="{x:Static local:UiText.Weak}" />
-                        <Button x:Name="PreviewEffectMediumButton" x:FieldModifier="public" Margin="0,0,12,0" Style="{StaticResource PrimaryButtonStyle}" Content="{x:Static local:UiText.Medium}" />
-                        <Button x:Name="PreviewEffectStrongButton" x:FieldModifier="public" Content="{x:Static local:UiText.Strong}" />
+                        <Button x:Name="PreviewEffectSoftButton" x:FieldModifier="public" Margin="0,0,12,0" Command="{Binding SetPreviewEffectCommand}" CommandParameter="0" Content="{x:Static local:UiText.Weak}" />
+                        <Button x:Name="PreviewEffectMediumButton" x:FieldModifier="public" Margin="0,0,12,0" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding SetPreviewEffectCommand}" CommandParameter="1" Content="{x:Static local:UiText.Medium}" />
+                        <Button x:Name="PreviewEffectStrongButton" x:FieldModifier="public" Command="{Binding SetPreviewEffectCommand}" CommandParameter="2" Content="{x:Static local:UiText.Strong}" />
                     </UniformGrid>
                     <Border x:Name="ThemePreviewCard" x:FieldModifier="public"
                             Margin="0,18,0,0"
@@ -91,6 +91,8 @@
                                        TextTrimming="None"
                                        HorizontalAlignment="Center"
                                        TextAlignment="Center"
+                                       Foreground="{Binding TitleBrush}"
+                                       Opacity="{Binding TitleOpacityRatio}"
                                        Text="{x:Static local:UiText.PreviewTitle}" />
                             <TextBlock x:Name="ThemePreviewArtist" x:FieldModifier="public"
                                        Margin="0,8,0,0"
@@ -99,6 +101,8 @@
                                        TextTrimming="None"
                                        HorizontalAlignment="Center"
                                        TextAlignment="Center"
+                                       Foreground="{Binding ArtistBrush}"
+                                       Opacity="{Binding ArtistOpacityRatio}"
                                        Text="{x:Static local:UiText.PreviewArtist}" />
                             <TextBlock x:Name="ThemePreviewLyrics" x:FieldModifier="public"
                                        Margin="0,16,0,0"
@@ -107,6 +111,8 @@
                                        TextTrimming="None"
                                        HorizontalAlignment="Center"
                                        TextAlignment="Center"
+                                       Foreground="{Binding LyricsBrush}"
+                                       Opacity="{Binding LyricsOpacityRatio}"
                                        Text="{x:Static local:UiText.PreviewLyrics}" />
                         </StackPanel>
                     </Border>

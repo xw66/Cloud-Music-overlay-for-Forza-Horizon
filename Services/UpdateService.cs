@@ -11,12 +11,17 @@ public sealed class UpdateService : IDisposable
     private static readonly Version CurrentVersion = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
 
     private readonly HttpClient _httpClient;
+    private readonly bool _disposeClient;
 
     public UpdateService()
+        : this(AppHttpClientProvider.CreateClient(TimeSpan.FromSeconds(10), "HorizonRadioOverlay/1.0"), disposeClient: true)
     {
-        _httpClient = new HttpClient();
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("HorizonRadioOverlay/1.0");
-        _httpClient.Timeout = TimeSpan.FromSeconds(10);
+    }
+
+    public UpdateService(HttpClient httpClient, bool disposeClient = false)
+    {
+        _httpClient = httpClient;
+        _disposeClient = disposeClient;
     }
 
     public async Task<UpdateInfo> CheckForUpdateAsync()
@@ -101,6 +106,9 @@ public sealed class UpdateService : IDisposable
 
     public void Dispose()
     {
-        _httpClient.Dispose();
+        if (_disposeClient)
+        {
+            _httpClient.Dispose();
+        }
     }
 }

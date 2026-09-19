@@ -11,19 +11,21 @@
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
     <ApplicationIcon>icon.ico</ApplicationIcon>
-    <AssemblyTitle>网易云悬浮窗 v3.0.1</AssemblyTitle>
-    <Product>网易云悬浮窗 v3.0.1</Product>
+    <AssemblyTitle>网易云悬浮窗 v3.0.2</AssemblyTitle>
+    <Product>网易云悬浮窗 v3.0.2</Product>
     <Company>网易云悬浮窗</Company>
     <Description>游戏中显示当前播放歌曲的透明悬浮窗</Description>
     <Copyright>Copyright © 2024-2026</Copyright>
-    <Version>3.0.1</Version>
-    <AssemblyVersion>3.0.1.0</AssemblyVersion>
-    <FileVersion>3.0.1</FileVersion>
+    <Version>3.0.2</Version>
+    <AssemblyVersion>3.0.2.0</AssemblyVersion>
+    <FileVersion>3.0.2</FileVersion>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
     <PackageReference Include="QRCoder" Version="1.6.0" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
   </ItemGroup>

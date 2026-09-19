@@ -15,10 +15,6 @@ public sealed class LyricsService : IDisposable
     private const double LineBoundaryStabilitySeconds = 0.08;
     private const double BackwardLineSwitchToleranceSeconds = 0.65;
 
-    private static readonly HttpClient HttpClient = new()
-    {
-        Timeout = TimeSpan.FromSeconds(3)
-    };
 
     private static readonly Regex QueryNoiseRegex = new(
         @"(\(.*?(live|\u4f34\u594f|dj|cover|vip|explicit|remaster|version|ver\.?|feat\.?|ft\.?|\u6bcd\u5e26|\u8d85\u54c1\u8d28|\u81fb\u54c1|\u675c\u6bd4|\u5168\u666f\u58f0).*?\))|(\[.*?(live|\u4f34\u594f|dj|cover|vip|explicit|remaster|version|ver\.?|feat\.?|ft\.?|\u6bcd\u5e26|\u8d85\u54c1\u8d28|\u81fb\u54c1|\u675c\u6bd4|\u5168\u666f\u58f0).*?\])|(\b(?:live|dj|cover|vip|explicit|remaster|version|ver|feat|ft)\.?)|(\u6bcd\u5e26)|(\u8d85\u54c1\u8d28)|(\u81fb\u54c1)|(\u675c\u6bd4\u5168\u666f\u58f0?)",
@@ -33,6 +29,7 @@ public sealed class LyricsService : IDisposable
         @"\(\d+,\d+,\d+\)",
         RegexOptions.Compiled);
 
+    private readonly HttpClient _httpClient;
     private readonly Func<string, string, string?, double, Task<IReadOnlyList<SongSearchCandidate>>> _searchSongCandidatesAsync;
     private readonly Func<string, Task<string>> _fetchLyricPayloadAsync;
     private readonly Func<long> _nowProvider;
@@ -48,10 +45,20 @@ public sealed class LyricsService : IDisposable
     private string _currentLine = string.Empty;
     private int _lastLineIndex = -1;
 
-    public bool HasLyrics => _cachedLyrics is { Count: > 0 };
-
-    public LyricsService(DiagnosticService diagnostic)
+    public bool HasLyrics
     {
+        get
+        {
+            lock (_cacheGate)
+            {
+                return _cachedLyrics is { Count: > 0 };
+            }
+        }
+    }
+
+    public LyricsService(DiagnosticService diagnostic, HttpClient? httpClient = null)
+    {
+        _httpClient = httpClient ?? AppHttpClientProvider.CreateClient(TimeSpan.FromSeconds(3));
         _searchSongCandidatesAsync = SearchSongCandidatesAsync;
         _fetchLyricPayloadAsync = FetchLyricPayloadAsync;
         _nowProvider = () => Environment.TickCount64;
@@ -61,8 +68,10 @@ public sealed class LyricsService : IDisposable
     internal LyricsService(
         Func<string, string, string?, double, Task<IReadOnlyList<SongSearchCandidate>>> searchSongCandidatesAsync,
         Func<string, Task<string>> fetchLyricPayloadAsync,
-        Func<long>? nowProvider = null)
+        Func<long>? nowProvider = null,
+        HttpClient? httpClient = null)
     {
+        _httpClient = httpClient ?? AppHttpClientProvider.CreateClient(TimeSpan.FromSeconds(3));
         _searchSongCandidatesAsync = searchSongCandidatesAsync;
         _fetchLyricPayloadAsync = fetchLyricPayloadAsync;
         _nowProvider = nowProvider ?? (() => Environment.TickCount64);
@@ -125,20 +134,26 @@ public sealed class LyricsService : IDisposable
 
         if (TryGetCachedLyrics(key, out List<(double Time, string Text)>? cachedLyrics))
         {
-            _lastLyricsKey = key;
-            _cachedLyrics = cachedLyrics;
-            _currentPlaybackPositionSeconds = startTimeSeconds;
-            _currentLine = string.Empty;
-            _lastLineIndex = -1;
+            lock (_cacheGate)
+            {
+                _lastLyricsKey = key;
+                _cachedLyrics = cachedLyrics;
+                _currentPlaybackPositionSeconds = startTimeSeconds;
+                _currentLine = string.Empty;
+                _lastLineIndex = -1;
+            }
             return;
         }
 
-        _lastLyricsKey = key;
-        _currentPlaybackPositionSeconds = startTimeSeconds;
-        _currentLine = string.Empty;
-        _lastLineIndex = -1;
-        _lastFetchAttemptAtMs = _nowProvider();
-        _inFlightKey = key;
+        lock (_cacheGate)
+        {
+            _lastLyricsKey = key;
+            _currentPlaybackPositionSeconds = startTimeSeconds;
+            _currentLine = string.Empty;
+            _lastLineIndex = -1;
+            _lastFetchAttemptAtMs = _nowProvider();
+            _inFlightKey = key;
+        }
         try
         {
             List<(double Time, string Text)>? fetchedLyrics = await FetchLyricsFromApiAsync(
@@ -147,14 +162,18 @@ public sealed class LyricsService : IDisposable
                 albumTitle,
                 durationSeconds,
                 preferredSongId);
-            if (!string.Equals(_lastLyricsKey, key, StringComparison.Ordinal))
-            {
-                _diagnostic?.Info($"Lyrics fetch ignored stale result: {songName} / {artist}");
-                return;
-            }
 
-            _cachedLyrics = fetchedLyrics;
-            _lastLineIndex = -1;
+            lock (_cacheGate)
+            {
+                if (!string.Equals(_lastLyricsKey, key, StringComparison.Ordinal))
+                {
+                    _diagnostic?.Info($"Lyrics fetch ignored stale result: {songName} / {artist}");
+                    return;
+                }
+
+                _cachedLyrics = fetchedLyrics;
+                _lastLineIndex = -1;
+            }
             if (_cachedLyrics is { Count: > 0 })
             {
                 CacheLyrics(key, _cachedLyrics);
@@ -176,45 +195,57 @@ public sealed class LyricsService : IDisposable
 
     public void SetPlaybackPosition(double positionSeconds)
     {
-        _currentPlaybackPositionSeconds = positionSeconds;
+        lock (_cacheGate)
+        {
+            _currentPlaybackPositionSeconds = positionSeconds;
+        }
     }
 
     public string? UpdateCurrentLine()
     {
-        if (_cachedLyrics is not { Count: > 0 })
+        lock (_cacheGate)
         {
+            if (_cachedLyrics is not { Count: > 0 })
+            {
+                return null;
+            }
+
+            string? line = GetLineAtTime(_cachedLyrics, _currentPlaybackPositionSeconds, ref _lastLineIndex);
+            if (line != null && !string.Equals(line, _currentLine, StringComparison.Ordinal))
+            {
+                _currentLine = line;
+                return line;
+            }
+
             return null;
         }
-
-        string? line = GetLineAtTime(_cachedLyrics, _currentPlaybackPositionSeconds, ref _lastLineIndex);
-        if (line != null && !string.Equals(line, _currentLine, StringComparison.Ordinal))
-        {
-            _currentLine = line;
-            return line;
-        }
-
-        return null;
     }
 
     public string? GetCurrentLine()
     {
-        if (_cachedLyrics is not { Count: > 0 })
+        lock (_cacheGate)
         {
-            return null;
-        }
+            if (_cachedLyrics is not { Count: > 0 })
+            {
+                return null;
+            }
 
-        return GetLineAtTime(_cachedLyrics, _currentPlaybackPositionSeconds, ref _lastLineIndex);
+            return GetLineAtTime(_cachedLyrics, _currentPlaybackPositionSeconds, ref _lastLineIndex);
+        }
     }
 
     public void Reset()
     {
-        _cachedLyrics = null;
-        _lastLyricsKey = string.Empty;
-        _inFlightKey = null;
-        _lastFetchAttemptAtMs = 0;
-        _currentLine = string.Empty;
-        _currentPlaybackPositionSeconds = 0;
-        _lastLineIndex = -1;
+        lock (_cacheGate)
+        {
+            _cachedLyrics = null;
+            _lastLyricsKey = string.Empty;
+            _inFlightKey = null;
+            _lastFetchAttemptAtMs = 0;
+            _currentLine = string.Empty;
+            _currentPlaybackPositionSeconds = 0;
+            _lastLineIndex = -1;
+        }
     }
 
     private bool TryGetCachedLyrics(string key, out List<(double Time, string Text)>? lyrics)
@@ -509,7 +540,7 @@ public sealed class LyricsService : IDisposable
         }
     }
 
-    private static async Task<IReadOnlyList<SongSearchCandidate>> SearchSongCandidatesAsync(string songName, string artist, string? albumTitle, double durationSeconds)
+    private async Task<IReadOnlyList<SongSearchCandidate>> SearchSongCandidatesAsync(string songName, string artist, string? albumTitle, double durationSeconds)
     {
         Dictionary<string, SongSearchCandidate> candidates = new(StringComparer.Ordinal);
 
@@ -523,7 +554,7 @@ public sealed class LyricsService : IDisposable
                 request.Headers.Referrer = new Uri("https://music.163.com/");
                 request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
 
-                using HttpResponseMessage response = await HttpClient.SendAsync(request);
+                using HttpResponseMessage response = await _httpClient.SendAsync(request);
                 response.EnsureSuccessStatusCode();
                 string json = await response.Content.ReadAsStringAsync();
                 foreach (SongSearchCandidate candidate in RankSongCandidatesFromSearchPayload(json, songName, artist, albumTitle, durationSeconds))
@@ -793,7 +824,7 @@ public sealed class LyricsService : IDisposable
         return new string(trimmed.Where(c => !char.IsWhiteSpace(c)).ToArray());
     }
 
-    private static async Task<string> FetchLyricPayloadAsync(string songId)
+    private async Task<string> FetchLyricPayloadAsync(string songId)
     {
         string url = $"https://music.163.com/api/song/lyric?id={songId}&lv=1&kv=1&tv=-1";
 
@@ -801,7 +832,7 @@ public sealed class LyricsService : IDisposable
         request.Headers.Referrer = new Uri("https://music.163.com/");
         request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
 
-        using HttpResponseMessage response = await HttpClient.SendAsync(request);
+        using HttpResponseMessage response = await _httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
     }
