@@ -84,7 +84,7 @@ public partial class MainWindow
         _trayIcon = new System.Windows.Forms.NotifyIcon
         {
             Icon = icon,
-            Text = "网易云悬浮窗 v3.0.1",
+            Text = "网易云悬浮窗 v3.1.0",
             Visible = false
         };
 
@@ -215,7 +215,7 @@ public partial class MainWindow
         if (_trayIcon != null)
         {
             _trayIcon.Visible = true;
-            _trayIcon.ShowBalloonTip(2000, "网易云悬浮窗 v3.0.1", "已最小化到托盘，双击图标恢复。", System.Windows.Forms.ToolTipIcon.Info);
+            _trayIcon.ShowBalloonTip(2000, "网易云悬浮窗 v3.1.0", "已最小化到托盘，双击图标恢复。", System.Windows.Forms.ToolTipIcon.Info);
         }
     }
 
