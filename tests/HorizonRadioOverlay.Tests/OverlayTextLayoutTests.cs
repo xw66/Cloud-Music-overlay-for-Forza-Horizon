@@ -39,7 +39,7 @@ public sealed class OverlayTextLayoutTests
     {
         string xaml = File.ReadAllText(FindWorkspaceFile("OverlayWindow.xaml"));
 
-        Assert.Contains("Title=\"[直播源] 网易云悬浮窗 v3.0.2\"", xaml);
+        Assert.Contains("Title=\"[直播源] 网易云悬浮窗 v3.1.0\"", xaml);
         Assert.Contains("AllowsTransparency=\"True\"", xaml);
         Assert.Contains("Background=\"Transparent\"", xaml);
     }

@@ -1,5 +1,21 @@
 # 更新日志
 
+## v3.1.0 - 2026-09-19
+
+本版本完成了架构级现代化重构、进程通信加固以及核心技术债治理。
+
+### 重构与优化
+
+- **MVVM 全链路闭环架构**：引入微软官方 `CommunityToolkit.Mvvm`，实现 NowPlaying、FloatingSettings、ThemeSettings、Hotkey、RemoteControl、Logs、About 七大页面 ViewModels，全面解耦 UI 与状态，主窗口 code-behind 深度精简。
+- **单实例命名管道 IPC 唤醒与托盘防假死**：引入 `SingleInstanceIpcService` 跨进程命名管道机制；二次启动自动穿透激活前台窗口并居中复位，解决多屏/托盘残留假死问题。
+- **配置原子落盘与自愈容灾机制**：`OverlaySettingsService` 升级为物理刷盘 + `File.Move` 原子覆盖，并引入 `.bak` 镜像备份与损坏自动回退恢复。
+- **主播放轮询与 UI 线程解耦**：彻底剥离高频 `DispatcherTimer`，改由后台 Task 与 `SemaphoreSlim` 事件唤醒驱动，CPU 占用降至 0.15% 极低水平。
+- **诊断日志异步无锁 Channel 架构**：`DiagnosticService` 重构为基于 `System.Threading.Channels` 的批量异步生产者-消费者模式，杜绝日志磁盘 I/O 阻塞主线程。
+- **引入 IoC / DI 依赖注入容器**：引入 `Microsoft.Extensions.DependencyInjection`，建立统一服务组合根 `AppServiceRegistration`，全面消除主窗口手动服务装配。
+- **网易云内存探针 God Class 模块化拆分**：将原 1906 行巨石类拆分为纯策略层、Win32 虚拟内存底层互操作层、候选时钟过滤流水线与门面协调器。
+- **集中式 HttpClient 连接池生命周期管理**：引入统一 `SocketsHttpHandler`（15分钟连接轮转周期响应 DNS 变更），解耦并支持全服务注入与 Mock 单元测试。
+- **测试工程扩充**：单元测试增加至 293 项，全自动化验证 100% 绿灯通过。
+
 ## v3.0.2 - 2026-07-19
 
 本节列出 v3.0.2 相较于 v3.0.0 的累计更新。
