@@ -16,7 +16,7 @@ public sealed partial class AboutViewModel : ObservableObject
     private string _appTitle = UiText.AppTitle;
 
     [ObservableProperty]
-    private string _versionText = $"{UiText.VersionPrefix} {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "3.1.0"}";
+    private string _versionText = $"{UiText.VersionPrefix} {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "3.1.1"}";
 
     [ObservableProperty]
     private string _description = UiText.AboutDescription;
