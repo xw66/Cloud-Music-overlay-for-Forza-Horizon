@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -10,11 +11,16 @@ namespace HorizonRadioOverlay.Services;
 
 public sealed class RemoteControlService : IDisposable
 {
+    internal const int MaxConnections = 16;
+    internal static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
+
     private Func<Task<RemoteControlStatus>> _statusProvider;
-    private Func<string, Task> _controlHandler;
+    private Func<string, Task<PlaybackCommandResult>> _controlHandler;
+    private readonly DiagnosticService? _diagnostic;
+    private readonly HashSet<TcpClient> _clients = new();
+    private readonly object _clientsGate = new();
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
-    private Task? _acceptLoopTask;
     private OverlaySettings? _settings;
 
     public event EventHandler? StateChanged;
@@ -31,22 +37,27 @@ public sealed class RemoteControlService : IDisposable
 
     public IReadOnlyList<string> LanUrls => BuildLanUrls(_settings);
 
-    public RemoteControlService()
-        : this(() => Task.FromResult(new RemoteControlStatus()), _ => Task.CompletedTask)
+    public RemoteControlService(DiagnosticService? diagnostic = null)
+        : this(
+            () => Task.FromResult(new RemoteControlStatus()),
+            _ => Task.FromResult(new PlaybackCommandResult(PlaybackCommandStatus.Unsupported, string.Empty)),
+            diagnostic)
     {
     }
 
     public RemoteControlService(
         Func<Task<RemoteControlStatus>> statusProvider,
-        Func<string, Task> controlHandler)
+        Func<string, Task<PlaybackCommandResult>> controlHandler,
+        DiagnosticService? diagnostic = null)
     {
         _statusProvider = statusProvider;
         _controlHandler = controlHandler;
+        _diagnostic = diagnostic;
     }
 
     public void SetHandlers(
         Func<Task<RemoteControlStatus>> statusProvider,
-        Func<string, Task> controlHandler)
+        Func<string, Task<PlaybackCommandResult>> controlHandler)
     {
         _statusProvider = statusProvider ?? throw new ArgumentNullException(nameof(statusProvider));
         _controlHandler = controlHandler ?? throw new ArgumentNullException(nameof(controlHandler));
@@ -95,8 +106,15 @@ public sealed class RemoteControlService : IDisposable
         }
 
         IsRunning = false;
-        try { _cts?.Cancel(); } catch { }
-        try { _listener?.Stop(); } catch { }
+        _cts?.Cancel();
+        _listener?.Stop();
+        lock (_clientsGate)
+        {
+            foreach (TcpClient client in _clients)
+            {
+                client.Dispose();
+            }
+        }
         _listener = null;
         _cts?.Dispose();
         _cts = null;
@@ -132,16 +150,20 @@ public sealed class RemoteControlService : IDisposable
                 : _settings.RemoteControlAllowLan
                     ? $"运行中：{LanUrl}"
                     : $"运行中：{LocalUrl}";
-            _acceptLoopTask = Task.Run(() => AcceptLoopAsync(_cts.Token));
+            TcpListener listener = _listener;
+            CancellationToken token = _cts.Token;
+            _ = Task.Run(() => AcceptLoopAsync(listener, token));
         }
         catch (SocketException ex)
         {
+            Stop();
             IsRunning = false;
             LastError = ex.Message;
             StatusMessage = $"启动失败：端口 {_settings.RemoteControlPort} 可能被占用，或防火墙阻止访问。";
         }
         catch (Exception ex)
         {
+            Stop();
             IsRunning = false;
             LastError = ex.Message;
             StatusMessage = $"启动失败：{ex.Message}";
@@ -150,44 +172,87 @@ public sealed class RemoteControlService : IDisposable
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private async Task AcceptLoopAsync(CancellationToken cancellationToken)
+    private async Task AcceptLoopAsync(TcpListener listener, CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested && _listener != null)
+        while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                TcpClient client = await _listener.AcceptTcpClientAsync(cancellationToken);
-                _ = Task.Run(() => HandleClientAsync(client, cancellationToken), cancellationToken);
+                TcpClient client = await listener.AcceptTcpClientAsync(cancellationToken);
+                lock (_clientsGate)
+                {
+                    if (cancellationToken.IsCancellationRequested || _clients.Count >= MaxConnections)
+                    {
+                        client.Dispose();
+                        continue;
+                    }
+
+                    _clients.Add(client);
+                }
+
+                _ = HandleClientAsync(client, cancellationToken);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 break;
             }
-            catch
+            catch (Exception ex)
             {
                 if (!cancellationToken.IsCancellationRequested)
                 {
+                    Stop();
                     StatusMessage = "运行异常：无法接受新的手机连接。";
+                    LastError = ex.Message;
+                    IsRunning = false;
+                    _diagnostic?.Error("Remote control accept failed", ex);
                     StateChanged?.Invoke(this, EventArgs.Empty);
                 }
+                break;
             }
         }
     }
 
     private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
     {
-        using (client)
+        using CancellationTokenSource requestCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        requestCts.CancelAfter(RequestTimeout);
+        try
         {
-            client.ReceiveTimeout = 5000;
-            client.SendTimeout = 5000;
             using NetworkStream stream = client.GetStream();
-            RemoteHttpRequest? request = await ReadRequestAsync(stream, cancellationToken);
+            RemoteHttpRequest? request = await ReadRequestAsync(stream, requestCts.Token);
             if (request == null)
             {
                 return;
             }
 
-            await RouteAsync(stream, request, cancellationToken);
+            await RouteAsync(stream, request, requestCts.Token);
+        }
+        catch (OperationCanceledException) when (requestCts.IsCancellationRequested)
+        {
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                _diagnostic?.Warn("Remote control request timed out");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or SocketException ||
+                                   ex is ObjectDisposedException && cancellationToken.IsCancellationRequested)
+        {
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                _diagnostic?.Warn($"Remote control connection closed: {ex.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _diagnostic?.Error("Remote control request failed", ex);
+        }
+        finally
+        {
+            client.Dispose();
+            lock (_clientsGate)
+            {
+                _clients.Remove(client);
+            }
         }
     }
 
@@ -223,7 +288,7 @@ public sealed class RemoteControlService : IDisposable
                 return;
             }
 
-            RemoteControlStatus status = await _statusProvider();
+            RemoteControlStatus status = await _statusProvider().WaitAsync(cancellationToken);
             await WriteJsonAsync(stream, 200, status, cancellationToken);
             return;
         }
@@ -243,8 +308,15 @@ public sealed class RemoteControlService : IDisposable
                 return;
             }
 
-            await _controlHandler(action!);
-            await WriteJsonAsync(stream, 200, new { ok = true }, cancellationToken);
+            PlaybackCommandResult result = await _controlHandler(action!).WaitAsync(cancellationToken);
+            int status = result.Status switch
+            {
+                PlaybackCommandStatus.Succeeded => 200,
+                PlaybackCommandStatus.Unsupported => 409,
+                _ => 502
+            };
+            await WriteJsonAsync(stream, status,
+                new { ok = result.Succeeded, result = result.Status.ToString() }, cancellationToken);
             return;
         }
 
@@ -326,16 +398,18 @@ public sealed class RemoteControlService : IDisposable
             headers[lines[i][..colon].Trim()] = lines[i][(colon + 1)..].Trim();
         }
 
-        int contentLength = headers.TryGetValue("Content-Length", out string? lengthText) &&
-                            int.TryParse(lengthText, out int parsedLength)
-            ? parsedLength
-            : 0;
+        int contentLength = 0;
+        if (headers.TryGetValue("Content-Length", out string? lengthText) &&
+            (!int.TryParse(lengthText, out contentLength) || contentLength < 0 || contentLength > 65536))
+        {
+            return null;
+        }
 
         int bodyStart = headerEnd + 4;
-        while (bytes.Count - bodyStart < contentLength && bytes.Count < 131072)
+        while (bytes.Count - bodyStart < contentLength)
         {
             int read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
-            if (read <= 0) break;
+            if (read <= 0) return null;
             for (int i = 0; i < read; i++)
             {
                 bytes.Add(buffer[i]);
@@ -401,6 +475,8 @@ public sealed class RemoteControlService : IDisposable
             400 => "Bad Request",
             401 => "Unauthorized",
             404 => "Not Found",
+            409 => "Conflict",
+            502 => "Bad Gateway",
             _ => "Error"
         };
         string header =
@@ -414,10 +490,9 @@ public sealed class RemoteControlService : IDisposable
         await stream.WriteAsync(bodyBytes, cancellationToken);
     }
 
-    private string BuildPageHtml()
+    private static string BuildPageHtml()
     {
-        string token = WebUtility.HtmlEncode(_settings?.RemoteControlToken ?? string.Empty);
-        return $$"""
+        return """
 <!doctype html>
 <html lang="zh-CN">
 <head>
@@ -452,15 +527,19 @@ button:active{transform:translateY(1px);background:#5b5ceb}.primary{background:#
 <div id="status" class="status">等待状态刷新</div>
 </main>
 <script>
-const token = '{{token}}';
+const token = new URLSearchParams(location.search).get('token') || '';
 async function api(path, options){
   const join = path.includes('?') ? '&' : '?';
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
-  const res = await fetch(path + join + 'token=' + encodeURIComponent(token), {...options, signal: controller.signal});
-  clearTimeout(timeout);
-  if(!res.ok) throw new Error('HTTP ' + res.status);
-  return await res.json();
+  try{
+    const res = await fetch(path + join + 'token=' + encodeURIComponent(token), {...options, signal: controller.signal});
+    const body = await res.json();
+    if(!res.ok) throw new Error(body.result === 'Unsupported' ? '当前来源不支持此操作' : body.result === 'Failed' ? '播放器执行失败' : 'HTTP ' + res.status);
+    return body;
+  }finally{
+    clearTimeout(timeout);
+  }
 }
 async function refresh(){
   try{

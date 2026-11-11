@@ -20,6 +20,7 @@ public partial class MainWindow
 {
     private void InitializeOverlayControls(OverlaySettings settings)
     {
+        bool wasInitializing = _isInitializingOverlayControls;
         _isInitializingOverlayControls = true;
         try
         {
@@ -35,7 +36,7 @@ public partial class MainWindow
         }
         finally
         {
-            _isInitializingOverlayControls = false;
+            _isInitializingOverlayControls = wasInitializing;
         }
     }
 
@@ -58,7 +59,7 @@ public partial class MainWindow
                 return;
             }
 
-            _overlaySettingsService.Save(_activeSettings);
+            if (!TrySaveActiveSettings()) return;
             _remoteControlService.ApplySettings(_activeSettings);
             UpdateRemoteControlPage();
             SetStatus($"状态：已保存并应用。{_overlaySettingsService.SettingsFilePath}", false);
@@ -69,25 +70,19 @@ public partial class MainWindow
         }
     }
 
-    private async void SettingCheckBox_Changed(object sender, RoutedEventArgs e)
+    private bool TrySaveActiveSettings()
     {
-        if (_isInitializingOverlayControls) return;
-        ApplyOverlaySettingsFromControls();
-        _diagnostic.Enabled = _activeSettings.DiagnosticMode;
-        _overlaySettingsService.Save(_activeSettings);
-        _remoteControlService.ApplySettings(_activeSettings);
-        UpdateRemoteControlPage();
-        await ApplyPauseOverlayVisibilityRuleAsync();
-    }
-
-    private void RemoteControlSetting_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_isInitializingOverlayControls) return;
-        ApplyOverlaySettingsFromControls();
-        _overlaySettingsService.Save(_activeSettings);
-        _remoteControlService.ApplySettings(_activeSettings);
-        UpdateRemoteControlPage();
-        SetStatus(_remoteControlService.IsRunning ? "状态：手机遥控已应用。" : $"状态：{_remoteControlService.StatusMessage}", !_remoteControlService.IsRunning && _activeSettings.EnableRemoteControl);
+        try
+        {
+            _overlaySettingsService.Save(_activeSettings);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _diagnostic.Error("Settings save failed", ex);
+            SetStatus($"状态：保存失败。{ex.Message}", true);
+            return false;
+        }
     }
 
     private void ApplyHotkeySettings()
@@ -106,7 +101,7 @@ public partial class MainWindow
             return;
         }
 
-        _overlaySettingsService.Save(_activeSettings);
+        if (!TrySaveActiveSettings()) return;
         SetStatus("状态：快捷键已应用。", false);
     }
 
@@ -137,7 +132,7 @@ public partial class MainWindow
         {
             _overlayWindow.SetInteractiveDragMode(false);
             ApplyOverlaySettingsFromControls();
-            _overlaySettingsService.Save(_activeSettings);
+            if (!TrySaveActiveSettings()) return;
             SetStatus($"状态：位置已更新并保存（X: {_activeSettings.LeftPercent * 100:0}%, Y: {_activeSettings.TopPercent * 100:0}%）。", false);
         }
     }
@@ -350,9 +345,6 @@ public partial class MainWindow
             AppNextHotkey = _activeSettings.AppNextHotkey,
             AppToggleHotkey = _activeSettings.AppToggleHotkey,
             AppToggleOverlayHotkey = _activeSettings.AppToggleOverlayHotkey,
-            NeteasePrevHotkey = _activeSettings.NeteasePrevHotkey,
-            NeteaseNextHotkey = _activeSettings.NeteaseNextHotkey,
-            NeteaseToggleHotkey = _activeSettings.NeteaseToggleHotkey,
             EnableGamepadHotkeys = _activeSettings.EnableGamepadHotkeys,
             GamepadPrevHotkey = _activeSettings.GamepadPrevHotkey,
             GamepadNextHotkey = _activeSettings.GamepadNextHotkey,
@@ -384,6 +376,7 @@ public partial class MainWindow
         _remoteControlViewModel.ApplyToSettings(settings);
         _themeSettingsViewModel.ApplyTo(settings);
 
+        bool lyricsChanged = settings.EnableLyrics != _activeSettings.EnableLyrics;
         _activeSettings = OverlaySettingsService.NormalizeForTests(settings);
         UpdatePlaybackSessionConfiguration();
         _smtcLyricTimingController.SetDelayOverrideMilliseconds(settings.SmtcLyricDelayOverrideMs);
@@ -394,6 +387,11 @@ public partial class MainWindow
         UpdateOverlayControlLabels();
         _remoteControlService.ApplySettings(_activeSettings);
         UpdateRemoteControlPage();
+        if (lyricsChanged)
+        {
+            _lyricsContextVersion++;
+            _ = RefreshCurrentTrackAsync(false, false, _playbackSession.LatestSnapshot);
+        }
     }
 
     private void UpdatePlaybackSessionConfiguration()
@@ -494,10 +492,7 @@ public partial class MainWindow
         bool keyboardOk = HotkeyParser.TryParse(settings.AppPrevHotkey, out _) &&
                           HotkeyParser.TryParse(settings.AppNextHotkey, out _) &&
                           HotkeyParser.TryParse(settings.AppToggleHotkey, out _) &&
-                          HotkeyParser.TryParse(settings.AppToggleOverlayHotkey, out _) &&
-                          HotkeyParser.TryParse(settings.NeteasePrevHotkey, out _) &&
-                          HotkeyParser.TryParse(settings.NeteaseNextHotkey, out _) &&
-                          HotkeyParser.TryParse(settings.NeteaseToggleHotkey, out _);
+                          HotkeyParser.TryParse(settings.AppToggleOverlayHotkey, out _);
 
         if (!keyboardOk)
         {

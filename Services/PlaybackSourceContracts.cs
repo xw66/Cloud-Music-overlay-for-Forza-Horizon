@@ -18,20 +18,6 @@ public enum PlaybackSourceCapabilities
     Lyrics = 1 << 3
 }
 
-public readonly record struct PlaybackControlBindings(
-    string PreviousHotkey,
-    string NextHotkey,
-    string TogglePlayPauseHotkey)
-{
-    public static PlaybackControlBindings FromSettings(OverlaySettings settings)
-    {
-        return new PlaybackControlBindings(
-            settings.NeteasePrevHotkey,
-            settings.NeteaseNextHotkey,
-            settings.NeteaseToggleHotkey);
-    }
-}
-
 public interface IPlaybackSource
 {
     string Id { get; }
@@ -46,7 +32,7 @@ public interface IPlaybackSource
 
     Task<(TimeSpan Position, bool IsPlaying)?> GetPlaybackStateAsync();
 
-    Task<bool> ExecuteAsync(PlaybackCommand command, PlaybackControlBindings bindings);
+    Task<PlaybackCommandStatus> ExecuteAsync(PlaybackCommand command);
 }
 
 public interface ITrackMetadataProvider
@@ -73,11 +59,6 @@ public interface IPlaybackTransport : ITrackMetadataProvider
     Task<bool> TogglePlayPauseAsync();
 
     Task<(TimeSpan Position, bool IsPlaying)?> GetPlaybackStateAsync();
-}
-
-public interface IHotkeySender
-{
-    bool Send(string hotkeyText);
 }
 
 public enum PlaybackCommand

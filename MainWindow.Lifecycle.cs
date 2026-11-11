@@ -84,7 +84,7 @@ public partial class MainWindow
         _trayIcon = new System.Windows.Forms.NotifyIcon
         {
             Icon = icon,
-            Text = "网易云悬浮窗 v3.1.1",
+            Text = "网易云悬浮窗 v3.1.2",
             Visible = false
         };
 
@@ -215,7 +215,7 @@ public partial class MainWindow
         if (_trayIcon != null)
         {
             _trayIcon.Visible = true;
-            _trayIcon.ShowBalloonTip(2000, "网易云悬浮窗 v3.1.1", "已最小化到托盘，双击图标恢复。", System.Windows.Forms.ToolTipIcon.Info);
+            _trayIcon.ShowBalloonTip(2000, "网易云悬浮窗 v3.1.2", "已最小化到托盘，双击图标恢复。", System.Windows.Forms.ToolTipIcon.Info);
         }
     }
 
@@ -230,7 +230,7 @@ public partial class MainWindow
         _gamepadInputService.AttachRawInput(this, _diagnostic);
         bool ok = RebindGlobalHotkeys();
         SetStatus(ok
-            ? "状态：快捷键已就绪，按应用快捷键会转发网易云快捷键。"
+            ? "状态：播放控制快捷键已就绪。"
             : "状态：应用快捷键注册失败（被占用或格式无效）。", false);
 
         _lifecycle.StartAll();
@@ -265,6 +265,9 @@ public partial class MainWindow
 
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
+        _lyricsContextVersion++;
+        _smtcCoverRefreshCts?.Cancel();
+        _lyricsService.Reset();
         _pageMetaUpdateTimer.Stop();
         _lifecycle.Dispose();
     }

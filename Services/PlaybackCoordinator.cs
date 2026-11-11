@@ -77,11 +77,7 @@ public sealed class PlaybackCoordinator
             return new PlaybackCommandResult(PlaybackCommandStatus.Unsupported, source.Id);
         }
 
-        bool succeeded = await source.ExecuteAsync(
-            command,
-            PlaybackControlBindings.FromSettings(settings));
-        return new PlaybackCommandResult(
-            succeeded ? PlaybackCommandStatus.Succeeded : PlaybackCommandStatus.Failed,
-            source.Id);
+        PlaybackCommandStatus status = await source.ExecuteAsync(command);
+        return new PlaybackCommandResult(status, source.Id);
     }
 }

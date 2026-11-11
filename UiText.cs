@@ -49,7 +49,7 @@ public static class UiText
     public const string OpenHotkeySettings = "\u6253\u5F00\u5FEB\u6377\u952E\u8BBE\u7F6E";
 
     public const string LyricsSource = "播放器数据渠道";
-    public const string PlaybackSourceDescription = "网易云用户默认选择网易云专用渠道；QQ音乐、Apple Music、酷狗等提供系统时间轴的播放器选择 SMTC。两条渠道独立运行，可随时手动切换。";
+    public const string PlaybackSourceDescription = "网易云专用渠道从网易云读取歌曲信息，通过系统媒体会话控制网易云。QQ 音乐、Apple Music、酷狗等播放器可选 SMTC 渠道。";
     public const string SourceNeteaseWindow = "网易云专用渠道（默认；博客 / 有声书不支持）";
     public const string SourceSmtc = "QQ音乐 / Apple Music / 酷狗等（SMTC）";
     public const string PositionAndScale = "\u4F4D\u7F6E\u4E0E\u7F29\u653E";
@@ -71,8 +71,6 @@ public static class UiText
 
     public const string InAppHotkeys = "\u5E94\u7528\u5185\u5FEB\u6377\u952E";
     public const string InAppHotkeysDesc = "\u5728\u4E3B\u7A0B\u5E8F\u5185\u6355\u83B7\uFF0C\u63A7\u5236\u5F53\u524D\u6765\u6E90\u3002";
-    public const string NeteaseForwardHotkeys = "\u7F51\u6613\u4E91\u8F6C\u53D1\u5FEB\u6377\u952E";
-    public const string NeteaseForwardHotkeysDesc = "\u5DE6\u4FA7\u6E38\u620F\u5185\u6309\u952E\uFF0C\u53F3\u4FA7\u8F6C\u53D1\u5230\u7F51\u6613\u4E91\u3002";
     public const string GamepadHotkeys = "\u624B\u67C4 / \u65B9\u5411\u76D8\u5FEB\u6377\u952E";
     public const string EnableXboxGamepad = "\u542F\u7528\u624B\u67C4 / \u65B9\u5411\u76D8\u5916\u8BBE";
     public const string GamepadHotkeysDesc = "\u70B9\u51FB\u8F93\u5165\u6846\u540E\u76F4\u63A5\u6309\u5916\u8BBE\u7EC4\u5408\u952E\u3002\u652F\u6301 Xbox\u3001DS5 \u4EE5\u53CA\u65B9\u5411\u76D8\u7B49 HID/DirectInput \u8BBE\u5907\u7684 Button1-Button16\u3002";

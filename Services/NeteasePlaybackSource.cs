@@ -15,16 +15,16 @@ internal static class NeteasePlaybackCapabilityPolicy
 public sealed class NeteasePlaybackSource : IPlaybackSource
 {
     private readonly ITrackMetadataProvider _metadataProvider;
-    private readonly IHotkeySender _hotkeySender;
+    private readonly Func<PlaybackCommand, Task<PlaybackCommandStatus>> _executeCommand;
     private readonly IPlaybackStateProvider? _playbackStateProvider;
 
     public NeteasePlaybackSource(
         ITrackMetadataProvider metadataProvider,
-        IHotkeySender hotkeySender,
+        Func<PlaybackCommand, Task<PlaybackCommandStatus>> executeCommand,
         IPlaybackStateProvider? playbackStateProvider = null)
     {
         _metadataProvider = metadataProvider;
-        _hotkeySender = hotkeySender;
+        _executeCommand = executeCommand;
         _playbackStateProvider = playbackStateProvider;
     }
 
@@ -65,16 +65,8 @@ public sealed class NeteasePlaybackSource : IPlaybackSource
             : Task.FromResult<(TimeSpan Position, bool IsPlaying)?>(null);
     }
 
-    public Task<bool> ExecuteAsync(PlaybackCommand command, PlaybackControlBindings bindings)
+    public Task<PlaybackCommandStatus> ExecuteAsync(PlaybackCommand command)
     {
-        string hotkey = command switch
-        {
-            PlaybackCommand.Previous => bindings.PreviousHotkey,
-            PlaybackCommand.Next => bindings.NextHotkey,
-            PlaybackCommand.TogglePlayPause => bindings.TogglePlayPauseHotkey,
-            _ => string.Empty
-        };
-        bool sent = !string.IsNullOrWhiteSpace(hotkey) && _hotkeySender.Send(hotkey);
-        return Task.FromResult(sent);
+        return _executeCommand(command);
     }
 }

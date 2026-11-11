@@ -5,6 +5,30 @@ namespace HorizonRadioOverlay.Tests;
 public sealed class LyricsServiceConcurrencyTests
 {
     [Fact]
+    public async Task Reset_and_refetch_of_same_song_rejects_the_older_response()
+    {
+        TaskCompletionSource<string> oldPayload = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int fetchCount = 0;
+        using LyricsService service = new(
+            searchSongIdsAsync: (_, _, _, _) => Task.FromResult<IReadOnlyList<string>>(["123"]),
+            fetchLyricPayloadAsync: _ => Interlocked.Increment(ref fetchCount) == 1
+                ? oldPayload.Task
+                : Task.FromResult("""{"lrc":{"lyric":"[00:00.00]current lyric"}}"""));
+
+        Task oldFetch = service.FetchLyricsAsync("Same song", "Artist", null, 0);
+        service.Reset();
+        await service.FetchLyricsAsync("Same song", "Artist", null, 0);
+        oldPayload.SetResult("""{"lrc":{"lyric":"[00:00.00]stale lyric"}}""");
+        await oldFetch;
+
+        Assert.Equal("current lyric", service.GetCurrentLine());
+        service.Reset();
+        await service.FetchLyricsAsync("Same song", "Artist", null, 0);
+        Assert.Equal("current lyric", service.GetCurrentLine());
+        Assert.Equal(2, fetchCount);
+    }
+
+    [Fact]
     public async Task LyricsService_handles_concurrent_state_updates_and_resets_safely()
     {
         using LyricsService service = new(

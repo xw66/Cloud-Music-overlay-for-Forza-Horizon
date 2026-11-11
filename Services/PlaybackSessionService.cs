@@ -138,7 +138,11 @@ public sealed class PlaybackSessionService : IDisposable
             {
                 _latestSnapshot = PlaybackSnapshot.StartingFor(
                     source,
-                    _timeProvider.GetUtcNow());
+                    _timeProvider.GetUtcNow()) with
+                {
+                    TrackVersion = _latestSnapshot.TrackVersion + 1,
+                    TimelineVersion = _latestSnapshot.TimelineVersion + 1
+                };
             }
             else if (!timelineEnabled)
             {
@@ -147,7 +151,7 @@ public sealed class PlaybackSessionService : IDisposable
                     Position = null,
                     IsPlaying = null,
                     TimelineCapturedAt = null,
-                    TimelineVersion = 0,
+                    TimelineVersion = _latestSnapshot.TimelineVersion + 1,
                     ConsecutiveFailures = 0,
                     LastError = null,
                     Health = source.IsAvailable

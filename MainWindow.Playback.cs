@@ -128,8 +128,20 @@ public partial class MainWindow
         }
     }
 
-    private async Task ExecutePollTickAsync(CancellationToken ct)
+    private Task ExecutePollTickAsync(CancellationToken ct)
     {
+        return Dispatcher.InvokeAsync(
+            () => ApplyPlaybackSnapshotAsync(_playbackSession.LatestSnapshot),
+            DispatcherPriority.Background,
+            ct).Task.Unwrap();
+    }
+
+    private async Task ApplyPlaybackSnapshotAsync(PlaybackSnapshot snapshot)
+    {
+        if (!string.Equals(snapshot.SourceId, _activeSettings.TrackSource, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
         bool isSmtcSource = IsSmtcSource();
         bool shouldSyncLyrics = SmtcLyricsSyncPolicy.ShouldPrioritizeTimelineSync(_activeSettings.EnableLyrics, isSmtcSource);
         bool shouldSyncNeteaseLyrics = _activeSettings.EnableLyrics && !isSmtcSource;
@@ -139,7 +151,6 @@ public partial class MainWindow
         bool shouldSyncNeteaseTimeline = shouldSyncNeteaseLyrics && supportsPlaybackState;
         bool shouldCheckPauseVisibility = _activeSettings.HideOverlayWhenPaused && isSmtcSource;
 
-        PlaybackSnapshot snapshot = _playbackSession.LatestSnapshot;
         CrashReportService.UpdatePlaybackSnapshot(snapshot);
 
         if (snapshot.Health != _lastReportedHealth ||
@@ -149,7 +160,7 @@ public partial class MainWindow
             _lastReportedHealth = snapshot.Health;
             _lastReportedHealthError = snapshot.LastError;
             _lastReportedHealthSourceId = snapshot.SourceId;
-            _ = Dispatcher.BeginInvoke(() => UpdatePlaybackHealthText(snapshot), DispatcherPriority.Background);
+            UpdatePlaybackHealthText(snapshot);
         }
 
         if (snapshot.TimelineVersion > _lastConsumedTimelineVersion)
@@ -160,10 +171,12 @@ public partial class MainWindow
                 bool isPlaying = snapshot.IsPlaying ?? true;
                 if (shouldCheckPauseVisibility)
                 {
-                    _ = Dispatcher.BeginInvoke(async () =>
+                    await ApplyPauseOverlayVisibilityRuleAsync(isSmtcSource, isPlaying);
+                    if (!string.Equals(snapshot.SourceId, _activeSettings.TrackSource, StringComparison.OrdinalIgnoreCase) ||
+                        snapshot.TimelineVersion != _playbackSession.LatestSnapshot.TimelineVersion)
                     {
-                        await ApplyPauseOverlayVisibilityRuleAsync(isSmtcSource, isPlaying);
-                    }, DispatcherPriority.Background);
+                        return;
+                    }
                 }
 
                 lock (_lyricGate)
@@ -206,77 +219,49 @@ public partial class MainWindow
             if (earlyLine != null && !string.Equals(_lastLyricsPreviewLine, earlyLine, StringComparison.Ordinal))
             {
                 _lastLyricsPreviewLine = earlyLine;
-                _ = Dispatcher.BeginInvoke(() =>
-                {
-                    _overlayWindow.SetLyrics(earlyLine);
-                    SetTextIfChanged(LyricsPreviewText, earlyLine);
-                }, DispatcherPriority.Background);
+                _overlayWindow.SetLyrics(earlyLine);
+                SetTextIfChanged(LyricsPreviewText, earlyLine);
             }
         }
 
         if (snapshot.TrackVersion > _lastConsumedTrackVersion)
         {
-            _lastConsumedTrackVersion = snapshot.TrackVersion;
-            _ = Dispatcher.BeginInvoke(async () =>
-            {
-                await RefreshCurrentTrackAsync(
-                    showOverlay: false,
-                    allowOverlayOnTrackChange: true,
-                    snapshot.Track,
-                    useSnapshot: true);
-            }, DispatcherPriority.Background);
+            await RefreshCurrentTrackAsync(
+                showOverlay: false,
+                allowOverlayOnTrackChange: true,
+                snapshot);
         }
     }
 
-    private async void Refresh_Click(object sender, RoutedEventArgs e)
+    private async Task<PlaybackCommandResult> PrevAsync()
     {
-        await RefreshCurrentTrackAsync(showOverlay: true, allowOverlayOnTrackChange: false);
-    }
-
-    private async void Prev_Click(object sender, RoutedEventArgs e)
-    {
-        await PrevAsync();
-    }
-
-    private async void Next_Click(object sender, RoutedEventArgs e)
-    {
-        await NextAsync();
-    }
-
-    private async void PlayPause_Click(object sender, RoutedEventArgs e)
-    {
-        await TogglePlayPauseAsync();
-    }
-
-    private async Task PrevAsync()
-    {
-        if (!await ExecutePlaybackCommandAsync(PlaybackCommand.Previous, "上一首"))
+        PlaybackCommandResult result = await ExecutePlaybackCommandAsync(PlaybackCommand.Previous, "上一首");
+        if (result.Succeeded)
         {
-            return;
+            await RefreshAfterControlAsync();
         }
-
-        await RefreshAfterControlAsync();
+        return result;
     }
 
-    private async Task NextAsync()
+    private async Task<PlaybackCommandResult> NextAsync()
     {
-        if (!await ExecutePlaybackCommandAsync(PlaybackCommand.Next, "下一首"))
+        PlaybackCommandResult result = await ExecutePlaybackCommandAsync(PlaybackCommand.Next, "下一首");
+        if (result.Succeeded)
         {
-            return;
+            await RefreshAfterControlAsync();
         }
-
-        await RefreshAfterControlAsync();
+        return result;
     }
 
-    private async Task TogglePlayPauseAsync()
+    private async Task<PlaybackCommandResult> TogglePlayPauseAsync()
     {
-        if (!await ExecutePlaybackCommandAsync(PlaybackCommand.TogglePlayPause, "播放/暂停"))
+        PlaybackCommandResult result = await ExecutePlaybackCommandAsync(PlaybackCommand.TogglePlayPause, "播放/暂停");
+        if (result.Succeeded)
         {
-            return;
+            SetStatus("状态：已发送播放/暂停指令。", false);
+            await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
         }
-
-        SetStatus("状态：已发送播放/暂停指令。", false);
-        await RefreshCurrentTrackAsync(showOverlay: false, allowOverlayOnTrackChange: false);
+        return result;
     }
 
     private void UpdatePlaybackHealthText(PlaybackSnapshot snapshot)
@@ -312,42 +297,47 @@ public partial class MainWindow
         _nowPlayingViewModel.ConnectionStatusDetail = detail;
     }
 
-    private async Task<bool> ExecutePlaybackCommandAsync(PlaybackCommand command, string displayName)
+    private async Task<PlaybackCommandResult> ExecutePlaybackCommandAsync(PlaybackCommand command, string displayName)
     {
         PlaybackCommandResult result = await _playbackCoordinator.ExecuteAsync(command, _activeSettings);
         if (result.Succeeded)
         {
-            return true;
+            return result;
         }
 
         if (result.Status == PlaybackCommandStatus.Unsupported)
         {
-            SetStatus("状态：当前系统版本不支持 SMTC 控制。", false);
-            return false;
+            SetStatus(PlaybackCoordinator.IsSmtcSource(result.SourceId)
+                ? "状态：当前系统版本不支持 SMTC 控制。"
+                : $"状态：网易云当前不支持“{displayName}”。请确认 Windows 媒体面板能控制网易云。", false);
+            return result;
         }
 
         SetStatus(PlaybackCoordinator.IsSmtcSource(result.SourceId)
             ? $"状态：SMTC 发送“{displayName}”失败。"
-            : $"状态：发送“{displayName}”快捷键失败，请检查快捷键格式。", false);
-        return false;
+            : $"状态：网易云 SMTC 执行“{displayName}”失败。", false);
+        return result;
     }
 
-    private async Task ToggleOverlayVisibilityAsync()
+    private async Task<PlaybackCommandResult> ToggleOverlayVisibilityAsync()
     {
         if (_overlayWindow.IsContentVisible)
         {
             await _overlayWindow.ConcealAsync();
             _overlayHiddenByPause = false;
             SetStatus("状态：已隐藏悬浮窗。", false);
-            return;
+            return new PlaybackCommandResult(PlaybackCommandStatus.Succeeded, _activeSettings.TrackSource);
         }
 
         _overlayHiddenByPause = false;
-        await RefreshCurrentTrackAsync(showOverlay: true, allowOverlayOnTrackChange: false);
+        bool displayed = await RefreshCurrentTrackAsync(showOverlay: true, allowOverlayOnTrackChange: false);
         if (_overlayWindow.IsContentVisible)
         {
             SetStatus("状态：已显示悬浮窗。", false);
         }
+        return new PlaybackCommandResult(
+            displayed ? PlaybackCommandStatus.Succeeded : PlaybackCommandStatus.Failed,
+            _activeSettings.TrackSource);
     }
 
     private async Task ApplyPauseOverlayVisibilityRuleAsync()
@@ -360,6 +350,11 @@ public partial class MainWindow
         }
 
         PlaybackSnapshot snapshot = await _playbackSession.RefreshTimelineAsync();
+        if (!string.Equals(snapshot.SourceId, _activeSettings.TrackSource, StringComparison.OrdinalIgnoreCase) ||
+            snapshot.TimelineVersion != _playbackSession.LatestSnapshot.TimelineVersion)
+        {
+            return;
+        }
         _lastConsumedTimelineVersion = Math.Max(
             _lastConsumedTimelineVersion,
             snapshot.TimelineVersion);
@@ -374,7 +369,8 @@ public partial class MainWindow
         if (OverlayVisibilityPolicy.ShouldRestoreWhenPlaybackResumed(_activeSettings.HideOverlayWhenPaused, isSmtcSource, isPlaying, _overlayHiddenByPause))
         {
             _overlayHiddenByPause = false;
-            await RefreshCurrentTrackAsync(showOverlay: true, allowOverlayOnTrackChange: false);
+            await RefreshCurrentTrackAsync(showOverlay: true, allowOverlayOnTrackChange: false,
+                _playbackSession.LatestSnapshot);
             return;
         }
 
@@ -424,11 +420,10 @@ public partial class MainWindow
         }
     }
 
-    private async Task RefreshCurrentTrackAsync(
+    private async Task<bool> RefreshCurrentTrackAsync(
         bool showOverlay,
         bool allowOverlayOnTrackChange,
-        TrackInfo? snapshotTrack = null,
-        bool useSnapshot = false)
+        PlaybackSnapshot? snapshot = null)
     {
         try
         {
@@ -436,21 +431,22 @@ public partial class MainWindow
             if (useSmtc && !_playbackCoordinator.SupportsSource(_activeSettings.TrackSource))
             {
                 SetStatus("状态：当前系统版本不支持 SMTC，请切换到网易云窗口标题模式。", false);
-                return;
+                return false;
             }
 
-            TrackInfo? track = snapshotTrack;
-            if (!useSnapshot)
+            snapshot ??= await _playbackSession.RefreshTrackAsync();
+            if (!string.Equals(snapshot.SourceId, _activeSettings.TrackSource, StringComparison.OrdinalIgnoreCase) ||
+                snapshot.TrackVersion != _playbackSession.LatestSnapshot.TrackVersion)
             {
-                PlaybackSnapshot snapshot = await _playbackSession.RefreshTrackAsync();
-                _lastConsumedTrackVersion = Math.Max(
-                    _lastConsumedTrackVersion,
-                    snapshot.TrackVersion);
-                track = snapshot.Track;
+                return false;
             }
+            useSmtc = PlaybackCoordinator.IsSmtcSource(snapshot.SourceId);
+            _lastConsumedTrackVersion = Math.Max(_lastConsumedTrackVersion, snapshot.TrackVersion);
+            TrackInfo? track = snapshot.Track;
 
             if (track == null)
             {
+                _lyricsContextVersion++;
                 _smtcCoverRefreshCts?.Cancel();
                 _smtcCoverRefreshCts = null;
                 lock (_lyricGate)
@@ -463,7 +459,7 @@ public partial class MainWindow
                 if (!string.IsNullOrEmpty(_lastLyricsPreviewLine))
                 {
                     _lastLyricsPreviewLine = string.Empty;
-                    _ = Dispatcher.BeginInvoke(() => _overlayWindow.SetLyrics(null), DispatcherPriority.Background);
+                    _overlayWindow.SetLyrics(null);
                 }
 
                 if (!string.IsNullOrEmpty(_lastDisplayTrackKey))
@@ -493,13 +489,17 @@ public partial class MainWindow
                 SetStatusIfChanged(useSmtc ? "状态：未读取到 SMTC 媒体会话。" : "状态：未读取到网易云窗口标题。", false);
                 _lastTrackKey = string.Empty;
                 _lastDisplayTrackKey = string.Empty;
-                return;
+                return false;
             }
 
             string currentTrackKey = useSmtc
                 ? TrackIdentity.BuildTrackKey(track, includeSourceAppId: true)
                 : TrackIdentity.BuildNeteaseTrackKey(track);
             bool changed = !string.Equals(_lastTrackKey, currentTrackKey, StringComparison.Ordinal);
+            if (changed)
+            {
+                _lyricsContextVersion++;
+            }
             _lastTrackKey = currentTrackKey;
             bool shouldDelayImmediateSmtcCover = useSmtc
                 && changed
@@ -557,7 +557,6 @@ public partial class MainWindow
             if (showOverlay || (allowOverlayOnTrackChange && changed))
             {
                 _diagnostic.Info($"Track changed: {track.Name} - {track.Artist} (source={track.SourceAppId})");
-                _songDetectedTime = Environment.TickCount / 1000.0;
                 BoostPolling();
                 await _overlayWindow.ShowTrackAsync(CreateTrackWithCover(track, immediateCoverBytes));
             }
@@ -567,43 +566,20 @@ public partial class MainWindow
                 double startTime = _smtcLyricTimingController.GetCurrentDisplayPositionSeconds()
                     ?? SmtcLyricsSyncPolicy.GetDisplayPlaybackPositionSeconds(
                         SmtcLyricsSyncPolicy.GetInitialPlaybackPositionSeconds(_lastSmtcPlaybackPositionSeconds));
-                double duration = track.DurationSeconds;
                 if (changed)
                 {
                     lock (_lyricGate)
                     {
                         _lyricsService.Reset();
                     }
-                    _ = Dispatcher.BeginInvoke(() => _overlayWindow.SetLyrics(null), DispatcherPriority.Background);
+                    _overlayWindow.SetLyrics(null);
                     _lastLyricsPreviewLine = string.Empty;
                     SetTextIfChanged(LyricsPreviewText, UiText.LyricsPreviewPlaceholder);
                 }
 
                 if (changed || !_lyricsService.HasLyrics)
                 {
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await _lyricsService.FetchLyricsAsync(
-                                track.Name,
-                                track.Artist,
-                                track.AlbumTitle,
-                                startTime,
-                                duration);
-                            string? line = _lyricsService.GetCurrentLine();
-                            _ = Dispatcher.BeginInvoke(() => UpdateLyricsPreviewAfterFetch(line), DispatcherPriority.Background);
-                        }
-                        catch
-                        {
-                            Dispatcher.Invoke(() =>
-                            {
-                                _overlayWindow.SetLyrics(null);
-                                _lastLyricsPreviewLine = string.Empty;
-                                SetTextIfChanged(LyricsPreviewText, "本次未获取到歌词内容。");
-                            });
-                        }
-                    });
+                    _ = FetchCurrentLyricsAsync(track, startTime, snapshot.SourceId, currentTrackKey);
                 }
             }
             else if (_activeSettings.EnableLyrics && !useSmtc)
@@ -616,7 +592,7 @@ public partial class MainWindow
                         _neteaseLyricTimingController.Reset();
                         _neteaseLyricTimingController.Start();
                     }
-                    _ = Dispatcher.BeginInvoke(() => _overlayWindow.SetLyrics(null), DispatcherPriority.Background);
+                    _overlayWindow.SetLyrics(null);
                     _lastLyricsPreviewLine = string.Empty;
                     SetTextIfChanged(LyricsPreviewText, UiText.LyricsPreviewPlaceholder);
                 }
@@ -636,30 +612,7 @@ public partial class MainWindow
                 }
                 if (changed || !_lyricsService.HasLyrics)
                 {
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await _lyricsService.FetchLyricsAsync(
-                                track.Name,
-                                track.Artist,
-                                track.AlbumTitle,
-                                startTime,
-                                track.DurationSeconds,
-                                track.SongId);
-                            string? line = _lyricsService.GetCurrentLine();
-                            _ = Dispatcher.BeginInvoke(() => UpdateLyricsPreviewAfterFetch(line), DispatcherPriority.Background);
-                        }
-                        catch
-                        {
-                            Dispatcher.Invoke(() =>
-                            {
-                                _overlayWindow.SetLyrics(null);
-                                _lastLyricsPreviewLine = string.Empty;
-                                SetTextIfChanged(LyricsPreviewText, "本次未获取到歌词内容。");
-                            });
-                        }
-                    });
+                    _ = FetchCurrentLyricsAsync(track, startTime, snapshot.SourceId, currentTrackKey);
                 }
             }
             else
@@ -674,7 +627,7 @@ public partial class MainWindow
                 if (!string.IsNullOrEmpty(_lastLyricsPreviewLine))
                 {
                     _lastLyricsPreviewLine = string.Empty;
-                    _ = Dispatcher.BeginInvoke(() => _overlayWindow.SetLyrics(null), DispatcherPriority.Background);
+                    _overlayWindow.SetLyrics(null);
                 }
                 SetTextIfChanged(LyricsPreviewText, UiText.LyricsPreviewPlaceholder);
             }
@@ -682,14 +635,54 @@ public partial class MainWindow
             SetStatusIfChanged(useSmtc ? "状态：已从 SMTC 同步。" : "状态：已从网易云窗口标题同步。", false);
             if (UiRefreshPolicy.ShouldRefreshTrackMetadata(changed, displayChanged, showOverlay))
             {
-            SchedulePageMetaTextsUpdate();
-        }
+                SchedulePageMetaTextsUpdate();
+            }
+            return true;
         }
         catch (Exception ex)
         {
             _diagnostic.Error("RefreshCurrentTrackAsync failed", ex);
             SetStatusIfChanged($"状态：读取歌曲数据失败。{ex.Message}", true);
+            return false;
         }
+    }
+
+    private async Task FetchCurrentLyricsAsync(TrackInfo track, double startTime, string sourceId, string trackKey)
+    {
+        long contextVersion = _lyricsContextVersion;
+        try
+        {
+            await _lyricsService.FetchLyricsAsync(
+                track.Name,
+                track.Artist,
+                track.AlbumTitle,
+                startTime,
+                track.DurationSeconds,
+                PlaybackCoordinator.IsSmtcSource(sourceId) ? null : track.SongId);
+            if (IsCurrentLyricsContext(sourceId, trackKey, contextVersion))
+            {
+                UpdateLyricsPreviewAfterFetch(_lyricsService.GetCurrentLine());
+            }
+        }
+        catch (Exception ex)
+        {
+            _diagnostic.Error("Lyrics fetch failed", ex);
+            if (IsCurrentLyricsContext(sourceId, trackKey, contextVersion))
+            {
+                _overlayWindow.SetLyrics(null);
+                _lastLyricsPreviewLine = string.Empty;
+                SetTextIfChanged(LyricsPreviewText, "本次未获取到歌词内容。");
+                _nowPlayingViewModel.LyricsPreview = "本次未获取到歌词内容。";
+            }
+        }
+    }
+
+    private bool IsCurrentLyricsContext(string sourceId, string trackKey, long contextVersion)
+    {
+        return _activeSettings.EnableLyrics &&
+               contextVersion == _lyricsContextVersion &&
+               string.Equals(sourceId, _activeSettings.TrackSource, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(trackKey, _lastDisplayTrackKey, StringComparison.Ordinal);
     }
 
     private void StartSmtcCoverRefresh(string expectedTrackKey, byte[]? pendingCoverBytes)
@@ -745,7 +738,8 @@ public partial class MainWindow
 
                     Dispatcher.Invoke(() =>
                     {
-                        if (!string.Equals(_lastDisplayTrackKey, expectedTrackKey, StringComparison.Ordinal))
+                        if (cts.IsCancellationRequested || !IsSmtcSource() ||
+                            !string.Equals(_lastDisplayTrackKey, expectedTrackKey, StringComparison.Ordinal))
                         {
                             return;
                         }

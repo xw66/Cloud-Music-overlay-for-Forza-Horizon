@@ -36,24 +36,22 @@ public partial class MainWindow
         }).Task;
     }
 
-    private Task HandleRemoteControlActionAsync(string action)
+    private Task<PlaybackCommandResult> HandleRemoteControlActionAsync(string action)
     {
         return Dispatcher.InvokeAsync(async () =>
         {
             switch (action)
             {
                 case "previous":
-                    await PrevAsync();
-                    break;
+                    return await PrevAsync();
                 case "next":
-                    await NextAsync();
-                    break;
+                    return await NextAsync();
                 case "togglePlayPause":
-                    await TogglePlayPauseAsync();
-                    break;
+                    return await TogglePlayPauseAsync();
                 case "toggleOverlay":
-                    await ToggleOverlayVisibilityAsync();
-                    break;
+                    return await ToggleOverlayVisibilityAsync();
+                default:
+                    return new PlaybackCommandResult(PlaybackCommandStatus.Unsupported, _activeSettings.TrackSource);
             }
         }).Task.Unwrap();
     }

@@ -16,9 +16,6 @@ public sealed class OverlaySettings
     public string AppToggleHotkey { get; set; } = "Ctrl+Shift+Down";
     public string AppToggleOverlayHotkey { get; set; } = "Ctrl+Shift+H";
 
-    public string NeteasePrevHotkey { get; set; } = "Ctrl+Alt+Left";
-    public string NeteaseNextHotkey { get; set; } = "Ctrl+Alt+Right";
-    public string NeteaseToggleHotkey { get; set; } = "Ctrl+Alt+P";
 
     public bool EnableGamepadHotkeys { get; set; } = false;
     public string GamepadPrevHotkey { get; set; } = "LB+Left";

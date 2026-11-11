@@ -37,6 +37,7 @@ public sealed class LyricsService : IDisposable
     private readonly object _cacheGate = new();
     private string _lastLyricsKey = string.Empty;
     private string? _inFlightKey;
+    private long _requestVersion;
     private long _lastFetchAttemptAtMs;
     private readonly Dictionary<string, List<(double Time, string Text)>> _lyricsCache = new(StringComparer.Ordinal);
     private readonly LinkedList<string> _lyricsCacheOrder = new();
@@ -100,54 +101,51 @@ public sealed class LyricsService : IDisposable
         double durationSeconds = 0,
         string? preferredSongId = null)
     {
-        if (ShouldSkipLookup(songName, artist))
-        {
-            _diagnostic?.Info($"Lyrics fetch skipped for placeholder metadata: {songName} / {artist}");
-            _cachedLyrics = null;
-            _currentLine = string.Empty;
-            _lastLyricsKey = string.Empty;
-            _inFlightKey = null;
-            _lastLineIndex = -1;
-            return;
-        }
-
         string key = BuildLyricsKey(songName, artist, albumTitle, durationSeconds);
-        if (string.Equals(_lastLyricsKey, key, StringComparison.Ordinal))
+        long requestVersion;
+        lock (_cacheGate)
         {
-            if (_cachedLyrics is { Count: > 0 })
+            if (ShouldSkipLookup(songName, artist))
             {
+                _diagnostic?.Info($"Lyrics fetch skipped for placeholder metadata: {songName} / {artist}");
+                Reset();
                 return;
             }
 
-            if (string.Equals(_inFlightKey, key, StringComparison.Ordinal))
+            if (string.Equals(_lastLyricsKey, key, StringComparison.Ordinal))
             {
-                _diagnostic?.Info($"Lyrics fetch skipped because request is already in flight: {songName} / {artist}");
-                return;
+                if (_cachedLyrics is { Count: > 0 })
+                {
+                    return;
+                }
+
+                if (string.Equals(_inFlightKey, key, StringComparison.Ordinal))
+                {
+                    _diagnostic?.Info($"Lyrics fetch skipped because request is already in flight: {songName} / {artist}");
+                    return;
+                }
+
+                if (_nowProvider() - _lastFetchAttemptAtMs < RetryAfterMissMs)
+                {
+                    _diagnostic?.Info($"Lyrics fetch throttled after previous miss: {songName} / {artist}");
+                    return;
+                }
             }
 
-            if (_nowProvider() - _lastFetchAttemptAtMs < RetryAfterMissMs)
-            {
-                _diagnostic?.Info($"Lyrics fetch throttled after previous miss: {songName} / {artist}");
-                return;
-            }
-        }
-
-        if (TryGetCachedLyrics(key, out List<(double Time, string Text)>? cachedLyrics))
-        {
-            lock (_cacheGate)
+            requestVersion = ++_requestVersion;
+            if (TryGetCachedLyrics(key, out List<(double Time, string Text)>? cachedLyrics))
             {
                 _lastLyricsKey = key;
+                _inFlightKey = null;
                 _cachedLyrics = cachedLyrics;
                 _currentPlaybackPositionSeconds = startTimeSeconds;
                 _currentLine = string.Empty;
                 _lastLineIndex = -1;
+                return;
             }
-            return;
-        }
 
-        lock (_cacheGate)
-        {
             _lastLyricsKey = key;
+            _cachedLyrics = null;
             _currentPlaybackPositionSeconds = startTimeSeconds;
             _currentLine = string.Empty;
             _lastLineIndex = -1;
@@ -165,7 +163,7 @@ public sealed class LyricsService : IDisposable
 
             lock (_cacheGate)
             {
-                if (!string.Equals(_lastLyricsKey, key, StringComparison.Ordinal))
+                if (_requestVersion != requestVersion)
                 {
                     _diagnostic?.Info($"Lyrics fetch ignored stale result: {songName} / {artist}");
                     return;
@@ -173,22 +171,25 @@ public sealed class LyricsService : IDisposable
 
                 _cachedLyrics = fetchedLyrics;
                 _lastLineIndex = -1;
-            }
-            if (_cachedLyrics is { Count: > 0 })
-            {
-                CacheLyrics(key, _cachedLyrics);
-                _diagnostic?.Info($"Lyrics fetch succeeded: {songName} / {artist}, lines={_cachedLyrics.Count}");
-            }
-            else
-            {
-                _diagnostic?.Warn($"Lyrics fetch returned empty: {songName} / {artist}");
+                if (fetchedLyrics is { Count: > 0 })
+                {
+                    CacheLyrics(key, fetchedLyrics);
+                    _diagnostic?.Info($"Lyrics fetch succeeded: {songName} / {artist}, lines={fetchedLyrics.Count}");
+                }
+                else
+                {
+                    _diagnostic?.Warn($"Lyrics fetch returned empty: {songName} / {artist}");
+                }
             }
         }
         finally
         {
-            if (string.Equals(_inFlightKey, key, StringComparison.Ordinal))
+            lock (_cacheGate)
             {
-                _inFlightKey = null;
+                if (_requestVersion == requestVersion)
+                {
+                    _inFlightKey = null;
+                }
             }
         }
     }
@@ -238,6 +239,7 @@ public sealed class LyricsService : IDisposable
     {
         lock (_cacheGate)
         {
+            _requestVersion++;
             _cachedLyrics = null;
             _lastLyricsKey = string.Empty;
             _inFlightKey = null;

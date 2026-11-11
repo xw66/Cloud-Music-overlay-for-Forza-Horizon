@@ -25,7 +25,6 @@ public static class AppServiceRegistration
 
         // 播放源实现与探针
         services.AddSingleton<NeteaseOfficialResolver>();
-        services.AddSingleton<NeteaseShortcutSender>();
         services.AddSingleton<NeteaseMemoryPlaybackProbe>();
         services.AddSingleton<SmtcTrackService>();
         services.AddSingleton<NeteaseLocalDataService>();
@@ -33,7 +32,7 @@ public static class AppServiceRegistration
         // 播放源列表与协调器
         services.AddSingleton<IPlaybackSource>(sp => new NeteasePlaybackSource(
             sp.GetRequiredService<NeteaseLocalDataService>(),
-            sp.GetRequiredService<NeteaseShortcutSender>(),
+            sp.GetRequiredService<SmtcTrackService>().ExecuteNeteaseCommandAsync,
             sp.GetRequiredService<NeteaseMemoryPlaybackProbe>()));
 
         services.AddSingleton<IPlaybackSource>(sp => new SmtcPlaybackSource(

@@ -1,15 +1,20 @@
 param(
-    [string]$Version = "v3.1.1"
+    [ValidatePattern('\Av\d+\.\d+\.\d+\z')]
+    [string]$Version = "v3.1.2"
 )
 
 $ErrorActionPreference = "Stop"
 
 $workspaceRoot = $PSScriptRoot
-$publishDir = Join-Path $workspaceRoot "publish\$Version"
+$publishRoot = [System.IO.Path]::GetFullPath((Join-Path $workspaceRoot "publish"))
+$publishDir = [System.IO.Path]::GetFullPath((Join-Path $publishRoot $Version))
+if (![string]::Equals([System.IO.Path]::GetDirectoryName($publishDir), $publishRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Publish directory must be a direct child of $publishRoot."
+}
 
 Write-Host "Starting build & packaging for version $Version..."
-if (Test-Path $publishDir) {
-    Remove-Item -Path $publishDir -Recurse -Force
+if (Test-Path -LiteralPath $publishDir) {
+    Remove-Item -LiteralPath $publishDir -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
 
@@ -29,36 +34,39 @@ foreach ($rid in $rids) {
         -p:DebugSymbols=false `
         -p:DebugType=None `
         -o $outDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "Publishing $rid failed with exit code $LASTEXITCODE."
+    }
 
     $singleExe = Join-Path $outDir "HorizonRadioOverlay.exe"
     $targetExeName = "HorizonRadioOverlay_${Version}_${rid}.exe"
     $targetExePath = Join-Path $publishDir $targetExeName
-    Copy-Item $singleExe $targetExePath -Force
+    Copy-Item -LiteralPath $singleExe -Destination $targetExePath -Force
     Write-Host "Created single-file: $targetExeName"
 
     $zipName = "HorizonRadioOverlay_${Version}_${rid}.zip"
     $zipPath = Join-Path $publishDir $zipName
-    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+    if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
     Compress-Archive -Path "$outDir\*" -DestinationPath $zipPath -Force
     Write-Host "Created zip package: $zipName"
 }
 
 # 复制 Release Notes
 $notesFile = Join-Path $workspaceRoot "RELEASE_NOTES_${Version}.md"
-if (Test-Path $notesFile) {
-    Copy-Item $notesFile (Join-Path $publishDir "RELEASE_NOTES_${Version}.md") -Force
+if (Test-Path -LiteralPath $notesFile) {
+    Copy-Item -LiteralPath $notesFile -Destination (Join-Path $publishDir "RELEASE_NOTES_${Version}.md") -Force
 }
 
 # 计算 SHA256 哈希
 Write-Host "`nGenerating SHA256 checksums..."
 $shaFile = Join-Path $publishDir "SHA256SUMS.txt"
-$filesToHash = Get-ChildItem -Path $publishDir -File -Filter "HorizonRadioOverlay_*" | Sort-Object Name
+$filesToHash = Get-ChildItem -LiteralPath $publishDir -File -Filter "HorizonRadioOverlay_*" | Sort-Object Name
 $hashEntries = foreach ($file in $filesToHash) {
-    $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $($file.Name)"
 }
-$hashEntries | Set-Content -Path $shaFile -Encoding utf8
+$hashEntries | Set-Content -LiteralPath $shaFile -Encoding utf8
 Write-Host "SHA256SUMS.txt generated successfully."
 
 Write-Host "`nAll packages built successfully in: $publishDir"
-Get-ChildItem -Path $publishDir -File | Format-Table Name, Length, LastWriteTime -AutoSize
+Get-ChildItem -LiteralPath $publishDir -File | Format-Table Name, Length, LastWriteTime -AutoSize

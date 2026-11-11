@@ -48,14 +48,13 @@ public partial class MainWindow
                 if (_isInitializingOverlayControls) return;
                 ApplyOverlaySettingsFromControls();
                 _diagnostic.Enabled = _activeSettings.DiagnosticMode;
-                _overlaySettingsService.Save(_activeSettings);
-                _remoteControlService.ApplySettings(_activeSettings);
-                UpdateRemoteControlPage();
+                if (!TrySaveActiveSettings()) return;
                 _ = ApplyPauseOverlayVisibilityRuleAsync();
             };
             _floatingSettingsViewModel.TrackSourceChanged += async () =>
             {
                 if (_isInitializingOverlayControls) return;
+                _lyricsContextVersion++;
                 ApplyOverlaySettingsFromControls();
                 _floatingSettingsViewModel.UpdateCapabilities(_playbackCoordinator);
                 _smtcCoverRefreshCts?.Cancel();
@@ -97,7 +96,6 @@ public partial class MainWindow
                 });
             };
             _floatingSettingsPageWired = true;
-            _floatingSettingsViewModel.LoadFrom(_activeSettings, _playbackCoordinator);
         }
 
         if (_hotkeySettingsPageView != null && !_hotkeySettingsPageWired)
@@ -109,7 +107,6 @@ public partial class MainWindow
                 ApplyHotkeySettings();
             };
             _hotkeySettingsPageWired = true;
-            _hotkeySettingsViewModel.LoadFromSettings(_activeSettings);
             SetupHotkeyCaptureInputs();
         }
 
@@ -120,20 +117,19 @@ public partial class MainWindow
             {
                 if (_isInitializingOverlayControls) return;
                 ApplyOverlaySettingsFromControls();
-                _overlaySettingsService.Save(_activeSettings);
+                if (!TrySaveActiveSettings()) return;
                 SetStatus(_remoteControlService.IsRunning ? "状态：手机遥控已应用。" : $"状态：{_remoteControlService.StatusMessage}", !_remoteControlService.IsRunning && _activeSettings.EnableRemoteControl);
             };
             _remoteControlViewModel.RequestResetToken += () =>
             {
                 _activeSettings.RemoteControlToken = RemoteControlService.GenerateToken();
-                _overlaySettingsService.Save(_activeSettings);
                 _remoteControlService.ApplySettings(_activeSettings);
                 UpdateRemoteControlPage();
+                if (!TrySaveActiveSettings()) return;
                 SetStatus("状态：手机遥控连接令牌已重置。", false);
             };
             _remoteControlViewModel.StatusNotification += (msg, isErr) => SetStatus(msg, isErr);
             _remoteControlPageWired = true;
-            _remoteControlViewModel.LoadFromSettings(_activeSettings);
             UpdateRemoteControlPage();
         }
 
@@ -155,7 +151,6 @@ public partial class MainWindow
                 _themeSettingsViewModel.ApplyColorFromPicker(hex);
             };
             _themeSettingsPageWired = true;
-            _themeSettingsViewModel.LoadFrom(_activeSettings);
         }
 
         if (_logsPageView != null && !_logsPageWired)

@@ -16,9 +16,6 @@ public sealed class SecondaryViewModelsTests
             AppNextHotkey = "Alt+Right",
             AppToggleHotkey = "Alt+Down",
             AppToggleOverlayHotkey = "Alt+H",
-            NeteasePrevHotkey = "Ctrl+Shift+P",
-            NeteaseNextHotkey = "Ctrl+Shift+N",
-            NeteaseToggleHotkey = "Ctrl+Shift+Space",
             EnableGamepadHotkeys = true,
             GamepadPrevHotkey = "A+B",
             GamepadNextHotkey = "X+Y",
@@ -32,7 +29,6 @@ public sealed class SecondaryViewModelsTests
         Assert.Equal("Alt+Right", vm.AppNextHotkey);
         Assert.Equal("Alt+Down", vm.AppToggleHotkey);
         Assert.Equal("Alt+H", vm.AppToggleOverlayHotkey);
-        Assert.Equal("Ctrl+Shift+P", vm.NeteasePrevHotkey);
         Assert.True(vm.EnableGamepadHotkeys);
         Assert.Equal("A+B", vm.GamepadPrevHotkey);
 

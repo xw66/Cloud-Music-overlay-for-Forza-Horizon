@@ -15,9 +15,6 @@ public partial class HotkeySettingsPage : UserControl
         configureKeyboard(AppNextHotkeyBox);
         configureKeyboard(AppToggleHotkeyBox);
         configureKeyboard(AppToggleOverlayHotkeyBox);
-        configureKeyboard(NeteasePrevHotkeyBox);
-        configureKeyboard(NeteaseNextHotkeyBox);
-        configureKeyboard(NeteaseToggleHotkeyBox);
 
         configureGamepad(GamepadPrevHotkeyBox);
         configureGamepad(GamepadNextHotkeyBox);

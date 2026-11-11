@@ -15,7 +15,6 @@
                 <RowDefinition Height="16" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <TextBlock Grid.Row="0" Style="{StaticResource PageTitleTextStyle}" Text="{x:Static local:UiText.NavHotkeys}" />
@@ -48,28 +47,6 @@
             </Border>
 
             <Border Grid.Row="3" Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.NeteaseForwardHotkeys}" />
-                    <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyTextStyle}" Text="{x:Static local:UiText.NeteaseForwardHotkeysDesc}" />
-                    <Grid Margin="0,18,0,0">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Previous}" />
-                        <TextBox x:Name="NeteasePrevHotkeyBox" Grid.Column="1" Text="{Binding NeteasePrevHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    </Grid>
-                    <Grid Margin="0,12,0,0">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.Next}" />
-                        <TextBox x:Name="NeteaseNextHotkeyBox" Grid.Column="1" Text="{Binding NeteaseNextHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    </Grid>
-                    <Grid Margin="0,12,0,0">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <TextBlock VerticalAlignment="Center" Text="{x:Static local:UiText.PlayPause}" />
-                        <TextBox x:Name="NeteaseToggleHotkeyBox" Grid.Column="1" Text="{Binding NeteaseToggleHotkey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    </Grid>
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Row="4" Style="{StaticResource CardBorderStyle}">
                 <StackPanel>
                     <DockPanel LastChildFill="False">
                         <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{x:Static local:UiText.GamepadHotkeys}" />

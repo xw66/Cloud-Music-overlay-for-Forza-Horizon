@@ -104,6 +104,82 @@ public sealed class SmtcTrackService : IPlaybackTransport
         return null;
     }
 
+    internal async Task<PlaybackCommandStatus> ExecuteNeteaseCommandAsync(PlaybackCommand command)
+    {
+        if (!RuntimeFeatureSupport.SupportsSmtc())
+        {
+            return PlaybackCommandStatus.Unsupported;
+        }
+
+        try
+        {
+            var manager = await GetManagerAsync();
+            var session = FindNeteaseSession(manager.GetSessions(), GetSourceId);
+            if (session == null)
+            {
+                _diagnostic?.Info("网易云播放控制不可用：未找到唯一的网易云 SMTC 会话。");
+                return PlaybackCommandStatus.Unsupported;
+            }
+
+            var playback = session.GetPlaybackInfo();
+            if (playback is not { Controls: { } controls })
+            {
+                return PlaybackCommandStatus.Unsupported;
+            }
+
+            bool? accepted = command switch
+            {
+                PlaybackCommand.Previous when controls.IsPreviousEnabled => await session.TrySkipPreviousAsync(),
+                PlaybackCommand.Next when controls.IsNextEnabled => await session.TrySkipNextAsync(),
+                PlaybackCommand.TogglePlayPause when controls.IsPlayPauseToggleEnabled => await session.TryTogglePlayPauseAsync(),
+                PlaybackCommand.TogglePlayPause when controls.IsPauseEnabled &&
+                    playback.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing =>
+                    await session.TryPauseAsync(),
+                PlaybackCommand.TogglePlayPause when controls.IsPlayEnabled && playback.PlaybackStatus is
+                    GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused or
+                    GlobalSystemMediaTransportControlsSessionPlaybackStatus.Stopped or
+                    GlobalSystemMediaTransportControlsSessionPlaybackStatus.Opened => await session.TryPlayAsync(),
+                _ => null
+            };
+
+            return accepted switch
+            {
+                true => PlaybackCommandStatus.Succeeded,
+                false => PlaybackCommandStatus.Failed,
+                null => PlaybackCommandStatus.Unsupported
+            };
+        }
+        catch (Exception ex)
+        {
+            _diagnostic?.Error($"网易云 SMTC 控制失败：{command}", ex);
+            return PlaybackCommandStatus.Failed;
+        }
+    }
+
+    [SupportedOSPlatform("windows10.0.17763")]
+    private static string GetSourceId(GlobalSystemMediaTransportControlsSession session) => session.SourceAppUserModelId;
+
+    internal static T? FindNeteaseSession<T>(IEnumerable<T> sessions, Func<T, string> getSourceId) where T : class
+    {
+        T? match = null;
+        foreach (T session in sessions)
+        {
+            if (!string.Equals(getSourceId(session), "cloudmusic.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (match != null)
+            {
+                return null;
+            }
+
+            match = session;
+        }
+
+        return match;
+    }
+
     public async Task<bool> NextAsync()
     {
         if (!RuntimeFeatureSupport.SupportsSmtc())

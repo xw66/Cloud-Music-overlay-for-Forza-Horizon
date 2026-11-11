@@ -190,15 +190,46 @@ public sealed class PlaybackSessionServiceTests
         PlaybackCoordinator coordinator = new([netease, smtc]);
         using PlaybackSessionService session = new(coordinator);
 
-        await session.RefreshTrackAsync();
+        PlaybackSnapshot previous = await session.RefreshTrackAsync();
         session.Configure(PlaybackSourceIds.Smtc, timelineEnabled: false);
         PlaybackSnapshot starting = session.LatestSnapshot;
         PlaybackSnapshot refreshed = await session.RefreshTrackAsync();
 
         Assert.Equal(PlaybackSourceIds.Smtc, starting.SourceId);
         Assert.Null(starting.Track);
-        Assert.Equal(0, starting.TrackVersion);
+        Assert.True(starting.TrackVersion > previous.TrackVersion);
+        Assert.True(refreshed.TrackVersion > starting.TrackVersion);
         Assert.Equal("SMTC", refreshed.Track?.Name);
+    }
+
+    [Fact]
+    public async Task Timeline_versions_keep_increasing_after_disable_and_source_switch()
+    {
+        FakePlaybackSource netease = new(PlaybackSourceIds.Netease)
+        {
+            Timeline = (TimeSpan.FromSeconds(10), true)
+        };
+        FakePlaybackSource smtc = new(PlaybackSourceIds.Smtc)
+        {
+            Timeline = (TimeSpan.FromSeconds(20), false)
+        };
+        using PlaybackSessionService session = new(new PlaybackCoordinator([netease, smtc]));
+        session.Configure(netease.Id, timelineEnabled: true);
+        PlaybackSnapshot first = await session.RefreshTimelineAsync();
+
+        session.Configure(netease.Id, timelineEnabled: false);
+        PlaybackSnapshot disabled = session.LatestSnapshot;
+        Assert.Null(disabled.Position);
+        Assert.True(disabled.TimelineVersion > first.TimelineVersion);
+
+        session.Configure(netease.Id, timelineEnabled: true);
+        PlaybackSnapshot reenabled = await session.RefreshTimelineAsync();
+        Assert.True(reenabled.TimelineVersion > disabled.TimelineVersion);
+
+        session.Configure(smtc.Id, timelineEnabled: true);
+        PlaybackSnapshot switched = await session.RefreshTimelineAsync();
+        Assert.Equal(smtc.Timeline, (switched.Position!.Value, switched.IsPlaying!.Value));
+        Assert.True(switched.TimelineVersion > reenabled.TimelineVersion);
     }
 
     [Fact]
@@ -364,11 +395,9 @@ public sealed class PlaybackSessionServiceTests
             return Task.FromResult(Timeline);
         }
 
-        public Task<bool> ExecuteAsync(
-            PlaybackCommand command,
-            PlaybackControlBindings bindings)
+        public Task<PlaybackCommandStatus> ExecuteAsync(PlaybackCommand command)
         {
-            return Task.FromResult(false);
+            return Task.FromResult(PlaybackCommandStatus.Failed);
         }
     }
 }

@@ -63,7 +63,7 @@ public partial class MainWindow : Window
     private bool _lastStatusIsError;
     private byte[]? _lastPreviewCoverBytes;
     private CancellationTokenSource? _smtcCoverRefreshCts;
-    private double _songDetectedTime;
+    private long _lyricsContextVersion;
     private long _pollBoostUntil;
     private long _lastConsumedTrackVersion;
     private long _lastConsumedTimelineVersion;
@@ -282,6 +282,7 @@ public partial class MainWindow : Window
         InitializeTrayIcon();
         ApplyAutoWindowSize();
         ApplyRuntimeFeatureAvailability();
+        InitializeOverlayControls(_activeSettings);
 
         IsVisibleChanged += (_, _) => UpdateUiVisibilityCache();
         StateChanged += (_, _) => UpdateUiVisibilityCache();
@@ -342,15 +343,12 @@ public partial class MainWindow : Window
         _lifecycle.Register("TrayIcon",
             onDispose: () => _trayIcon?.Dispose());
 
-        _lifecycle.Register("Settings",
-            onDispose: () =>
-            {
-                try { _overlaySettingsService.Save(_activeSettings); } catch { }
-            });
-
         _lifecycle.Register("Diagnostic",
             onStart: () => _diagnostic.Enabled = _activeSettings.DiagnosticMode,
             onDispose: () => _diagnostic.Dispose());
+
+        _lifecycle.Register("Settings",
+            onDispose: () => TrySaveActiveSettings());
 
         _lifecycle.Register("LogWatcher",
             onDispose: () =>

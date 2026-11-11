@@ -112,17 +112,23 @@ public sealed class PlaybackCoordinatorTests
         Assert.Equal(0, smtc.ExecuteCount);
     }
 
-    [Fact]
-    public async Task NeteasePlaybackSource_uses_configured_hotkey_binding()
+    [Theory]
+    [InlineData(PlaybackCommand.Previous, PlaybackCommandStatus.Succeeded)]
+    [InlineData(PlaybackCommand.Next, PlaybackCommandStatus.Unsupported)]
+    [InlineData(PlaybackCommand.TogglePlayPause, PlaybackCommandStatus.Failed)]
+    public async Task NeteasePlaybackSource_preserves_direct_control_result(PlaybackCommand command, PlaybackCommandStatus expected)
     {
-        var sender = new FakeHotkeySender();
-        var source = new NeteasePlaybackSource(new FakeMetadataProvider("Netease"), sender);
-        PlaybackControlBindings bindings = new("Prev", "Next", "Toggle");
+        var commands = new List<PlaybackCommand>();
+        var source = new NeteasePlaybackSource(new FakeMetadataProvider("Netease"), sent =>
+        {
+            commands.Add(sent);
+            return Task.FromResult(expected);
+        });
+        var coordinator = new PlaybackCoordinator([source]);
+        var result = await coordinator.ExecuteAsync(command, new OverlaySettings());
 
-        bool succeeded = await source.ExecuteAsync(PlaybackCommand.Previous, bindings);
-
-        Assert.True(succeeded);
-        Assert.Equal("Prev", sender.LastHotkey);
+        Assert.Equal(new PlaybackCommandResult(expected, PlaybackSourceIds.Netease), result);
+        Assert.Equal(command, Assert.Single(commands));
         Assert.True(source.Capabilities.HasFlag(PlaybackSourceCapabilities.TrackMetadata));
         Assert.False(source.Capabilities.HasFlag(PlaybackSourceCapabilities.PlaybackState));
     }
@@ -133,7 +139,7 @@ public sealed class PlaybackCoordinatorTests
         var stateProvider = new FakeTrackAwarePlaybackStateProvider();
         var source = new NeteasePlaybackSource(
             new FakeMetadataProvider("Netease"),
-            new FakeHotkeySender(),
+            _ => Task.FromResult(PlaybackCommandStatus.Unsupported),
             stateProvider);
 
         TrackInfo? track = await source.GetCurrentTrackAsync();
@@ -151,12 +157,10 @@ public sealed class PlaybackCoordinatorTests
         var transport = new FakePlaybackTransport("SMTC");
         var source = new SmtcPlaybackSource(transport, () => true);
 
-        bool succeeded = await source.ExecuteAsync(
-            PlaybackCommand.TogglePlayPause,
-            new PlaybackControlBindings("", "", ""));
+        PlaybackCommandStatus status = await source.ExecuteAsync(PlaybackCommand.TogglePlayPause);
         (TimeSpan Position, bool IsPlaying)? state = await source.GetPlaybackStateAsync();
 
-        Assert.True(succeeded);
+        Assert.Equal(PlaybackCommandStatus.Succeeded, status);
         Assert.Equal(1, transport.ToggleCount);
         Assert.Equal(TimeSpan.FromSeconds(10), state?.Position);
         Assert.True(source.Capabilities.HasFlag(PlaybackSourceCapabilities.PlaybackState));
@@ -193,10 +197,10 @@ public sealed class PlaybackCoordinatorTests
                 (TimeSpan.FromSeconds(10), true));
         }
 
-        public Task<bool> ExecuteAsync(PlaybackCommand command, PlaybackControlBindings bindings)
+        public Task<PlaybackCommandStatus> ExecuteAsync(PlaybackCommand command)
         {
             ExecuteCount++;
-            return Task.FromResult(true);
+            return Task.FromResult(PlaybackCommandStatus.Succeeded);
         }
     }
 
@@ -239,17 +243,6 @@ public sealed class PlaybackCoordinatorTests
         {
             return Task.FromResult<(TimeSpan Position, bool IsPlaying)?>(
                 (TimeSpan.FromSeconds(10), true));
-        }
-    }
-
-    private sealed class FakeHotkeySender : IHotkeySender
-    {
-        public string? LastHotkey { get; private set; }
-
-        public bool Send(string hotkeyText)
-        {
-            LastHotkey = hotkeyText;
-            return true;
         }
     }
 

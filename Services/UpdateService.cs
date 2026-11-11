@@ -36,24 +36,7 @@ public sealed class UpdateService : IDisposable
             string tagName = root.TryGetProperty("tag_name", out var tag) ? tag.GetString() ?? "" : "";
             string releaseNotes = root.TryGetProperty("body", out var body) ? body.GetString() ?? "" : "";
 
-            string downloadUrl = "";
-            if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var asset in assets.EnumerateArray())
-                {
-                    string name = asset.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-                    if (name.Contains("win-x64"))
-                    {
-                        downloadUrl = asset.TryGetProperty("browser_download_url", out var url) ? url.GetString() ?? "" : "";
-                        break;
-                    }
-                }
-            }
-
-            if (string.IsNullOrEmpty(downloadUrl))
-            {
-                downloadUrl = root.TryGetProperty("html_url", out var html) ? html.GetString() ?? "" : "";
-            }
+            string downloadUrl = root.GetProperty("html_url").GetString()!;
 
             Version? latestVersion = ParseVersion(tagName);
             if (latestVersion == null)

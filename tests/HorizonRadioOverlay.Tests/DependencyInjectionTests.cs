@@ -36,7 +36,6 @@ public class DependencyInjectionTests
         Assert.NotNull(sp.GetService<SmtcLyricTimingController>());
         Assert.NotNull(sp.GetService<NeteaseLyricTimingController>());
         Assert.NotNull(sp.GetService<NeteaseOfficialResolver>());
-        Assert.NotNull(sp.GetService<NeteaseShortcutSender>());
         Assert.NotNull(sp.GetService<NeteaseMemoryPlaybackProbe>());
         Assert.NotNull(sp.GetService<SmtcTrackService>());
         Assert.NotNull(sp.GetService<NeteaseLocalDataService>());

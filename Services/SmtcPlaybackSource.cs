@@ -44,19 +44,20 @@ public sealed class SmtcPlaybackSource : IPlaybackSource
             : Task.FromResult<(TimeSpan Position, bool IsPlaying)?>(null);
     }
 
-    public async Task<bool> ExecuteAsync(PlaybackCommand command, PlaybackControlBindings bindings)
+    public async Task<PlaybackCommandStatus> ExecuteAsync(PlaybackCommand command)
     {
         if (!IsAvailable)
         {
-            return false;
+            return PlaybackCommandStatus.Unsupported;
         }
 
-        return command switch
+        bool succeeded = command switch
         {
             PlaybackCommand.Previous => await _transport.PreviousAsync(),
             PlaybackCommand.Next => await _transport.NextAsync(),
             PlaybackCommand.TogglePlayPause => await _transport.TogglePlayPauseAsync(),
             _ => false
         };
+        return succeeded ? PlaybackCommandStatus.Succeeded : PlaybackCommandStatus.Failed;
     }
 }

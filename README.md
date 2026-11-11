@@ -1,6 +1,6 @@
-# 网易云悬浮窗 v3.1.1
+# 网易云悬浮窗 v3.1.2
 
-一个 Windows 桌面工具：游戏中自定义快捷键转发网易云切歌，并显示透明悬浮窗（封面 + 歌名 + 歌手）。
+一个 Windows 桌面工具，可在游戏中通过自定义快捷键控制音乐，并用透明悬浮窗显示封面、歌名和歌手。
 
 支持 **键盘**、**Xbox 手柄**、**DualSense（DS5）手柄** 和 **方向盘等 HID/DirectInput 外设** 快捷键。
 
@@ -19,7 +19,7 @@
 - **网易云封面适配**：优先从网易云本地播放数据定位当前歌曲，再从网易云官方接口获取并缓存封面
 - **歌名/歌手颜色自定义**：5 种预设色块 + 透明度滑块
 - **悬浮窗始终显示**：切歌时淡入淡出交叉过渡，不中断显示
-- **键盘快捷键映射**：自定义应用快捷键 -> 转发网易云快捷键
+- **键盘快捷键**：自定义上一首、下一首、播放／暂停及悬浮窗显示切换的按键。
 - **手柄 / 方向盘外设快捷键**：支持组合键（如 `LB+Left`、`L1+Left` 或 `Button1+Button2`），独立开关
 - **悬浮窗自定义**：水平/垂直位置（0-100%）、缩放，可保存
 - **设置持久化**：保存在 `%LOCALAPPDATA%\HorizonRadioOverlay\overlay-settings.json`
@@ -75,28 +75,22 @@
 
 > 说明 1：`SMTC` 模式依赖较新的 Windows 媒体会话能力。低于 Windows 10 1809 的环境会自动回退为网易云窗口标题模式。
 >
-> 说明 2：两个渠道是完全分开的业务：
-> - **网易云窗口标题**：只给网易云使用，专门适配网易云封面、快捷键转发和歌词显示
-> - **SMTC**：只对接 Windows `SMTC` 媒体会话，不针对某个播放器单独做业务适配
+> **网易云专用渠道**从网易云读取曲目、封面和歌词，并向网易云的 Windows 媒体会话发送播放命令。**SMTC 渠道**读取和控制 Windows 当前媒体会话。
 
 ## 使用说明
 
-### 第一步：设置网易云快捷键
-
-在网易云音乐中设置你想要的全局快捷键（如 `Ctrl+Alt+Left` 上一首、`Ctrl+Alt+Right` 下一首、`Ctrl+Alt+P` 播放/暂停）。
-
-### 第二步：打开本工具
+### 第一步：打开本工具
 
 - **数据来源**：
   - 选择 **网易云窗口标题**：仅用于网易云音乐
   - 选择 **SMTC**：用于 QQ 音乐、Apple Music 等支持系统媒体会话的播放器
-- **快捷键映射**：左侧填写游戏中按的键，右侧填写网易云快捷键
+- **快捷键**：在本工具的快捷键设置中填写游戏中使用的按键。若网易云无法切歌或暂停，确认 Windows 媒体面板能控制网易云，并检查网易云内的系统媒体控制设置。
 - **显示颜色**：点击色块选择歌名/歌手颜色，拖动滑块调整透明度
 - **歌词说明**：
   - `网易云窗口标题`：默认启用只读内存时间轴实验功能，可跟随 seek；读取失败时自动降级为本地计时，可在设置中关闭
   - `SMTC`：歌词滚动同步依赖 `SMTC` 时间轴
 
-### 第三步：启动游戏
+### 第二步：启动游戏
 
 悬浮窗会在歌曲切换时自动弹出，5 秒后淡出。勾选“悬浮窗始终生效”可保持常驻。
 
@@ -136,10 +130,10 @@
 ## 打包发布
 
 ```powershell
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugSymbols=false -p:DebugType=None -o .\publish\HorizonRadioOverlay_v3.1.1_win-x64
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugSymbols=false -p:DebugType=None -o .\publish\HorizonRadioOverlay_v3.1.2_win-x64
 ```
 
-发布结果在 `publish\HorizonRadioOverlay_v3.1.1_win-x64\HorizonRadioOverlay.exe`。
+发布结果在 `publish\HorizonRadioOverlay_v3.1.2_win-x64\HorizonRadioOverlay.exe`。
 默认按单文件分发，直接分发这个 exe 即可。
 
 ## 常见问题
@@ -174,7 +168,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - .NET 10.0 WPF
 - SMTC（Windows.Media.Control）
 - XInput + Windows.Gaming.Input（Xbox / DS5 手柄支持）
-- Win32 API（全局热键、窗口枚举、快捷键转发）
+- Win32 API（全局热键、窗口枚举）
 
 ## 许可证
 
